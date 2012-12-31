@@ -75,15 +75,30 @@ private:
 	ptr<Context> context;
 	ptr<Presenter> presenter;
 
+	ptr<UniformBuffer> ubCamera;
+	ptr<UniformGroup> ugCamera;
+	float alpha;
+
 	ContextState drawingState;
+
+	PresentMode mode;
+	TestShader t;
 
 public:
 	void onTick(int)
 	{
 		float color[4] = { 1, 0, 0, 0 };
 		context->ClearRenderBuffer(presenter->GetBackBuffer(), color);
+		context->ClearDepthStencilBuffer(drawingState.depthStencilBuffer, 1.0f);
 
 		context->Reset();
+
+		alpha += 0.001f;
+		float4x4 viewMatrix = CreateLookAtMatrix(float3(400 * cos(alpha), 400 * sin(alpha), 400), float3(0, 0, 0), float3(0, 0, 1));
+		float4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 1, 10000);
+		t.uViewProj.SetValue(viewMatrix * projMatrix);
+		context->SetUniformBufferData(ubCamera, ugCamera->GetData(), ugCamera->GetSize());
+
 		context->GetTargetState() = drawingState;
 		context->Draw();
 
@@ -102,7 +117,6 @@ public:
 		device = system->CreatePrimaryDevice();
 		ptr<Win32Window> window = system->CreateDefaultWindow().FastCast<Win32Window>();
 
-		PresentMode mode;
 		mode.width = 640;
 		mode.height = 480;
 		mode.fullscreen = false;
@@ -119,8 +133,6 @@ public:
 		ptr<Layout> layout = NEW(Layout(layoutElements, sizeof(Vertex)));
 
 		// шейдер :)
-		TestShader t;
-
 		Interpolant<float4> tPosition(Semantics::VertexPosition);
 		Interpolant<float3> tNormal(Semantics::CustomNormal);
 		Interpolant<float2> tTexcoord(Semantics::CustomTexcoord0);
@@ -131,11 +143,15 @@ public:
 		Fragment<float4> tTarget(Semantics::TargetColor0);
 
 		Expression vertexShader = (
-			tPosition = t.aPosition
+			tPosition = mul(t.aPosition, t.uViewProj),
+			tNormal = t.aNormal,
+			tTexcoord = t.aTexcoord
 			);
 
 		Expression pixelShader = (
-				tTarget = newfloat4(0, 1, 0, 1)
+			tPosition,
+			tmpNormal = normalize(tNormal),
+			tTarget = newfloat4((tNormal.Swizzle<float>("x") + Value<float>(1)) / Value<float>(2), (tNormal.Swizzle<float>("y") + Value<float>(1)) / Value<float>(2), 0, 1)
 			);
 
 		ptr<HlslGenerator> shaderGenerator = NEW(HlslGenerator());
@@ -152,14 +168,19 @@ public:
 		fs->SaveFile(vertexShaderBinary, "vs.fxo");
 		fs->SaveFile(pixelShaderBinary, "ps.fxo");
 
-		float4x4 viewMatrix = CreateLookAtMatrix(float3(100, 100, 100), float3(0, 0, 0), float3(0, 0, 1));
-		t.uWorldViewProj.SetValue(viewMatrix);
-
 		drawingState.viewportWidth = mode.width;
 		drawingState.viewportHeight = mode.height;
 		drawingState.renderBuffers[0] = presenter->GetBackBuffer();
+		drawingState.depthStencilBuffer = device->CreateDepthStencilBuffer(mode.width, mode.height);
 		drawingState.vertexShader = device->CreateVertexShader(vertexShaderBinary);
 		drawingState.pixelShader = device->CreatePixelShader(pixelShaderBinary);
+
+		ubCamera = device->CreateUniformBuffer(t.ugCamera->GetSize());
+		drawingState.uniformBuffers[t.ugCamera->GetSlot()] = ubCamera;
+
+		ugCamera = t.ugCamera;
+
+		alpha = 0;
 
 #if 0
 		ptr<File> vertexBufferFile = NEW(MemoryFile(sizeof(Vertex) * 3));
@@ -175,6 +196,8 @@ public:
 		indexBufferData[2] = 2;
 		drawingState.indexBuffer = device->CreateIndexBuffer(indexBufferFile, sizeof(short));
 #else
+		drawingState.vertexBuffer = device->CreateVertexBuffer(fs->LoadFile("circular.geo.vertices"), layout);
+		drawingState.indexBuffer = device->CreateIndexBuffer(fs->LoadFile("circular.geo.indices"), layout);
 #endif
 
 		window->Run(Win32Window::ActiveHandler::CreateDelegate(MakePointer(this), &Game::onTick));
