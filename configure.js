@@ -6,7 +6,7 @@ exports.configureCompiler = function(objectFile, compiler) {
 };
 
 var staticLibraries =
-	'libinanity-base libinanity-compress libinanity-win32window libinanity-graphics libinanity-shaders libinanity-dx libinanity-lua'.split(' ');
+	'libinanity-base libinanity-compress libinanity-win32window libinanity-graphics libinanity-shaders libinanity-dx libinanity-lua libinanity-input'.split(' ');
 var dynamicLibraries =
 	'user32.lib gdi32.lib dxgi.lib d3d11.lib d3dx11.lib'.split(' ');
 

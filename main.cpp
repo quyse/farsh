@@ -2,6 +2,7 @@
 #include "../inanity2/inanity-graphics.hpp"
 #include "../inanity2/inanity-dx.hpp"
 #include "../inanity2/inanity-shaders.hpp"
+#include "../inanity2/inanity-input.hpp"
 #include <sstream>
 #include <iostream>
 #include <fstream>
@@ -12,6 +13,8 @@
 using namespace Inanity;
 using namespace Inanity::Graphics;
 using namespace Inanity::Graphics::Shaders;
+
+#include "test.hpp"
 
 struct Vertex
 {
@@ -71,9 +74,12 @@ struct TestShader
 class Game : public Object
 {
 private:
+	ptr<Window> window;
 	ptr<Device> device;
 	ptr<Context> context;
 	ptr<Presenter> presenter;
+
+	ptr<Input::Manager> inputManager;
 
 	ptr<UniformBuffer> ubCamera;
 	ptr<UniformBuffer> ubLight;
@@ -90,20 +96,96 @@ private:
 	PresentMode mode;
 	TestShader t;
 
+	long long lastTick;
+	float tickCoef;
+
+	float3 cameraPosition;
+	float cameraAlpha, cameraBeta;
+
 public:
+	Game() : lastTick(0), cameraPosition(300, 0, 0), cameraAlpha(0), cameraBeta(0)
+	{
+		tickCoef = 1.0f / Time::GetTicksPerSecond();
+	}
+
 	void onTick(int)
 	{
+		long long tick = Time::GetTicks();
+		float frameTime = lastTick ? (tick - lastTick) * tickCoef : 0;
+		lastTick = tick;
+
+		const float maxAngleChange = frameTime * 20;
+
+		ptr<Input::Frame> inputFrame = inputManager->GetCurrentFrame();
+		while(inputFrame->NextEvent())
+		{
+			const Input::Event& inputEvent = inputFrame->GetCurrentEvent();
+
+			//PrintInputEvent(inputEvent);
+
+			switch(inputEvent.device)
+			{
+			case Input::Event::deviceKeyboard:
+				if(inputEvent.keyboard.type == Input::Event::Keyboard::typeKeyDown)
+				{
+					if(inputEvent.keyboard.key == 27)
+					{
+						window->Close();
+						return;
+					}
+				}
+				break;
+			case Input::Event::deviceMouse:
+				switch(inputEvent.mouse.type)
+				{
+				case Input::Event::Mouse::typeButtonDown:
+					break;
+				case Input::Event::Mouse::typeButtonUp:
+					break;
+				case Input::Event::Mouse::typeMove:
+					cameraAlpha -= std::max(std::min(inputEvent.mouse.offsetX * 0.005f, maxAngleChange), -maxAngleChange);
+					cameraBeta -= std::max(std::min(inputEvent.mouse.offsetY * 0.005f, maxAngleChange), -maxAngleChange);
+					break;
+				}
+				break;
+			}
+		}
+
+		float3 cameraDirection = float3(cos(cameraAlpha) * cos(cameraBeta), sin(cameraAlpha) * cos(cameraBeta), sin(cameraBeta));
+		float3 cameraRightDirection = normalize(cross(cameraDirection, float3(0, 0, 1)));
+		float3 cameraUpDirection = cross(cameraRightDirection, cameraDirection);
+
+		const Input::State& inputState = inputFrame->GetCurrentState();
+		/*
+		left up right down Q E
+		37 38 39 40
+		65 87 68 83 81 69
+		*/
+		float cameraStep = frameTime * 1000;
+		if(inputState.keyboard[37] || inputState.keyboard[65])
+			cameraPosition -= cameraRightDirection * cameraStep;
+		if(inputState.keyboard[38] || inputState.keyboard[87])
+			cameraPosition += cameraDirection * cameraStep;
+		if(inputState.keyboard[39] || inputState.keyboard[68])
+			cameraPosition += cameraRightDirection * cameraStep;
+		if(inputState.keyboard[40] || inputState.keyboard[83])
+			cameraPosition -= cameraDirection * cameraStep;
+		if(inputState.keyboard[81])
+			cameraPosition -= cameraUpDirection * cameraStep;
+		if(inputState.keyboard[69])
+			cameraPosition += cameraUpDirection * cameraStep;
+
 		float color[4] = { 1, 0, 0, 0 };
 		context->ClearRenderBuffer(presenter->GetBackBuffer(), color);
 		context->ClearDepthStencilBuffer(drawingState.depthStencilBuffer, 1.0f);
 
 		context->Reset();
 
-		alpha += 0.001f;
-		float3 cameraPosition = float3(400 * cos(alpha / 5), 400 * sin(alpha / 5), 50);
+		alpha += frameTime;
 		t.uCameraPosition.SetValue(cameraPosition);
 		float4x4 worldMatrix = CreateRotationZMatrix(alpha);
-		float4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, float3(0, 0, 0), float3(0, 0, 1));
+
+		float4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, float3(0, 0, 1));
 		float4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 1, 10000);
 		t.uViewProj.SetValue(viewMatrix * projMatrix);
 		t.uWorldViewProj.SetValue(worldMatrix * viewMatrix * projMatrix);
@@ -134,6 +216,11 @@ public:
 
 		device = system->CreatePrimaryDevice();
 		ptr<Win32Window> window = system->CreateDefaultWindow().FastCast<Win32Window>();
+		this->window = window;
+		window->SetTitle("F.A.R.S.H.");
+
+		inputManager = NEW(Input::RawManager(window->GetHWND()));
+		window->SetInputManager(inputManager);
 
 #ifdef _DEBUG
 		mode.width = 640;
@@ -252,6 +339,8 @@ int main()
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, INT)
 #endif
 {
+	//freopen("output.txt", "w", stdout);
+
 	try
 	{
 		MakePointer(NEW(Game()))->process();
