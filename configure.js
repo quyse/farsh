@@ -5,8 +5,24 @@ exports.configureCompiler = function(objectFile, compiler) {
 	compiler.setSourceFile(a[2].replace(/\./g, '/') + '.cpp');
 };
 
-var staticLibraries =
-	'libinanity-base libinanity-compress libinanity-win32window libinanity-graphics libinanity-shaders libinanity-dx libinanity-lua libinanity-input'.split(' ');
+var staticLibraries = [
+	'libinanity-base',
+	'libinanity-compress',
+	'libinanity-win32window',
+	'libinanity-graphics',
+	'libinanity-shaders',
+	'libinanity-dx',
+	'libinanity-lua',
+	'libinanity-input',
+	'libinanity-physics',
+	'libinanity-bullet'
+	];
+var staticDepsLibraries = [
+	{ dir: 'lua', lib: 'liblua' },
+	{ dir: 'bullet', lib: 'libbullet-linearmath' },
+	{ dir: 'bullet', lib: 'libbullet-collision' },
+	{ dir: 'bullet', lib: 'libbullet-dynamics' }
+	];
 var dynamicLibraries =
 	'user32.lib gdi32.lib dxgi.lib d3d11.lib d3dx11.lib'.split(' ');
 
@@ -20,7 +36,8 @@ exports.configureLinker = function(executableFile, linker) {
 
 	for(var i = 0; i < staticLibraries.length; ++i)
 		linker.addStaticLibrary('../inanity2/' + a[1] + staticLibraries[i]);
-	linker.addStaticLibrary('../inanity2/deps/lua/' + a[1] + 'liblua');
+	for(var i = 0; i < staticDepsLibraries.length; ++i)
+		linker.addStaticLibrary('../inanity2/deps/' + staticDepsLibraries[i].dir + '/' + a[1] + staticDepsLibraries[i].lib);
 
 	for(var i = 0; i < dynamicLibraries.length; ++i)
 		linker.addDynamicLibrary(dynamicLibraries[i]);
