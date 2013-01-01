@@ -76,7 +76,13 @@ private:
 	ptr<Presenter> presenter;
 
 	ptr<UniformBuffer> ubCamera;
+	ptr<UniformBuffer> ubLight;
+	ptr<UniformBuffer> ubMaterial;
+	ptr<UniformBuffer> ubModel;
 	ptr<UniformGroup> ugCamera;
+	ptr<UniformGroup> ugLight;
+	ptr<UniformGroup> ugMaterial;
+	ptr<UniformGroup> ugModel;
 	float alpha;
 
 	ContextState drawingState;
@@ -94,10 +100,22 @@ public:
 		context->Reset();
 
 		alpha += 0.001f;
-		float4x4 viewMatrix = CreateLookAtMatrix(float3(400 * cos(alpha), 400 * sin(alpha), 400), float3(0, 0, 0), float3(0, 0, 1));
+		float3 cameraPosition = float3(400 * cos(alpha / 5), 400 * sin(alpha / 5), 50);
+		t.uCameraPosition.SetValue(cameraPosition);
+		float4x4 worldMatrix = CreateRotationZMatrix(alpha);
+		float4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, float3(0, 0, 0), float3(0, 0, 1));
 		float4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 1, 10000);
 		t.uViewProj.SetValue(viewMatrix * projMatrix);
+		t.uWorldViewProj.SetValue(worldMatrix * viewMatrix * projMatrix);
+		t.uWorld.SetValue(worldMatrix);
+		float3 lightPosition = float3(400 * cos(alpha / 5), 400 * sin(alpha / 5), -50);
+		t.uLightPosition.SetValue(lightPosition);
+		t.uLightDirection.SetValue(normalize(lightPosition));
+
 		context->SetUniformBufferData(ubCamera, ugCamera->GetData(), ugCamera->GetSize());
+		context->SetUniformBufferData(ubLight, ugLight->GetData(), ugLight->GetSize());
+		context->SetUniformBufferData(ubMaterial, ugMaterial->GetData(), ugMaterial->GetSize());
+		context->SetUniformBufferData(ubModel, ugModel->GetData(), ugModel->GetSize());
 
 		context->GetTargetState() = drawingState;
 		context->Draw();
@@ -117,9 +135,15 @@ public:
 		device = system->CreatePrimaryDevice();
 		ptr<Win32Window> window = system->CreateDefaultWindow().FastCast<Win32Window>();
 
+#ifdef _DEBUG
 		mode.width = 640;
 		mode.height = 480;
 		mode.fullscreen = false;
+#else
+		mode.width = GetSystemMetrics(SM_CXSCREEN);
+		mode.height = GetSystemMetrics(SM_CYSCREEN);
+		mode.fullscreen = true;
+#endif
 		mode.pixelFormat = PixelFormats::intR8G8B8A8;
 		presenter = device->CreatePresenter(window->CreateOutput(), mode);
 
@@ -136,22 +160,31 @@ public:
 		Interpolant<float4> tPosition(Semantics::VertexPosition);
 		Interpolant<float3> tNormal(Semantics::CustomNormal);
 		Interpolant<float2> tTexcoord(Semantics::CustomTexcoord0);
+		Interpolant<float3> tWorldPosition(Semantic(Semantics::CustomTexcoord0 + 1));
 
 		Temp<float4> tmpPosition;
 		Temp<float3> tmpNormal;
+		Temp<float> tmpDiffuse;
 
 		Fragment<float4> tTarget(Semantics::TargetColor0);
 
 		Expression vertexShader = (
-			tPosition = mul(t.aPosition, t.uViewProj),
-			tNormal = t.aNormal,
-			tTexcoord = t.aTexcoord
+			tPosition = mul(t.aPosition, t.uWorldViewProj),
+			tNormal = mul(t.aNormal, t.uWorld.Cast<float3x3>()),
+			tTexcoord = t.aTexcoord,
+			tWorldPosition = mul(t.aPosition, t.uWorld).Swizzle<float3>("xyz")
 			);
 
 		Expression pixelShader = (
 			tPosition,
+			tNormal,
+			tTexcoord,
+			tWorldPosition,
 			tmpNormal = normalize(tNormal),
-			tTarget = newfloat4((tNormal.Swizzle<float>("x") + Value<float>(1)) / Value<float>(2), (tNormal.Swizzle<float>("y") + Value<float>(1)) / Value<float>(2), 0, 1)
+			//dot(tmpNormal, t.uLightDirection) * 0.2f * 0
+			tmpDiffuse = pow(max(0, dot(tmpNormal, normalize(t.uLightDirection + normalize(t.uCameraPosition - tWorldPosition)))), 8.0f),
+			tTarget = newfloat4(tmpDiffuse, tmpDiffuse, tmpDiffuse, 1)
+			//tTarget = newfloat4((tNormal.Swizzle<float>("x") + Value<float>(1)) / Value<float>(2), (tNormal.Swizzle<float>("y") + Value<float>(1)) / Value<float>(2), 0, 1)
 			);
 
 		ptr<HlslGenerator> shaderGenerator = NEW(HlslGenerator());
@@ -175,10 +208,19 @@ public:
 		drawingState.vertexShader = device->CreateVertexShader(vertexShaderBinary);
 		drawingState.pixelShader = device->CreatePixelShader(pixelShaderBinary);
 
-		ubCamera = device->CreateUniformBuffer(t.ugCamera->GetSize());
-		drawingState.uniformBuffers[t.ugCamera->GetSlot()] = ubCamera;
-
 		ugCamera = t.ugCamera;
+		ugLight = t.ugLight;
+		ugMaterial = t.ugMaterial;
+		ugModel = t.ugModel;
+
+		ubCamera = device->CreateUniformBuffer(ugCamera->GetSize());
+		drawingState.uniformBuffers[ugCamera->GetSlot()] = ubCamera;
+		ubLight = device->CreateUniformBuffer(ugLight->GetSize());
+		drawingState.uniformBuffers[ugLight->GetSlot()] = ubLight;
+		ubMaterial = device->CreateUniformBuffer(ugMaterial->GetSize());
+		drawingState.uniformBuffers[ugMaterial->GetSlot()] = ubMaterial;
+		ubModel = device->CreateUniformBuffer(ugModel->GetSize());
+		drawingState.uniformBuffers[ugModel->GetSlot()] = ubModel;
 
 		alpha = 0;
 
