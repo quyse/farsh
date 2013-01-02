@@ -3,6 +3,8 @@
 #include "../inanity2/inanity-dx.hpp"
 #include "../inanity2/inanity-shaders.hpp"
 #include "../inanity2/inanity-input.hpp"
+#include "../inanity2/inanity-physics.hpp"
+#include "../inanity2/inanity-bullet.hpp"
 #include <sstream>
 #include <iostream>
 #include <fstream>
@@ -102,8 +104,18 @@ private:
 	float3 cameraPosition;
 	float cameraAlpha, cameraBeta;
 
+	ptr<Physics::World> physicsWorld;
+	struct Cube
+	{
+		ptr<Physics::RigidBody> rigidBody;
+		float3 scale;
+		Cube(ptr<Physics::RigidBody> rigidBody, const float3& scale = float3(1, 1, 1))
+		: rigidBody(rigidBody), scale(scale) {}
+	};
+	std::vector<Cube> cubes;
+
 public:
-	Game() : lastTick(0), cameraPosition(300, 0, 0), cameraAlpha(0), cameraBeta(0)
+	Game() : lastTick(0), cameraPosition(-20, 0, 10), cameraAlpha(0), cameraBeta(0)
 	{
 		tickCoef = 1.0f / Time::GetTicksPerSecond();
 	}
@@ -114,7 +126,7 @@ public:
 		float frameTime = lastTick ? (tick - lastTick) * tickCoef : 0;
 		lastTick = tick;
 
-		const float maxAngleChange = frameTime * 20;
+		const float maxAngleChange = frameTime * 50;
 
 		ptr<Input::Frame> inputFrame = inputManager->GetCurrentFrame();
 		while(inputFrame->NextEvent())
@@ -161,7 +173,7 @@ public:
 		37 38 39 40
 		65 87 68 83 81 69
 		*/
-		float cameraStep = frameTime * 1000;
+		float cameraStep = frameTime * 10;
 		if(inputState.keyboard[37] || inputState.keyboard[65])
 			cameraPosition -= cameraRightDirection * cameraStep;
 		if(inputState.keyboard[38] || inputState.keyboard[87])
@@ -175,7 +187,7 @@ public:
 		if(inputState.keyboard[69])
 			cameraPosition += cameraUpDirection * cameraStep;
 
-		float color[4] = { 1, 0, 0, 0 };
+		float color[4] = { 0, 0, 0, 0 };
 		context->ClearRenderBuffer(presenter->GetBackBuffer(), color);
 		context->ClearDepthStencilBuffer(drawingState.depthStencilBuffer, 1.0f);
 
@@ -183,24 +195,31 @@ public:
 
 		alpha += frameTime;
 		t.uCameraPosition.SetValue(cameraPosition);
-		float4x4 worldMatrix = CreateRotationZMatrix(alpha);
 
 		float4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, float3(0, 0, 1));
 		float4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 1, 10000);
 		t.uViewProj.SetValue(viewMatrix * projMatrix);
-		t.uWorldViewProj.SetValue(worldMatrix * viewMatrix * projMatrix);
-		t.uWorld.SetValue(worldMatrix);
-		float3 lightPosition = float3(400 * cos(alpha / 5), 400 * sin(alpha / 5), -50);
+		//float3 lightPosition = float3(400 * cos(alpha / 5), 400 * sin(alpha / 5), -50);
+		float3 lightPosition = cameraPosition + cameraRightDirection * (-3.0f);
 		t.uLightPosition.SetValue(lightPosition);
 		t.uLightDirection.SetValue(normalize(lightPosition));
 
 		context->SetUniformBufferData(ubCamera, ugCamera->GetData(), ugCamera->GetSize());
 		context->SetUniformBufferData(ubLight, ugLight->GetData(), ugLight->GetSize());
 		context->SetUniformBufferData(ubMaterial, ugMaterial->GetData(), ugMaterial->GetSize());
-		context->SetUniformBufferData(ubModel, ugModel->GetData(), ugModel->GetSize());
 
 		context->GetTargetState() = drawingState;
-		context->Draw();
+
+		physicsWorld->Simulate(frameTime);
+
+		for(size_t i = 0; i < cubes.size(); ++i)
+		{
+			float4x4 worldMatrix = CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform();
+			t.uWorldViewProj.SetValue(worldMatrix * viewMatrix * projMatrix);
+			t.uWorld.SetValue(worldMatrix);
+			context->SetUniformBufferData(ubModel, ugModel->GetData(), ugModel->GetSize());
+			context->Draw();
+		}
 
 		presenter->Present();
 	}
@@ -268,9 +287,9 @@ public:
 			tTexcoord,
 			tWorldPosition,
 			tmpNormal = normalize(tNormal),
-			//dot(tmpNormal, t.uLightDirection) * 0.2f * 0
-			tmpDiffuse = pow(max(0, dot(tmpNormal, normalize(t.uLightDirection + normalize(t.uCameraPosition - tWorldPosition)))), 8.0f),
+			tmpDiffuse = pow(max(0, dot(tmpNormal, normalize(normalize(t.uLightPosition - tWorldPosition) + normalize(t.uCameraPosition - tWorldPosition)))), 8.0f),
 			tTarget = newfloat4(tmpDiffuse, tmpDiffuse, tmpDiffuse, 1)
+			//tTarget = newfloat4(1, 0, 0, 1)
 			//tTarget = newfloat4((tNormal.Swizzle<float>("x") + Value<float>(1)) / Value<float>(2), (tNormal.Swizzle<float>("y") + Value<float>(1)) / Value<float>(2), 0, 1)
 			);
 
@@ -325,9 +344,20 @@ public:
 		indexBufferData[2] = 2;
 		drawingState.indexBuffer = device->CreateIndexBuffer(indexBufferFile, sizeof(short));
 #else
-		drawingState.vertexBuffer = device->CreateVertexBuffer(fs->LoadFile("circular.geo.vertices"), layout);
-		drawingState.indexBuffer = device->CreateIndexBuffer(fs->LoadFile("circular.geo.indices"), layout);
+//		drawingState.vertexBuffer = device->CreateVertexBuffer(fs->LoadFile("circular.geo.vertices"), layout);
+//		drawingState.indexBuffer = device->CreateIndexBuffer(fs->LoadFile("circular.geo.indices"), layout);
+		drawingState.vertexBuffer = device->CreateVertexBuffer(fs->LoadFile("box.geo.vertices"), layout);
+		drawingState.indexBuffer = device->CreateIndexBuffer(fs->LoadFile("box.geo.indices"), layout);
 #endif
+
+		physicsWorld = NEW(Physics::BtWorld());
+		ptr<Physics::Shape> physicsShape = physicsWorld->CreateBoxShape(float3(20, 20, 1));
+		cubes.push_back(Cube(physicsWorld->CreateRigidBody(physicsShape, 0, CreateTranslationMatrix(0, 0, 0)), float3(20, 20, 1)));
+		physicsShape = physicsWorld->CreateBoxShape(float3(1, 1, 1));
+		for(int i = 0; i < 5; ++i)
+			for(int j = 0; j < 5; ++j)
+				for(int k = 0; k < 5; ++k)
+					cubes.push_back(physicsWorld->CreateRigidBody(physicsShape, 10, CreateTranslationMatrix(i * 4 + k * 0.5f - 2, j * 4 + k * 0.2f - 2, k * 4 + 10)));
 
 		window->Run(Win32Window::ActiveHandler::CreateDelegate(MakePointer(this), &Game::onTick));
 	}
