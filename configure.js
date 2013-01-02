@@ -30,7 +30,7 @@ exports.configureLinker = function(executableFile, linker) {
 	var a = /^(([^\/]+)\/)([^\/]+)$/.exec(executableFile);
 	linker.configuration = a[2];
 
-	var objects = ['main'];
+	var objects = ['main', 'Painter'];
 	for ( var i = 0; i < objects.length; ++i)
 		linker.addObjectFile(a[1] + objects[i]);
 

@@ -1,20 +1,11 @@
-#include "../inanity2/inanity-base.hpp"
-#include "../inanity2/inanity-graphics.hpp"
-#include "../inanity2/inanity-dx.hpp"
-#include "../inanity2/inanity-shaders.hpp"
-#include "../inanity2/inanity-input.hpp"
-#include "../inanity2/inanity-physics.hpp"
-#include "../inanity2/inanity-bullet.hpp"
+#include "general.hpp"
+#include "Painter.hpp"
 #include <sstream>
 #include <iostream>
 #include <fstream>
 
 #define TEST_GRAPHICS_DIRECTX
 //#define TEST_GRAPHICS_OPENGL
-
-using namespace Inanity;
-using namespace Inanity::Graphics;
-using namespace Inanity::Graphics::Shaders;
 
 #include "test.hpp"
 
@@ -25,54 +16,6 @@ struct Vertex
 	float2 texcoord;
 };
 
-struct TestShader
-{
-	Attribute<float4> aPosition;
-	Attribute<float3> aNormal;
-	Attribute<float2> aTexcoord;
-
-	ptr<UniformGroup> ugCamera;
-	Uniform<float4x4> uViewProj;
-	Uniform<float3> uCameraPosition;
-
-	ptr<UniformGroup> ugLight;
-	Uniform<float3> uLightPosition;
-	Uniform<float3> uLightDirection;
-
-	ptr<UniformGroup> ugMaterial;
-	Sampler<float3, float2> uDiffuseSampler;
-
-	ptr<UniformGroup> ugModel;
-	Uniform<float4x4> uWorldViewProj;
-	Uniform<float4x4> uWorld;
-
-	TestShader() :
-		aPosition(0),
-		aNormal(1),
-		aTexcoord(2),
-
-		ugCamera(NEW(UniformGroup(0))),
-		uViewProj(ugCamera->AddUniform<float4x4>()),
-		uCameraPosition(ugCamera->AddUniform<float3>()),
-
-		ugLight(NEW(UniformGroup(1))),
-		uLightPosition(ugLight->AddUniform<float3>()),
-		uLightDirection(ugLight->AddUniform<float3>()),
-
-		ugMaterial(NEW(UniformGroup(2))),
-		uDiffuseSampler(0),
-
-		ugModel(NEW(UniformGroup(3))),
-		uWorldViewProj(ugModel->AddUniform<float4x4>()),
-		uWorld(ugModel->AddUniform<float4x4>())
-	{
-		ugCamera->Finalize();
-		ugLight->Finalize();
-		ugMaterial->Finalize();
-		ugModel->Finalize();
-	}
-};
-
 class Game : public Object
 {
 private:
@@ -81,22 +24,18 @@ private:
 	ptr<Context> context;
 	ptr<Presenter> presenter;
 
+	ptr<Painter> painter;
+
 	ptr<Input::Manager> inputManager;
 
-	ptr<UniformBuffer> ubCamera;
-	ptr<UniformBuffer> ubLight;
-	ptr<UniformBuffer> ubMaterial;
-	ptr<UniformBuffer> ubModel;
-	ptr<UniformGroup> ugCamera;
-	ptr<UniformGroup> ugLight;
-	ptr<UniformGroup> ugMaterial;
-	ptr<UniformGroup> ugModel;
 	float alpha;
 
-	ContextState drawingState;
+	ptr<VertexBuffer> vertexBuffer;
+	ptr<IndexBuffer> indexBuffer;
+	ptr<Texture> diffuseTexture;
+	ptr<Texture> specularTexture;
 
 	PresentMode mode;
-	TestShader t;
 
 	long long lastTick;
 	float tickCoef;
@@ -187,38 +126,52 @@ public:
 		if(inputState.keyboard[69])
 			cameraPosition += cameraUpDirection * cameraStep;
 
-		float color[4] = { 0, 0, 0, 0 };
-		context->ClearRenderBuffer(presenter->GetBackBuffer(), color);
-		context->ClearDepthStencilBuffer(drawingState.depthStencilBuffer, 1.0f);
-
 		context->Reset();
 
 		alpha += frameTime;
-		t.uCameraPosition.SetValue(cameraPosition);
 
 		float4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, float3(0, 0, 1));
 		float4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 1, 10000);
-		t.uViewProj.SetValue(viewMatrix * projMatrix);
-		//float3 lightPosition = float3(400 * cos(alpha / 5), 400 * sin(alpha / 5), -50);
-		float3 lightPosition = cameraPosition + cameraRightDirection * (-3.0f);
-		t.uLightPosition.SetValue(lightPosition);
-		t.uLightDirection.SetValue(normalize(lightPosition));
 
-		context->SetUniformBufferData(ubCamera, ugCamera->GetData(), ugCamera->GetSize());
-		context->SetUniformBufferData(ubLight, ugLight->GetData(), ugLight->GetSize());
-		context->SetUniformBufferData(ubMaterial, ugMaterial->GetData(), ugMaterial->GetSize());
+		float3 shadowLightPosition(0, 20, 20);
+		float3 shadowLightPosition2(-10, -20, 20);
+		float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, float3(0, 0, 0), float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
+		float4x4 shadowLightTransform2 = CreateLookAtMatrix(shadowLightPosition2, float3(0, 0, 0), float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
 
-		context->GetTargetState() = drawingState;
+		painter->BeginShadow(0, shadowLightTransform);
+		painter->SetGeometry(vertexBuffer, indexBuffer);
+		for(size_t i = 0; i < cubes.size(); ++i)
+		{
+			float4x4 worldMatrix = CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform();
+			painter->DrawShadowModel(worldMatrix);
+		}
+		painter->BeginShadow(1, shadowLightTransform2);
+		painter->SetGeometry(vertexBuffer, indexBuffer);
+		for(size_t i = 0; i < cubes.size(); ++i)
+		{
+			float4x4 worldMatrix = CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform();
+			painter->DrawShadowModel(worldMatrix);
+		}
+
+		painter->BeginOpaque(viewMatrix * projMatrix, cameraPosition);
+		painter->SetLightVariant(0, 2);
+		painter->SetAmbientLight(float3(0, 0, 0));
+		//painter->SetBasicLight(0, cameraPosition + cameraRightDirection * (-3.0f), float3(0.0f, 0.1f, 0.0f));
+		//painter->SetBasicLight(1, cameraPosition + cameraRightDirection * (20.0f), float3(0.0f, 0.0f, 0.1f));
+		painter->SetShadowLight(0, shadowLightPosition, float3(0.0f, 0.1f, 0.0f), shadowLightTransform);
+		painter->SetShadowLight(1, shadowLightPosition2, float3(0.0f, 0.0f, 0.1f), shadowLightTransform2);
+		painter->ApplyLight();
+
+		painter->SetMaterial(diffuseTexture, specularTexture);
 
 		physicsWorld->Simulate(frameTime);
+
+		painter->SetGeometry(vertexBuffer, indexBuffer);
 
 		for(size_t i = 0; i < cubes.size(); ++i)
 		{
 			float4x4 worldMatrix = CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform();
-			t.uWorldViewProj.SetValue(worldMatrix * viewMatrix * projMatrix);
-			t.uWorld.SetValue(worldMatrix);
-			context->SetUniformBufferData(ubModel, ugModel->GetData(), ugModel->GetSize());
-			context->Draw();
+			painter->DrawOpaqueModel(worldMatrix, false);
 		}
 
 		presenter->Present();
@@ -255,6 +208,8 @@ public:
 
 		context = device->GetContext();
 
+		painter = NEW(Painter(device, context, presenter, mode.width, mode.height));
+
 		// разметка
 		std::vector<Layout::Element> layoutElements;
 		layoutElements.push_back(Layout::Element(DataTypes::Float3, 0, 0));
@@ -262,73 +217,9 @@ public:
 		layoutElements.push_back(Layout::Element(DataTypes::Float2, 24, 2));
 		ptr<Layout> layout = NEW(Layout(layoutElements, sizeof(Vertex)));
 
-		// шейдер :)
-		Interpolant<float4> tPosition(Semantics::VertexPosition);
-		Interpolant<float3> tNormal(Semantics::CustomNormal);
-		Interpolant<float2> tTexcoord(Semantics::CustomTexcoord0);
-		Interpolant<float3> tWorldPosition(Semantic(Semantics::CustomTexcoord0 + 1));
-
-		Temp<float4> tmpPosition;
-		Temp<float3> tmpNormal;
-		Temp<float> tmpDiffuse;
-
-		Fragment<float4> tTarget(Semantics::TargetColor0);
-
-		Expression vertexShader = (
-			tPosition = mul(t.aPosition, t.uWorldViewProj),
-			tNormal = mul(t.aNormal, t.uWorld.Cast<float3x3>()),
-			tTexcoord = t.aTexcoord,
-			tWorldPosition = mul(t.aPosition, t.uWorld).Swizzle<float3>("xyz")
-			);
-
-		Expression pixelShader = (
-			tPosition,
-			tNormal,
-			tTexcoord,
-			tWorldPosition,
-			tmpNormal = normalize(tNormal),
-			tmpDiffuse = pow(max(0, dot(tmpNormal, normalize(normalize(t.uLightPosition - tWorldPosition) + normalize(t.uCameraPosition - tWorldPosition)))), 8.0f),
-			tTarget = newfloat4(tmpDiffuse, tmpDiffuse, tmpDiffuse, 1)
-			//tTarget = newfloat4(1, 0, 0, 1)
-			//tTarget = newfloat4((tNormal.Swizzle<float>("x") + Value<float>(1)) / Value<float>(2), (tNormal.Swizzle<float>("y") + Value<float>(1)) / Value<float>(2), 0, 1)
-			);
-
-		ptr<HlslGenerator> shaderGenerator = NEW(HlslGenerator());
-		ptr<ShaderSource> vertexShaderSource = shaderGenerator->Generate(vertexShader, ShaderTypes::vertex);
-		ptr<ShaderSource> pixelShaderSource = shaderGenerator->Generate(pixelShader, ShaderTypes::pixel);
-
-		ptr<DxShaderCompiler> shaderCompiler = NEW(DxShaderCompiler());
-		ptr<File> vertexShaderBinary = shaderCompiler->Compile(vertexShaderSource);
-		ptr<File> pixelShaderBinary = shaderCompiler->Compile(pixelShaderSource);
+		alpha = 0;
 
 		ptr<FileSystem> fs = FolderFileSystem::GetNativeFileSystem();
-		fs->SaveFile(vertexShaderSource->GetCode(), "vs.fx");
-		fs->SaveFile(pixelShaderSource->GetCode(), "ps.fx");
-		fs->SaveFile(vertexShaderBinary, "vs.fxo");
-		fs->SaveFile(pixelShaderBinary, "ps.fxo");
-
-		drawingState.viewportWidth = mode.width;
-		drawingState.viewportHeight = mode.height;
-		drawingState.renderBuffers[0] = presenter->GetBackBuffer();
-		drawingState.depthStencilBuffer = device->CreateDepthStencilBuffer(mode.width, mode.height);
-		drawingState.vertexShader = device->CreateVertexShader(vertexShaderBinary);
-		drawingState.pixelShader = device->CreatePixelShader(pixelShaderBinary);
-
-		ugCamera = t.ugCamera;
-		ugLight = t.ugLight;
-		ugMaterial = t.ugMaterial;
-		ugModel = t.ugModel;
-
-		ubCamera = device->CreateUniformBuffer(ugCamera->GetSize());
-		drawingState.uniformBuffers[ugCamera->GetSlot()] = ubCamera;
-		ubLight = device->CreateUniformBuffer(ugLight->GetSize());
-		drawingState.uniformBuffers[ugLight->GetSlot()] = ubLight;
-		ubMaterial = device->CreateUniformBuffer(ugMaterial->GetSize());
-		drawingState.uniformBuffers[ugMaterial->GetSlot()] = ubMaterial;
-		ubModel = device->CreateUniformBuffer(ugModel->GetSize());
-		drawingState.uniformBuffers[ugModel->GetSlot()] = ubModel;
-
-		alpha = 0;
 
 #if 0
 		ptr<File> vertexBufferFile = NEW(MemoryFile(sizeof(Vertex) * 3));
@@ -346,9 +237,12 @@ public:
 #else
 //		drawingState.vertexBuffer = device->CreateVertexBuffer(fs->LoadFile("circular.geo.vertices"), layout);
 //		drawingState.indexBuffer = device->CreateIndexBuffer(fs->LoadFile("circular.geo.indices"), layout);
-		drawingState.vertexBuffer = device->CreateVertexBuffer(fs->LoadFile("box.geo.vertices"), layout);
-		drawingState.indexBuffer = device->CreateIndexBuffer(fs->LoadFile("box.geo.indices"), layout);
+		vertexBuffer = device->CreateVertexBuffer(fs->LoadFile("box.geo.vertices"), layout);
+		indexBuffer = device->CreateIndexBuffer(fs->LoadFile("box.geo.indices"), layout);
 #endif
+
+		diffuseTexture = device->CreateStaticTexture(fs->LoadFile("diffuse.jpg"));
+		specularTexture = device->CreateStaticTexture(fs->LoadFile("specular.jpg"));
 
 		physicsWorld = NEW(Physics::BtWorld());
 		ptr<Physics::Shape> physicsShape = physicsWorld->CreateBoxShape(float3(20, 20, 1));
@@ -357,7 +251,7 @@ public:
 		for(int i = 0; i < 5; ++i)
 			for(int j = 0; j < 5; ++j)
 				for(int k = 0; k < 5; ++k)
-					cubes.push_back(physicsWorld->CreateRigidBody(physicsShape, 10, CreateTranslationMatrix(i * 4 + k * 0.5f - 2, j * 4 + k * 0.2f - 2, k * 4 + 10)));
+					cubes.push_back(physicsWorld->CreateRigidBody(physicsShape, 10.0f, CreateTranslationMatrix(i * 4.0f + k * 0.5f - 2.0f, j * 4.0f + k * 0.2f - 2.0f, k * 4.0f + 10.0f)));
 
 		window->Run(Win32Window::ActiveHandler::CreateDelegate(MakePointer(this), &Game::onTick));
 	}
