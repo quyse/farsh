@@ -125,7 +125,7 @@ public:
 		37 38 39 40
 		65 87 68 83 81 69
 		*/
-		float cameraStep = frameTime * 10;
+		float cameraStep = 10;
 		float3 cameraMove(0, 0, 0);
 		float3 cameraMoveDirectionFront(cos(cameraAlpha), sin(cameraAlpha), 0);
 		float3 cameraMoveDirectionUp(0, 0, 1);
@@ -148,7 +148,7 @@ public:
 			//cameraRigidBody.FastCast<Physics::BtRigidBody>()->GetInternalObject()->proceedToTransform(Physics::toBt(CreateTranslationMatrix(cameraPosition)));
 			physicsCharacter->Walk(cameraMove);
 			float4x4 t = physicsCharacter->GetTransform();
-			cameraPosition = float3(t.t[3][0], t.t[3][1], t.t[3][2]);
+			cameraPosition = float3(t.t[3][0], t.t[3][1], t.t[3][2] + 0.8f);
 		}
 
 		context->Reset();
@@ -156,10 +156,10 @@ public:
 		alpha += frameTime;
 
 		float4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, float3(0, 0, 1));
-		float4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 1, 10000);
+		float4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 0.1f, 100.0f);
 
-		float3 shadowLightPosition(0, 20, 20);
-		float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, float3(0, 0, 0), float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
+		float3 shadowLightPosition = cameraPosition;
+		float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, shadowLightPosition + cameraDirection, float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
 		//float3 shadowLightPosition2 = cameraPosition + cameraRightDirection * -1;
 		//float4x4 shadowLightTransform2 = CreateLookAtMatrix(shadowLightPosition2, shadowLightPosition2 + cameraDirection, float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
 		float3 shadowLightPosition2(-10, -20, 20);
@@ -187,8 +187,8 @@ public:
 		painter->SetAmbientLight(float3(0, 0, 0));
 		//painter->SetBasicLight(0, cameraPosition + cameraRightDirection * (-3.0f), float3(0.0f, 0.1f, 0.0f));
 		//painter->SetBasicLight(1, cameraPosition + cameraRightDirection * (20.0f), float3(0.0f, 0.0f, 0.1f));
-		painter->SetShadowLight(0, shadowLightPosition, float3(0.0f, 0.1f, 0.0f), shadowLightTransform);
-		painter->SetShadowLight(1, shadowLightPosition2, float3(0.0f, 0.0f, 0.1f), shadowLightTransform2);
+		painter->SetShadowLight(0, shadowLightPosition, float3(0.2f, 0.2f, 0.2f), shadowLightTransform);
+		painter->SetShadowLight(1, shadowLightPosition2, float3(0.2f, 0.2f, 0.2f), shadowLightTransform2);
 		painter->ApplyLight();
 
 		painter->SetMaterial(diffuseTexture, specularTexture);
@@ -266,6 +266,8 @@ public:
 //		drawingState.indexBuffer = device->CreateIndexBuffer(fs->LoadFile("circular.geo.indices"), layout);
 		vertexBuffer = device->CreateVertexBuffer(fs->LoadFile("box.geo.vertices"), layout);
 		indexBuffer = device->CreateIndexBuffer(fs->LoadFile("box.geo.indices"), layout);
+		//vertexBuffer = device->CreateVertexBuffer(fs->LoadFile("statuya.geo.vertices"), layout);
+		//indexBuffer = device->CreateIndexBuffer(fs->LoadFile("statuya.geo.indices"), layout);
 #endif
 
 		diffuseTexture = device->CreateStaticTexture(fs->LoadFile("diffuse.jpg"));
@@ -273,17 +275,48 @@ public:
 
 		physicsWorld = NEW(Physics::BtWorld());
 
-		// пол
+		// пол и кубики лабиринта
 		{
-			ptr<Physics::Shape> physicsShape = physicsWorld->CreateBoxShape(float3(20, 20, 1));
-			cubes.push_back(Cube(physicsWorld->CreateRigidBody(physicsShape, 0, CreateTranslationMatrix(0, 0, 0)), float3(20, 20, 1)));
-		}
+			std::fstream f("labyrint.txt", std::ios::in);
+			int n, m;
+			f >> n >> m;
 
-		// лестница
-		{
-			ptr<Physics::Shape> physicsShape = physicsWorld->CreateBoxShape(float3(10, 1, 0.4f));
-			for(int i = 0; i < 10; ++i)
-				cubes.push_back(Cube(physicsWorld->CreateRigidBody(physicsShape, 0, CreateTranslationMatrix(0, i, 0.4f * i)), float3(10, 1, 0.4f)));
+			float cellHalfSize = 10;
+
+			//const float modelScale = 0.002f;
+			const float modelScale = 1;
+
+			// пол
+			cubes.push_back(Cube(
+				physicsWorld->CreateRigidBody(
+					physicsWorld->CreateBoxShape(float3(float(m) * cellHalfSize, float(n) * cellHalfSize, cellHalfSize)),
+					0, CreateTranslationMatrix(float(m) * cellHalfSize, float(n) * cellHalfSize, -cellHalfSize)),
+					float3(float(m), float(n), 1) * cellHalfSize * modelScale
+				));
+
+			// стенки
+			ptr<Physics::Shape> wallShape = physicsWorld->CreateBoxShape(float3(cellHalfSize, cellHalfSize, cellHalfSize));
+			std::string line;
+			for(int i = 0; i < n; ++i)
+			{
+				f >> line;
+				for(int j = 0; j < m; ++j)
+					switch(line[j])
+					{
+					case '#':
+						for(int k = 0; k < 2; ++k)
+							cubes.push_back(Cube(
+								physicsWorld->CreateRigidBody(wallShape, 0,
+									CreateTranslationMatrix(float(j) * cellHalfSize * 2 + cellHalfSize, float(i) * cellHalfSize * 2 + cellHalfSize, float(k) * cellHalfSize * 2 + cellHalfSize)),
+								float3(cellHalfSize, cellHalfSize, cellHalfSize) * modelScale));
+						break;
+					case '$':
+						physicsCharacter = physicsWorld->CreateCharacter(
+							physicsWorld->CreateCapsuleShape(0.4f, 1),
+							CreateTranslationMatrix(float(j) * cellHalfSize * 2 + cellHalfSize, float(i) * cellHalfSize * 2 + cellHalfSize, 50));
+						break;
+					}
+			}
 		}
 
 		// падающие кубики
@@ -298,8 +331,6 @@ public:
 						cubes.push_back(rigidBody);
 					}
 		}
-
-		physicsCharacter = physicsWorld->CreateCharacter(physicsWorld->CreateCapsuleShape(1, 1), CreateTranslationMatrix(0, 0, 50));
 
 		window->Run(Win32Window::ActiveHandler::CreateDelegate(MakePointer(this), &Game::onTick));
 	}
