@@ -40,7 +40,6 @@ private:
 	long long lastTick;
 	float tickCoef;
 
-	float3 cameraPosition;
 	float cameraAlpha, cameraBeta;
 
 	ptr<Physics::World> physicsWorld;
@@ -52,9 +51,12 @@ private:
 		: rigidBody(rigidBody), scale(scale) {}
 	};
 	std::vector<Cube> cubes;
+	ptr<Physics::Shape> cubePhysicsShape;
+
+	ptr<Physics::Character> physicsCharacter;
 
 public:
-	Game() : lastTick(0), cameraPosition(-20, 0, 10), cameraAlpha(0), cameraBeta(0)
+	Game() : lastTick(0), cameraAlpha(0), cameraBeta(0)
 	{
 		tickCoef = 1.0f / Time::GetTicksPerSecond();
 	}
@@ -79,10 +81,21 @@ public:
 			case Input::Event::deviceKeyboard:
 				if(inputEvent.keyboard.type == Input::Event::Keyboard::typeKeyDown)
 				{
-					if(inputEvent.keyboard.key == 27)
+					switch(inputEvent.keyboard.key)
 					{
+					case 27: // escape
 						window->Close();
 						return;
+					case 32:
+						physicsCharacter.FastCast<Physics::BtCharacter>()->GetInternalController()->jump();
+						break;
+					case 90:
+						{
+							ptr<Physics::RigidBody> rigidBody = physicsWorld->CreateRigidBody(cubePhysicsShape, 100, physicsCharacter->GetTransform());
+							rigidBody->ApplyImpulse(float3(cos(cameraAlpha) * cos(cameraBeta), sin(cameraAlpha) * cos(cameraBeta), sin(cameraBeta)) * 1000);
+							cubes.push_back(rigidBody);
+						}
+						break;
 					}
 				}
 				break;
@@ -113,18 +126,30 @@ public:
 		65 87 68 83 81 69
 		*/
 		float cameraStep = frameTime * 10;
+		float3 cameraMove(0, 0, 0);
+		float3 cameraMoveDirectionFront(cos(cameraAlpha), sin(cameraAlpha), 0);
+		float3 cameraMoveDirectionUp(0, 0, 1);
+		float3 cameraMoveDirectionRight = cross(cameraMoveDirectionFront, cameraMoveDirectionUp);
 		if(inputState.keyboard[37] || inputState.keyboard[65])
-			cameraPosition -= cameraRightDirection * cameraStep;
+			cameraMove -= cameraMoveDirectionRight * cameraStep;
 		if(inputState.keyboard[38] || inputState.keyboard[87])
-			cameraPosition += cameraDirection * cameraStep;
+			cameraMove += cameraMoveDirectionFront * cameraStep;
 		if(inputState.keyboard[39] || inputState.keyboard[68])
-			cameraPosition += cameraRightDirection * cameraStep;
+			cameraMove += cameraMoveDirectionRight * cameraStep;
 		if(inputState.keyboard[40] || inputState.keyboard[83])
-			cameraPosition -= cameraDirection * cameraStep;
+			cameraMove -= cameraMoveDirectionFront * cameraStep;
 		if(inputState.keyboard[81])
-			cameraPosition -= cameraUpDirection * cameraStep;
+			cameraMove -= cameraMoveDirectionUp * cameraStep;
 		if(inputState.keyboard[69])
-			cameraPosition += cameraUpDirection * cameraStep;
+			cameraMove += cameraMoveDirectionUp * cameraStep;
+
+		float3 cameraPosition;
+		{
+			//cameraRigidBody.FastCast<Physics::BtRigidBody>()->GetInternalObject()->proceedToTransform(Physics::toBt(CreateTranslationMatrix(cameraPosition)));
+			physicsCharacter->Walk(cameraMove);
+			float4x4 t = physicsCharacter->GetTransform();
+			cameraPosition = float3(t.t[3][0], t.t[3][1], t.t[3][2]);
+		}
 
 		context->Reset();
 
@@ -134,9 +159,13 @@ public:
 		float4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 1, 10000);
 
 		float3 shadowLightPosition(0, 20, 20);
-		float3 shadowLightPosition2(-10, -20, 20);
 		float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, float3(0, 0, 0), float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
+		//float3 shadowLightPosition2 = cameraPosition + cameraRightDirection * -1;
+		//float4x4 shadowLightTransform2 = CreateLookAtMatrix(shadowLightPosition2, shadowLightPosition2 + cameraDirection, float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
+		float3 shadowLightPosition2(-10, -20, 20);
 		float4x4 shadowLightTransform2 = CreateLookAtMatrix(shadowLightPosition2, float3(0, 0, 0), float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
+
+		physicsWorld->Simulate(frameTime);
 
 		painter->BeginShadow(0, shadowLightTransform);
 		painter->SetGeometry(vertexBuffer, indexBuffer);
@@ -163,8 +192,6 @@ public:
 		painter->ApplyLight();
 
 		painter->SetMaterial(diffuseTexture, specularTexture);
-
-		physicsWorld->Simulate(frameTime);
 
 		painter->SetGeometry(vertexBuffer, indexBuffer);
 
@@ -245,13 +272,34 @@ public:
 		specularTexture = device->CreateStaticTexture(fs->LoadFile("specular.jpg"));
 
 		physicsWorld = NEW(Physics::BtWorld());
-		ptr<Physics::Shape> physicsShape = physicsWorld->CreateBoxShape(float3(20, 20, 1));
-		cubes.push_back(Cube(physicsWorld->CreateRigidBody(physicsShape, 0, CreateTranslationMatrix(0, 0, 0)), float3(20, 20, 1)));
-		physicsShape = physicsWorld->CreateBoxShape(float3(1, 1, 1));
-		for(int i = 0; i < 5; ++i)
-			for(int j = 0; j < 5; ++j)
-				for(int k = 0; k < 5; ++k)
-					cubes.push_back(physicsWorld->CreateRigidBody(physicsShape, 10.0f, CreateTranslationMatrix(i * 4.0f + k * 0.5f - 2.0f, j * 4.0f + k * 0.2f - 2.0f, k * 4.0f + 10.0f)));
+
+		// пол
+		{
+			ptr<Physics::Shape> physicsShape = physicsWorld->CreateBoxShape(float3(20, 20, 1));
+			cubes.push_back(Cube(physicsWorld->CreateRigidBody(physicsShape, 0, CreateTranslationMatrix(0, 0, 0)), float3(20, 20, 1)));
+		}
+
+		// лестница
+		{
+			ptr<Physics::Shape> physicsShape = physicsWorld->CreateBoxShape(float3(10, 1, 0.4f));
+			for(int i = 0; i < 10; ++i)
+				cubes.push_back(Cube(physicsWorld->CreateRigidBody(physicsShape, 0, CreateTranslationMatrix(0, i, 0.4f * i)), float3(10, 1, 0.4f)));
+		}
+
+		// падающие кубики
+		cubePhysicsShape = physicsWorld->CreateBoxShape(float3(1, 1, 1));
+		if(0)
+		{
+			for(int i = 0; i < 5; ++i)
+				for(int j = 0; j < 5; ++j)
+					for(int k = 0; k < 5; ++k)
+					{
+						ptr<Physics::RigidBody> rigidBody = physicsWorld->CreateRigidBody(cubePhysicsShape, 10.0f, CreateTranslationMatrix(i * 4.0f - k * 1.0f - 2.0f, j * 4.0f - k * 0.5f - 2.0f, k * 4.0f + 10.0f));
+						cubes.push_back(rigidBody);
+					}
+		}
+
+		physicsCharacter = physicsWorld->CreateCharacter(physicsWorld->CreateCapsuleShape(1, 1), CreateTranslationMatrix(0, 0, 50));
 
 		window->Run(Win32Window::ActiveHandler::CreateDelegate(MakePointer(this), &Game::onTick));
 	}
