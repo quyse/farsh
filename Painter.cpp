@@ -32,6 +32,9 @@ Painter::Shader::Shader() {}
 Painter::Shader::Shader(ptr<VertexShader> vertexShader, ptr<PixelShader> pixelShader)
 : vertexShader(vertexShader), pixelShader(pixelShader) {}
 
+Painter::Model::Model(ptr<Texture> diffuseTexture, ptr<Texture> specularTexture, ptr<VertexBuffer> vertexBuffer, ptr<IndexBuffer> indexBuffer, const float4x4& worldTransform)
+: diffuseTexture(diffuseTexture), specularTexture(specularTexture), vertexBuffer(vertexBuffer), indexBuffer(indexBuffer), worldTransform(worldTransform) {}
+
 Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, int screenWidth, int screenHeight) :
 	device(device),
 	context(context),
@@ -43,9 +46,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	aNormal(1),
 	aTexcoord(2),
 
-	ugShadow(NEW(UniformGroup(0))),
-	uShadowWorldViewProj(ugShadow->AddUniform<float4x4>()),
-
 	ugCamera(NEW(UniformGroup(0))),
 	uViewProj(ugCamera->AddUniform<float4x4>()),
 	uCameraPosition(ugCamera->AddUniform<float3>()),
@@ -55,16 +55,13 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	uSpecularSampler(1),
 
 	ugModel(NEW(UniformGroup(3))),
-	uWorldViewProj(ugModel->AddUniform<float4x4>()),
-	uWorld(ugModel->AddUniform<float4x4>()),
+	uWorlds(ugModel->AddUniformArray<float4x4>(maxInstancesCount)),
 
-	ubShadow(device->CreateUniformBuffer(ugShadow->GetSize())),
 	ubCamera(device->CreateUniformBuffer(ugCamera->GetSize())),
 	ubMaterial(device->CreateUniformBuffer(ugMaterial->GetSize())),
 	ubModel(device->CreateUniformBuffer(ugModel->GetSize()))
 {
 	// финализировать uniform группы
-	ugShadow->Finalize();
 	ugCamera->Finalize();
 	ugMaterial->Finalize();
 	ugModel->Finalize();
@@ -94,7 +91,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	shadowContextState = cleanState;
 	shadowContextState.viewportWidth = shadowMapSize;
 	shadowContextState.viewportHeight = shadowMapSize;
-	shadowContextState.uniformBuffers[ugShadow->GetSlot()] = ubShadow;
+	shadowContextState.uniformBuffers[ugModel->GetSlot()] = ubModel;
 
 	// варианты света
 	for(int basicLightsCount = 0; basicLightsCount <= maxBasicLightsCount; ++basicLightsCount)
@@ -142,23 +139,29 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	ptr<HlslGenerator> shaderGenerator = NEW(HlslGenerator());
 	ptr<DxShaderCompiler> shaderCompiler = NEW(DxShaderCompiler());
 	// переменные шейдеров
+	Temp<float4x4> tmpWorld;
+	Temp<float4> tmpWorldPosition;
 	Interpolant<float4> tPosition(Semantics::VertexPosition);
 	Interpolant<float3> tNormal(Semantics::CustomNormal);
 	Interpolant<float2> tTexcoord(Semantics::CustomTexcoord0);
 	Interpolant<float3> tWorldPosition(Semantic(Semantics::CustomTexcoord0 + 1));
 	Fragment<float4> tTarget(Semantics::TargetColor0);
+	// номер instance
+	Value<unsigned int> instanceID = NEW(SpecialNode(DataTypes::UInt, Semantics::Instance));
 	// вершинный шейдер
 	ptr<ShaderSource> vertexShaderSource = shaderGenerator->Generate(Expression((
-		tPosition = mul(aPosition, uWorldViewProj),
-		tNormal = mul(aNormal, uWorld.Cast<float3x3>()),
+		tmpWorld = uWorlds[instanceID],
+		tmpWorldPosition = mul(aPosition, tmpWorld),
+		tPosition = mul(tmpWorldPosition, uViewProj),
+		tNormal = mul(aNormal, tmpWorld.Cast<float3x3>()),
 		tTexcoord = aTexcoord,
-		tWorldPosition = mul(aPosition, uWorld).Swizzle<float3>("xyz")
+		tWorldPosition = tmpWorldPosition.Swizzle<float3>("xyz")
 		)), ShaderTypes::vertex);
 	ptr<VertexShader> vertexShader = device->CreateVertexShader(shaderCompiler->Compile(vertexShaderSource));
 
 	// вершинный шейдер для теней
 	ptr<ShaderSource> shadowVertexShaderSource = shaderGenerator->Generate(Expression((
-		tPosition = mul(aPosition, uShadowWorldViewProj)
+		tPosition = mul(mul(aPosition, uWorlds[instanceID]), uViewProj)
 		)), ShaderTypes::vertex);
 	shadowContextState.vertexShader = device->CreateVertexShader(shaderCompiler->Compile(shadowVertexShaderSource));
 
@@ -264,7 +267,17 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		}
 }
 
-void Painter::BeginShadow(int shadowNumber, const float4x4& shadowViewProj)
+void Painter::BeginFrame()
+{
+	models.clear();
+}
+
+void Painter::AddModel(ptr<Texture> diffuseTexture, ptr<Texture> specularTexture, ptr<VertexBuffer> vertexBuffer, ptr<IndexBuffer> indexBuffer, const float4x4& worldTransform)
+{
+	models.push_back(Model(diffuseTexture, specularTexture, vertexBuffer, indexBuffer, worldTransform));
+}
+
+void Painter::DoShadowPass(int shadowNumber, const float4x4& shadowViewProj)
 {
 	// запомнить камеру
 	this->shadowViewProj = shadowViewProj;
@@ -275,17 +288,48 @@ void Painter::BeginShadow(int shadowNumber, const float4x4& shadowViewProj)
 
 	// очистить карту теней
 	context->ClearDepthStencilBuffer(dsbShadows[shadowNumber], 1.0f);
-}
 
-void Painter::DrawShadowModel(const float4x4& worldTransform)
-{
-	// установить uniform'ы
-	uShadowWorldViewProj.SetValue(worldTransform * shadowViewProj);
-	// и залить в GPU
-	context->SetUniformBufferData(ubShadow, ugShadow->GetData(), ugShadow->GetSize());
+	// указать трансформацию
+	uViewProj.SetValue(shadowViewProj);
+	context->SetUniformBufferData(ubCamera, ugCamera->GetData(), ugCamera->GetSize());
+
+	// отсортировать объекты по геометрии
+	struct GeometrySorter
+	{
+		bool operator()(const Model& a, const Model& b) const
+		{
+			return a.vertexBuffer < b.vertexBuffer || a.vertexBuffer == b.vertexBuffer && a.indexBuffer < b.indexBuffer;
+		}
+	};
+	std::sort(models.begin(), models.end(), GeometrySorter());
 
 	// нарисовать
-	context->Draw();
+	ContextState& cs = context->GetTargetState();
+	for(size_t i = 0; i < models.size(); )
+	{
+		// количество рисуемых объектов
+		int batchCount;
+		for(batchCount = 1;
+			batchCount < maxInstancesCount &&
+			i + batchCount < models.size() &&
+			models[i].vertexBuffer == models[i + batchCount].vertexBuffer &&
+			models[i].indexBuffer == models[i + batchCount].indexBuffer;
+			++batchCount);
+
+		// установить геометрию
+		cs.vertexBuffer = models[i].vertexBuffer;
+		cs.indexBuffer = models[i].indexBuffer;
+		// установить uniform'ы
+		for(int j = 0; j < batchCount; ++j)
+			uWorlds.SetValue(j, models[i + j].worldTransform);
+		// и залить в GPU
+		context->SetUniformBufferData(ubModel, ugModel->GetData(), ugModel->GetSize());
+
+		// нарисовать
+		context->DrawInstanced(batchCount);
+
+		i += batchCount;
+	}
 }
 
 void Painter::BeginOpaque(const float4x4& cameraViewProj, const float3& cameraPosition)
@@ -310,8 +354,18 @@ void Painter::SetLightVariant(int basicLightsCount, int shadowLightsCount)
 {
 	this->basicLightsCount = basicLightsCount;
 	this->shadowLightsCount = shadowLightsCount;
+
 	// установить состояние конвейера
-	context->GetTargetState() = lightVariants[basicLightsCount][shadowLightsCount].csOpaque;
+	ContextState& cs = context->GetTargetState();
+	cs = lightVariants[basicLightsCount][shadowLightsCount].csOpaque;
+
+	// установить шейдеры
+	std::unordered_map<ShaderKey, Shader>::const_iterator it = shaders.find(ShaderKey(basicLightsCount, shadowLightsCount, false/*skinned*/));
+	if(it == shaders.end())
+		THROW_PRIMARY_EXCEPTION("Shader not compiled");
+	const Shader& shader = it->second;
+	cs.vertexShader = shader.vertexShader;
+	cs.pixelShader = shader.pixelShader;
 }
 
 void Painter::SetAmbientLight(const float3& ambientColor)
@@ -345,39 +399,67 @@ void Painter::ApplyLight()
 	context->SetUniformBufferData(lightVariant.ubLight, lightVariant.ugLight->GetData(), lightVariant.ugLight->GetSize());
 }
 
-void Painter::SetMaterial(ptr<Texture> diffuseTexture, ptr<Texture> specularTexture)
+void Painter::DrawOpaque()
 {
-	ContextState& cs = context->GetTargetState();
-	uDiffuseSampler.SetTexture(diffuseTexture);
-	uDiffuseSampler.Apply(cs);
-	uSpecularSampler.SetTexture(specularTexture);
-	uSpecularSampler.Apply(cs);
-}
-
-void Painter::SetGeometry(ptr<VertexBuffer> vertexBuffer, ptr<IndexBuffer> indexBuffer)
-{
-	ContextState& state = context->GetTargetState();
-	state.vertexBuffer = vertexBuffer;
-	state.indexBuffer = indexBuffer;
-}
-
-void Painter::DrawOpaqueModel(const float4x4& worldTransform, bool skinned)
-{
-	// установить uniform'ы модели
-	uWorldViewProj.SetValue(worldTransform * cameraViewProj);
-	uWorld.SetValue(worldTransform);
-	// и залить в GPU
-	context->SetUniformBufferData(ubModel, ugModel->GetData(), ugModel->GetSize());
-
-	// установить шейдеры
-	std::unordered_map<ShaderKey, Shader>::const_iterator it = shaders.find(ShaderKey(basicLightsCount, shadowLightsCount, skinned));
-	if(it == shaders.end())
-		THROW_PRIMARY_EXCEPTION("Shader not compiled");
-	const Shader& shader = it->second;
-	ContextState& cs = context->GetTargetState();
-	cs.vertexShader = shader.vertexShader;
-	cs.pixelShader = shader.pixelShader;
+	// отсортировать объекты по материалу, а затем по геометрии
+	struct Sorter
+	{
+		bool operator()(const Model& a, const Model& b) const
+		{
+			return
+				a.diffuseTexture < b.diffuseTexture || a.diffuseTexture == b.diffuseTexture && (
+				a.specularTexture < b.specularTexture || a.specularTexture == b.specularTexture && (
+				a.vertexBuffer < b.vertexBuffer || a.vertexBuffer == b.vertexBuffer && (
+				a.indexBuffer < b.indexBuffer)));
+		}
+	};
+	std::sort(models.begin(), models.end(), Sorter());
 
 	// нарисовать
-	context->Draw();
+	ContextState& cs = context->GetTargetState();
+	for(size_t i = 0; i < models.size(); )
+	{
+		// выяснить размер батча по материалу
+		int materialBatchCount;
+		for(materialBatchCount = 1;
+			i + materialBatchCount < models.size() &&
+			models[i].diffuseTexture == models[i + materialBatchCount].diffuseTexture &&
+			models[i].specularTexture == models[i + materialBatchCount].specularTexture;
+			++materialBatchCount);
+
+		// установить параметры материала
+		uDiffuseSampler.SetTexture(models[i].diffuseTexture);
+		uDiffuseSampler.Apply(cs);
+		uSpecularSampler.SetTexture(models[i].specularTexture);
+		uSpecularSampler.Apply(cs);
+
+		// цикл по батчам по геометрии
+		for(int j = 0; j < materialBatchCount; )
+		{
+			// выяснить размер батча по геометрии
+			int geometryBatchCount;
+			for(geometryBatchCount = 1;
+				geometryBatchCount < maxInstancesCount &&
+				j + geometryBatchCount < materialBatchCount &&
+				models[i + j].vertexBuffer == models[i + j + geometryBatchCount].vertexBuffer &&
+				models[i + j].indexBuffer == models[i + j + geometryBatchCount].indexBuffer;
+				++geometryBatchCount);
+
+			// установить геометрию
+			cs.vertexBuffer = models[i + j].vertexBuffer;
+			cs.indexBuffer = models[i + j].indexBuffer;
+
+			// установить uniform'ы
+			for(int k = 0; k < geometryBatchCount; ++k)
+				uWorlds.SetValue(k, models[i + j + k].worldTransform);
+			context->SetUniformBufferData(ubModel, ugModel->GetData(), ugModel->GetSize());
+
+			// нарисовать
+			context->DrawInstanced(geometryBatchCount);
+
+			j += geometryBatchCount;
+		}
+
+		i += materialBatchCount;
+	}
 }

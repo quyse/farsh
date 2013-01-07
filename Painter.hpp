@@ -19,17 +19,13 @@ public:
 	static const int maxBasicLightsCount = 4;
 	/// Максимальное количество источников света с тенями.
 	static const int maxShadowLightsCount = 4;
+	/// Количество для instancing'а.
+	static const int maxInstancesCount = 64;
 
 	//*** Атрибуты.
 	Attribute<float4> aPosition;
 	Attribute<float3> aNormal;
 	Attribute<float2> aTexcoord;
-
-	///*** Uniform-группа shadow-модели.
-	/** Для рисования теней. */
-	ptr<UniformGroup> ugShadow;
-	/// Матрица мир-вид-проекция.
-	Uniform<float4x4> uShadowWorldViewProj;
 
 	///*** Uniform-группа камеры.
 	ptr<UniformGroup> ugCamera;
@@ -91,10 +87,8 @@ public:
 
 	///*** Uniform-группа модели.
 	ptr<UniformGroup> ugModel;
-	/// Матрица мир-вид-проекция.
-	Uniform<float4x4> uWorldViewProj;
-	/// Матрица мира.
-	Uniform<float4x4> uWorld;
+	/// Матрицы мира.
+	UniformArray<float4x4> uWorlds;
 
 	//*** Uniform-буферы.
 	ptr<UniformBuffer> ubShadow;
@@ -153,13 +147,30 @@ private:
 	/// Кэш шейдеров.
 	std::unordered_map<ShaderKey, Shader> shaders;
 
+	/// Список моделей для рисования.
+	struct Model
+	{
+		ptr<Texture> diffuseTexture;
+		ptr<Texture> specularTexture;
+		ptr<VertexBuffer> vertexBuffer;
+		ptr<IndexBuffer> indexBuffer;
+		float4x4 worldTransform;
+
+		Model(ptr<Texture> diffuseTexture, ptr<Texture> specularTexture, ptr<VertexBuffer> vertexBuffer, ptr<IndexBuffer> indexBuffer, const float4x4& worldTransform);
+	};
+	std::vector<Model> models;
+
 public:
 	Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, int screenWidth, int screenHeight);
 
-	/// Начать shadow pass.
-	void BeginShadow(int shadowNumber, const float4x4& shadowViewProj);
-	/// Нарисовать модель в shadow pass.
-	void DrawShadowModel(const float4x4& worldTransform);
+	/// Начать кадр.
+	/** Очистить список моделей. */
+	void BeginFrame();
+	/// Зарегистрировать модель.
+	void AddModel(ptr<Texture> diffuseTexture, ptr<Texture> specularTexture, ptr<VertexBuffer> vertexBuffer, ptr<IndexBuffer> indexBuffer, const float4x4& worldTransform);
+
+	/// Выполнить shadow pass.
+	void DoShadowPass(int shadowNumber, const float4x4& shadowViewProj);
 	/// Начать opaque pass.
 	void BeginOpaque(const float4x4& cameraViewProj, const float3& cameraPosition);
 	/// Установить текущий вариант освещения.
@@ -172,12 +183,8 @@ public:
 	void SetShadowLight(int shadowLightNumber, const float3& lightPosition, const float3& lightColor, const float4x4& lightTransform);
 	/// Применить параметры света.
 	void ApplyLight();
-	/// Установить параметры материала.
-	void SetMaterial(ptr<Texture> diffuseTexture, ptr<Texture> specularTexture);
-	/// Установить геометрию.
-	void SetGeometry(ptr<VertexBuffer> vertexBuffer, ptr<IndexBuffer> indexBuffer);
-	/// Нарисовать модель в opaque pass.
-	void DrawOpaqueModel(const float4x4& worldTransform, bool skinned);
+	/// Нарисовать opaque pass.
+	void DrawOpaque();
 };
 
 #endif

@@ -167,20 +167,13 @@ public:
 
 		physicsWorld->Simulate(frameTime);
 
-		painter->BeginShadow(0, shadowLightTransform);
-		painter->SetGeometry(vertexBuffer, indexBuffer);
+		// зарегистрировать все объекты
+		painter->BeginFrame();
 		for(size_t i = 0; i < cubes.size(); ++i)
-		{
-			float4x4 worldMatrix = CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform();
-			painter->DrawShadowModel(worldMatrix);
-		}
-		painter->BeginShadow(1, shadowLightTransform2);
-		painter->SetGeometry(vertexBuffer, indexBuffer);
-		for(size_t i = 0; i < cubes.size(); ++i)
-		{
-			float4x4 worldMatrix = CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform();
-			painter->DrawShadowModel(worldMatrix);
-		}
+			painter->AddModel(diffuseTexture, specularTexture, vertexBuffer, indexBuffer, CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform());
+
+		painter->DoShadowPass(0, shadowLightTransform);
+		painter->DoShadowPass(1, shadowLightTransform2);
 
 		painter->BeginOpaque(viewMatrix * projMatrix, cameraPosition);
 		painter->SetLightVariant(0, 2);
@@ -191,15 +184,7 @@ public:
 		painter->SetShadowLight(1, shadowLightPosition2, float3(0.2f, 0.2f, 0.2f), shadowLightTransform2);
 		painter->ApplyLight();
 
-		painter->SetMaterial(diffuseTexture, specularTexture);
-
-		painter->SetGeometry(vertexBuffer, indexBuffer);
-
-		for(size_t i = 0; i < cubes.size(); ++i)
-		{
-			float4x4 worldMatrix = CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform();
-			painter->DrawOpaqueModel(worldMatrix, false);
-		}
+		painter->DrawOpaque();
 
 		presenter->Present();
 	}
