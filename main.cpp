@@ -169,22 +169,14 @@ public:
 
 		// зарегистрировать все объекты
 		painter->BeginFrame();
+		painter->SetCamera(viewMatrix * projMatrix, cameraPosition);
+		painter->SetAmbientColor(float3(0, 0, 0));
 		for(size_t i = 0; i < cubes.size(); ++i)
 			painter->AddModel(diffuseTexture, specularTexture, vertexBuffer, indexBuffer, CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform());
+		painter->AddShadowLight(shadowLightPosition, float3(0.2f, 0.2f, 0.2f), shadowLightTransform);
+		painter->AddShadowLight(shadowLightPosition2, float3(0.2f, 0.2f, 0.2f), shadowLightTransform2);
 
-		painter->DoShadowPass(0, shadowLightTransform);
-		painter->DoShadowPass(1, shadowLightTransform2);
-
-		painter->BeginOpaque(viewMatrix * projMatrix, cameraPosition);
-		painter->SetLightVariant(0, 2);
-		painter->SetAmbientLight(float3(0, 0, 0));
-		//painter->SetBasicLight(0, cameraPosition + cameraRightDirection * (-3.0f), float3(0.0f, 0.1f, 0.0f));
-		//painter->SetBasicLight(1, cameraPosition + cameraRightDirection * (20.0f), float3(0.0f, 0.0f, 0.1f));
-		painter->SetShadowLight(0, shadowLightPosition, float3(0.2f, 0.2f, 0.2f), shadowLightTransform);
-		painter->SetShadowLight(1, shadowLightPosition2, float3(0.2f, 0.2f, 0.2f), shadowLightTransform2);
-		painter->ApplyLight();
-
-		painter->DrawOpaque();
+		painter->Draw();
 
 		presenter->Present();
 	}

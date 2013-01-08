@@ -111,16 +111,6 @@ public:
 	ptr<DepthStencilBuffer> dsbShadows[maxShadowLightsCount];
 
 private:
-	// Текущая камера для shadow pass.
-	float4x4 shadowViewProj;
-	// Текущая камера для opaque pass.
-	float4x4 cameraViewProj;
-	float3 cameraPosition;
-
-	// Текущий вариант освещения.
-	int basicLightsCount;
-	int shadowLightsCount;
-
 	/// Ключ шейдеров в кэше.
 	struct ShaderKey
 	{
@@ -147,6 +137,12 @@ private:
 	/// Кэш шейдеров.
 	std::unordered_map<ShaderKey, Shader> shaders;
 
+	//*** зарегистрированные объекты для рисования
+
+	// Текущая камера для opaque pass.
+	float4x4 cameraViewProj;
+	float3 cameraPosition;
+
 	/// Список моделей для рисования.
 	struct Model
 	{
@@ -160,31 +156,45 @@ private:
 	};
 	std::vector<Model> models;
 
+	// Источники света.
+	/// Рассеянный свет.
+	float3 ambientColor;
+	/// Структура источника света.
+	struct Light
+	{
+		float3 position;
+		float3 color;
+		float4x4 transform;
+		bool shadow;
+
+		Light(const float3& position, const float3& color);
+		Light(const float3& position, const float3& color, const float4x4& transform);
+	};
+	std::vector<Light> lights;
+
 public:
 	Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, int screenWidth, int screenHeight);
 
 	/// Начать кадр.
-	/** Очистить список моделей. */
+	/** Очистить все регистрационные списки. */
 	void BeginFrame();
+	/// Установить камеру.
+	void SetCamera(const float4x4& cameraViewProj, const float3& cameraPosition);
 	/// Зарегистрировать модель.
 	void AddModel(ptr<Texture> diffuseTexture, ptr<Texture> specularTexture, ptr<VertexBuffer> vertexBuffer, ptr<IndexBuffer> indexBuffer, const float4x4& worldTransform);
+	/// Установить рассеянный свет.
+	void SetAmbientColor(const float3& ambientColor);
+	/// Зарегистрировать простой источник света.
+	void AddBasicLight(const float3& position, const float3& color);
+	/// Зарегистрировать источник света с тенью.
+	void AddShadowLight(const float3& position, const float3& color, const float4x4& transform);
 
+	/// Выполнить рисование.
+	void Draw();
+
+private:
 	/// Выполнить shadow pass.
 	void DoShadowPass(int shadowNumber, const float4x4& shadowViewProj);
-	/// Начать opaque pass.
-	void BeginOpaque(const float4x4& cameraViewProj, const float3& cameraPosition);
-	/// Установить текущий вариант освещения.
-	void SetLightVariant(int basicLightsCount, int shadowLightsCount);
-	/// Установить рассеянный свет.
-	void SetAmbientLight(const float3& ambientColor);
-	/// Установить простой свет.
-	void SetBasicLight(int basicLightNumber, const float3& lightPosition, const float3& lightColor);
-	/// Установить свет с тенью.
-	void SetShadowLight(int shadowLightNumber, const float3& lightPosition, const float3& lightColor, const float4x4& lightTransform);
-	/// Применить параметры света.
-	void ApplyLight();
-	/// Нарисовать opaque pass.
-	void DrawOpaque();
 };
 
 #endif
