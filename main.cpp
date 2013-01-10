@@ -158,12 +158,12 @@ public:
 		float4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, float3(0, 0, 1));
 		float4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 0.1f, 100.0f);
 
-		float3 shadowLightPosition = cameraPosition;
-		float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, shadowLightPosition + cameraDirection, float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
-		//float3 shadowLightPosition2 = cameraPosition + cameraRightDirection * -1;
-		//float4x4 shadowLightTransform2 = CreateLookAtMatrix(shadowLightPosition2, shadowLightPosition2 + cameraDirection, float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
-		float3 shadowLightPosition2(-10, -20, 20);
-		float4x4 shadowLightTransform2 = CreateLookAtMatrix(shadowLightPosition2, float3(0, 0, 0), float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
+		//float3 shadowLightPosition = cameraPosition;
+		//float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, cameraPosition + cameraDirection, float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
+		float3 shadowLightPosition(0, 0, 10);
+		float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, float3(10, 10, 0), float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
+		float3 shadowLightPosition2(20, 20, 10);
+		float4x4 shadowLightTransform2 = CreateLookAtMatrix(shadowLightPosition2, float3(10, 10, 0), float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
 
 		physicsWorld->Simulate(frameTime);
 
@@ -258,10 +258,10 @@ public:
 			int n, m;
 			f >> n >> m;
 
-			float cellHalfSize = 10;
+			float cellHalfSize = 1.0f;
 
 			//const float modelScale = 0.002f;
-			const float modelScale = 1;
+			const float modelScale = 1.0f;
 
 			// пол
 			cubes.push_back(Cube(
@@ -316,7 +316,8 @@ public:
 #ifdef _DEBUG
 int main()
 #else
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, INT)
+int main()
+//int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, INT)
 #endif
 {
 	//freopen("output.txt", "w", stdout);

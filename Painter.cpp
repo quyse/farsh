@@ -1,6 +1,7 @@
 #include "Painter.hpp"
 
-const int Painter::shadowMapSize = 1024;
+const int Painter::shadowMapSize = 512;
+const int Painter::randomMapSize = 64;
 
 Painter::BasicLight::BasicLight(ptr<UniformGroup> ug) :
 	uLightPosition(ug->AddUniform<float3>()),
@@ -57,8 +58,9 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	uCameraPosition(ugCamera->AddUniform<float3>()),
 
 	ugMaterial(NEW(UniformGroup(2))),
-	uDiffuseSampler(0),
-	uSpecularSampler(1),
+	uRandomSampler(0),
+	uDiffuseSampler(1),
+	uSpecularSampler(2),
 
 	ugModel(NEW(UniformGroup(3))),
 	uWorlds(ugModel->AddUniformArray<float4x4>(maxInstancesCount)),
@@ -90,13 +92,46 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		shadowSamplerState->SetBorderColor(borderColor);
 	}
 
+	// создать случайную текстуру
+	{
+		int width = randomMapSize, height = randomMapSize;
+		ptr<File> randomTextureFile = NEW(MemoryFile(sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + width * height * 4));
+		BITMAPFILEHEADER* bfh = (BITMAPFILEHEADER*)randomTextureFile->GetData();
+		ZeroMemory(bfh, sizeof(*bfh));
+		bfh->bfType = 'MB';
+		bfh->bfSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + width * height * 4;
+		bfh->bfReserved1 = 0;
+		bfh->bfReserved2 = 0;
+		bfh->bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+		BITMAPINFOHEADER* bih = (BITMAPINFOHEADER*)(bfh + 1);
+		ZeroMemory(bih, sizeof(*bih));
+		bih->biSize = sizeof(BITMAPINFOHEADER);
+		bih->biWidth = width;
+		bih->biHeight = height;
+		bih->biPlanes = 1;
+		bih->biBitCount = 32;
+		unsigned char* pixels = (unsigned char*)(bih + 1);
+		int count = width * height * 4;
+		for(int i = 0; i < count; ++i)
+			pixels[i] = rand() % 256;
+		randomTexture = device->CreateStaticTexture(randomTextureFile);
+		uRandomSampler.SetTexture(randomTexture);
+		ptr<SamplerState> ss = device->CreateSamplerState();
+		ss->SetWrap(SamplerState::wrapRepeat, SamplerState::wrapRepeat, SamplerState::wrapRepeat);
+		uRandomSampler.SetSamplerState(ss);
+	}
+
 	//** инициализировать состояния конвейера
 	ContextState cleanState;
+	cleanState.blendState = device->CreateBlendState();
+	cleanState.blendState->SetColor(BlendState::colorSourceSrcAlpha, BlendState::colorSourceInvSrcAlpha, BlendState::operationAdd);
+	cleanState.blendState->SetAlpha(BlendState::alphaSourceOne, BlendState::alphaSourceZero, BlendState::operationAdd);
 
 	// shadow pass
 	shadowContextState = cleanState;
 	shadowContextState.viewportWidth = shadowMapSize;
 	shadowContextState.viewportHeight = shadowMapSize;
+	shadowContextState.uniformBuffers[ugCamera->GetSlot()] = ubCamera;
 	shadowContextState.uniformBuffers[ugModel->GetSlot()] = ubModel;
 
 	// варианты света
@@ -109,8 +144,8 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			for(int i = 0; i < basicLightsCount; ++i)
 				lightVariant.basicLights.push_back(BasicLight(lightVariant.ugLight));
 			for(int i = 0; i < shadowLightsCount; ++i)
-				// первые два семплера - для материала
-				lightVariant.shadowLights.push_back(ShadowLight(lightVariant.ugLight, i + 2));
+				// первые три семплера - для рандомной текстуры и материала
+				lightVariant.shadowLights.push_back(ShadowLight(lightVariant.ugLight, i + 3));
 
 			lightVariant.ugLight->Finalize();
 
@@ -128,6 +163,9 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			cs.uniformBuffers[lightVariant.ugLight->GetSlot()] = lightVariant.ubLight;
 			cs.uniformBuffers[ugMaterial->GetSlot()] = ubMaterial;
 			cs.uniformBuffers[ugModel->GetSlot()] = ubModel;
+
+			// применить семплер случайной текстуры
+			uRandomSampler.Apply(cs);
 
 			// применить семплеры карт теней
 			for(int i = 0; i < shadowLightsCount; ++i)
@@ -226,6 +264,14 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 					));
 			}
 
+			// общие переменные для источников света с тенями
+			Temp<float4> random;
+			if(shadowLightsCount)
+			{
+				shader.Assign((shader,
+					random = (uRandomSampler.Sample(tPosition.Swizzle<float2>("xy") * Value<float>(1.0f / randomMapSize)) - Value<float>(0.5f)) * Value<float>(32.0f / shadowMapSize)
+					));
+			}
 			// учесть все источники света с тенями
 			for(int i = 0; i < shadowLightsCount; ++i)
 			{
@@ -246,18 +292,62 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 				// тень
 				Temp<float4> shadowCoords;
 				Temp<float> shadowMultiplier;
+				Temp<float2> shadowCoordsXY;
+				Temp<float> originZ;
+				Temp<float> lighted;
 				shader.Assign((shader,
 					shadowCoords = mul(tmpWorldPosition, shadowLight.uLightTransform),
+					lighted = shadowCoords.Swizzle<float>("w") > Value<float>(0),
 					shadowCoords = shadowCoords / shadowCoords.Swizzle<float>("w"),
-					shadowMultiplier = shadowLight.uShadowSampler.Sample(
-						newfloat2(
-							(shadowCoords.Swizzle<float>("x") + Value<float>(1.0f)) * Value<float>(0.5f),
-							(Value<float>(1.0f) - shadowCoords.Swizzle<float>("y")) * Value<float>(0.5f))) > shadowCoords.Swizzle<float>("z") - Value<float>(0.0001f)
+					originZ = shadowCoords.Swizzle<float>("z"),// - Value<float>(0.0001f)
+					shadowCoordsXY = newfloat2(
+						(shadowCoords.Swizzle<float>("x") + Value<float>(1.0f)) * Value<float>(0.5f),
+						(Value<float>(1.0f) - shadowCoords.Swizzle<float>("y")) * Value<float>(0.5f)),
+					shadowMultiplier = 0
+					));
+#if 0
+				static const struct
+				{
+					const char* swizzle;
+					int sign;
+				} mx[8][2] =
+				{
+					{ { "x", 1 }, { "y", 1 } },
+					{ { "y", -1 }, { "z", 1 } },
+					{ { "z", 1 }, { "w", -1 } },
+					{ { "w", -1 }, { "x", -1 } },
+					{ { "z", 1 }, { "x", 1 } },
+					{ { "w", -1 }, { "y", 1 } },
+					{ { "x", 1 }, { "z", -1 } },
+					{ { "y", -1 }, { "w", -1 } }
+				};
+#else
+				static const char* const mx[8] = { "xy", "yz", "zw", "wx", "zx", "wy", "xz", "yw" };
+#endif
+				for(int j = 0; j < 8; ++j)
+				{
+					shader.Assign((shader,
+#if 0
+						shadowMultiplier = shadowMultiplier + (shadowLight.uShadowSampler.Sample(shadowCoordsXY +
+							newfloat2(
+								mx[j][0].sign > 0 ? random.Swizzle<float>(mx[j][0].swizzle) : -random.Swizzle<float>(mx[j][0].swizzle),
+								mx[j][1].sign > 0 ? random.Swizzle<float>(mx[j][1].swizzle) : -random.Swizzle<float>(mx[j][1].swizzle)
+							)) > originZ)
+#else
+						shadowMultiplier = shadowMultiplier +
+							(shadowLight.uShadowSampler.Sample(shadowCoordsXY + random.Swizzle<float2>(mx[j])) /*+ Value<float>(0.0001f)*/ > originZ)
+#endif
+					));
+				}
+				shader.Assign((shader,
+					shadowMultiplier = shadowMultiplier * lighted / Value<float>(8)
 					));
 
 				// добавка к цвету
+				Temp<float3> toLight;
 				shader.Assign((shader,
-					tmpColor = tmpColor + shadowLight.uLightColor * shadowMultiplier * (diffuse + specular)
+					toLight = shadowLight.uLightPosition - tmpWorldPosition.Swizzle<float3>("xyz"),
+					tmpColor = tmpColor + shadowLight.uLightColor * exp(length(toLight) * Value<float>(-0.05f)) * shadowMultiplier * (diffuse + specular) * Value<float>(0.5f)
 					));
 			}
 
@@ -320,10 +410,58 @@ void Painter::Draw()
 		THROW_PRIMARY_EXCEPTION("Too many shadow lights");
 
 	// выполнить теневые проходы
+	context->GetTargetState() = shadowContextState;
 	int shadowPassNumber = 0;
 	for(size_t i = 0; i < lights.size(); ++i)
 		if(lights[i].shadow)
-			DoShadowPass(shadowPassNumber++, lights[i].transform);
+		{
+			// очистить карту теней
+			context->ClearDepthStencilBuffer(dsbShadows[shadowPassNumber], 1.0f);
+			context->GetTargetState().depthStencilBuffer = dsbShadows[shadowPassNumber];
+			shadowPassNumber++;
+
+			// указать трансформацию
+			uViewProj.SetValue(lights[i].transform);
+			context->SetUniformBufferData(ubCamera, ugCamera->GetData(), ugCamera->GetSize());
+
+			// отсортировать объекты по геометрии
+			struct GeometrySorter
+			{
+				bool operator()(const Model& a, const Model& b) const
+				{
+					return a.vertexBuffer < b.vertexBuffer || a.vertexBuffer == b.vertexBuffer && a.indexBuffer < b.indexBuffer;
+				}
+			};
+			std::sort(models.begin(), models.end(), GeometrySorter());
+
+			// нарисовать
+			ContextState& cs = context->GetTargetState();
+			for(size_t j = 0; j < models.size(); )
+			{
+				// количество рисуемых объектов
+				int batchCount;
+				for(batchCount = 1;
+					batchCount < maxInstancesCount &&
+					j + batchCount < models.size() &&
+					models[j].vertexBuffer == models[j + batchCount].vertexBuffer &&
+					models[j].indexBuffer == models[j + batchCount].indexBuffer;
+					++batchCount);
+
+				// установить геометрию
+				cs.vertexBuffer = models[j].vertexBuffer;
+				cs.indexBuffer = models[j].indexBuffer;
+				// установить uniform'ы
+				for(int k = 0; k < batchCount; ++k)
+					uWorlds.SetValue(j, models[j + k].worldTransform);
+				// и залить в GPU
+				context->SetUniformBufferData(ubModel, ugModel->GetData(), ugModel->GetSize());
+
+				// нарисовать
+				context->DrawInstanced(batchCount);
+
+				j += batchCount;
+			}
+		}
 
 	// очистить рендербуферы
 	float color[4] = { 1, 0, 0, 0 };
@@ -431,52 +569,4 @@ void Painter::Draw()
 
 void Painter::DoShadowPass(int shadowNumber, const float4x4& shadowViewProj)
 {
-	// установить состояние конвейера
-	context->GetTargetState() = shadowContextState;
-	context->GetTargetState().depthStencilBuffer = dsbShadows[shadowNumber];
-
-	// очистить карту теней
-	context->ClearDepthStencilBuffer(dsbShadows[shadowNumber], 1.0f);
-
-	// указать трансформацию
-	uViewProj.SetValue(shadowViewProj);
-	context->SetUniformBufferData(ubCamera, ugCamera->GetData(), ugCamera->GetSize());
-
-	// отсортировать объекты по геометрии
-	struct GeometrySorter
-	{
-		bool operator()(const Model& a, const Model& b) const
-		{
-			return a.vertexBuffer < b.vertexBuffer || a.vertexBuffer == b.vertexBuffer && a.indexBuffer < b.indexBuffer;
-		}
-	};
-	std::sort(models.begin(), models.end(), GeometrySorter());
-
-	// нарисовать
-	ContextState& cs = context->GetTargetState();
-	for(size_t i = 0; i < models.size(); )
-	{
-		// количество рисуемых объектов
-		int batchCount;
-		for(batchCount = 1;
-			batchCount < maxInstancesCount &&
-			i + batchCount < models.size() &&
-			models[i].vertexBuffer == models[i + batchCount].vertexBuffer &&
-			models[i].indexBuffer == models[i + batchCount].indexBuffer;
-			++batchCount);
-
-		// установить геометрию
-		cs.vertexBuffer = models[i].vertexBuffer;
-		cs.indexBuffer = models[i].indexBuffer;
-		// установить uniform'ы
-		for(int j = 0; j < batchCount; ++j)
-			uWorlds.SetValue(j, models[i + j].worldTransform);
-		// и залить в GPU
-		context->SetUniformBufferData(ubModel, ugModel->GetData(), ugModel->GetSize());
-
-		// нарисовать
-		context->DrawInstanced(batchCount);
-
-		i += batchCount;
-	}
 }

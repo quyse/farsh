@@ -13,6 +13,8 @@ private:
 	ptr<Presenter> presenter;
 	//** Размер экрана.
 	int screenWidth, screenHeight;
+	/// Случайная текстура.
+	ptr<Texture> randomTexture;
 
 public:
 	/// Максимальное количество источников света без теней.
@@ -80,6 +82,8 @@ public:
 
 	///*** Uniform-группа материала.
 	ptr<UniformGroup> ugMaterial;
+	/// Семплер случайной текстуры.
+	Sampler<float4, float2> uRandomSampler;
 	/// Семплер диффузной текстуры.
 	Sampler<float3, float2> uDiffuseSampler;
 	/// Семплер specular текстуры.
@@ -102,6 +106,8 @@ public:
 
 	/// Размер карты теней.
 	static const int shadowMapSize;
+	/// Размер случайной текстуры.
+	static const int randomMapSize;
 
 	//** Рендербуферы.
 	ptr<RenderBuffer> rbBack;
