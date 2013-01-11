@@ -87,6 +87,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 
 	shadowSamplerState = device->CreateSamplerState();
 	shadowSamplerState->SetWrap(SamplerState::wrapBorder, SamplerState::wrapBorder, SamplerState::wrapBorder);
+	shadowSamplerState->SetFilter(SamplerState::filterLinear, SamplerState::filterLinear, SamplerState::filterLinear);
 	{
 		float borderColor[] = { 0, 0, 0, 0 };
 		shadowSamplerState->SetBorderColor(borderColor);
@@ -268,9 +269,15 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			Temp<float4> random;
 			if(shadowLightsCount)
 			{
+#if 0
 				shader.Assign((shader,
 					random = (uRandomSampler.Sample(tPosition.Swizzle<float2>("xy") * Value<float>(1.0f / randomMapSize)) - Value<float>(0.5f)) * Value<float>(32.0f / shadowMapSize)
 					));
+#else
+				shader.Assign((shader,
+					random = uRandomSampler.Sample(tPosition.Swizzle<float2>("xy") * Value<float>(1.0f / randomMapSize)) * newfloat4(16, 16, 2.0f / shadowMapSize, 2.0f / shadowMapSize)
+					));
+#endif
 			}
 			// учесть все источники света с тенями
 			for(int i = 0; i < shadowLightsCount; ++i)
@@ -299,10 +306,12 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 					shadowCoords = mul(tmpWorldPosition, shadowLight.uLightTransform),
 					lighted = shadowCoords.Swizzle<float>("w") > Value<float>(0),
 					shadowCoords = shadowCoords / shadowCoords.Swizzle<float>("w"),
-					originZ = shadowCoords.Swizzle<float>("z"),// - Value<float>(0.0001f)
+					originZ = shadowCoords.Swizzle<float>("z") - Value<float>(0.0005f),
 					shadowCoordsXY = newfloat2(
 						(shadowCoords.Swizzle<float>("x") + Value<float>(1.0f)) * Value<float>(0.5f),
-						(Value<float>(1.0f) - shadowCoords.Swizzle<float>("y")) * Value<float>(0.5f)),
+						(Value<float>(1.0f) - shadowCoords.Swizzle<float>("y")) * Value<float>(0.5f))
+						+ random.Swizzle<float2>("zw")
+						,
 					shadowMultiplier = 0
 					));
 #if 0
@@ -321,9 +330,26 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 					{ { "x", 1 }, { "z", -1 } },
 					{ { "y", -1 }, { "w", -1 } }
 				};
-#else
+#elif 0
 				static const char* const mx[8] = { "xy", "yz", "zw", "wx", "zx", "wy", "xz", "yw" };
+#else
+				static const float poissonDisk[11][2] =
+				{
+					{ 0.756607, -0.0438077 },
+					{ 0.461417, -0.537318 },
+					{ 0.549276, 0.44852 },
+					{ 0.272938, 0.0256119 },
+					{ -0.701909, 0.0956898 },
+					{ -0.189804, 0.183371 },
+					{ -0.579847, -0.459086 },
+					{ -0.427713, 0.61854 },
+					{ 0.108073, 0.727706 },
+					{ -0.109598, -0.29099 },
+					{ -0.0102734, -0.763004 }
+				};
 #endif
+				// старый способ - дизеринг
+#if 0
 				for(int j = 0; j < 8; ++j)
 				{
 					shader.Assign((shader,
@@ -342,12 +368,39 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 				shader.Assign((shader,
 					shadowMultiplier = shadowMultiplier * lighted / Value<float>(8)
 					));
+#elif 0
+				// новый способ
+				shader.Assign((shader,
+					shadowMultiplier = saturate(exp(shadowLight.uShadowSampler.Sample(shadowCoordsXY)) / exp(originZ))
+					));
+#else
+				// самый новый способ
+				const float m = 1.0f / shadowMapSize;
+				Temp<float2> rotate1, rotate2;
+				shader.Assign((shader,
+					rotate1 = newfloat2(cos(random.Swizzle<float>("x")), sin(random.Swizzle<float>("x"))),
+					rotate2 = newfloat2(-rotate1.Swizzle<float>("y"), rotate1.Swizzle<float>("x"))
+					));
+				for(int j = 0; j < 11; ++j)
+				{
+					Temp<float2> v;
+					shader.Assign((shader,
+						v = newfloat2(poissonDisk[j][0] * m, poissonDisk[j][1] * m),
+						v = newfloat2(dot(v, rotate1), dot(v, rotate2)),
+						shadowMultiplier = shadowMultiplier +
+						(shadowLight.uShadowSampler.Sample(shadowCoordsXY + v) > originZ)
+						));
+				}
+				shader.Assign((shader,
+					shadowMultiplier = shadowMultiplier * lighted * Value<float>(1.0f / 11)
+					));
+#endif
 
 				// добавка к цвету
 				Temp<float3> toLight;
 				shader.Assign((shader,
 					toLight = shadowLight.uLightPosition - tmpWorldPosition.Swizzle<float3>("xyz"),
-					tmpColor = tmpColor + shadowLight.uLightColor * exp(length(toLight) * Value<float>(-0.05f)) * shadowMultiplier * (diffuse + specular) * Value<float>(0.5f)
+					tmpColor = tmpColor + shadowLight.uLightColor /** exp(length(toLight) * Value<float>(-0.05f))*/ * shadowMultiplier * (diffuse + specular) * Value<float>(0.5f)
 					));
 			}
 

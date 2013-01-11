@@ -170,7 +170,7 @@ public:
 		// зарегистрировать все объекты
 		painter->BeginFrame();
 		painter->SetCamera(viewMatrix * projMatrix, cameraPosition);
-		painter->SetAmbientColor(float3(0, 0, 0));
+		painter->SetAmbientColor(float3(0.2f, 0.2f, 0.2f));
 		for(size_t i = 0; i < cubes.size(); ++i)
 			painter->AddModel(diffuseTexture, specularTexture, vertexBuffer, indexBuffer, CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform());
 		painter->AddShadowLight(shadowLightPosition, float3(0.2f, 0.2f, 0.2f), shadowLightTransform);
