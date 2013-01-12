@@ -98,6 +98,8 @@ private:
 	/// Смещения для семплов.
 	/** Смещения это xz, xw, yz, yw. */
 	Uniform<float4> uDownsampleOffsets;
+	/// Коэффициент смешивания.
+	Uniform<float> uDownsampleBlend;
 	/// Исходный семплер.
 	Sampler<float3, float2> uDownsampleSourceSampler;
 	/// Исходный семплер для освещённости.
@@ -199,6 +201,9 @@ private:
 	/// Кэш шейдеров.
 	std::unordered_map<ShaderKey, Shader> shaders;
 
+	/// Текущее время кадра.
+	float frameTime;
+
 	//*** зарегистрированные объекты для рисования
 
 	// Текущая камера для opaque pass.
@@ -239,7 +244,7 @@ public:
 
 	/// Начать кадр.
 	/** Очистить все регистрационные списки. */
-	void BeginFrame();
+	void BeginFrame(float frameTime);
 	/// Установить камеру.
 	void SetCamera(const float4x4& cameraViewProj, const float3& cameraPosition);
 	/// Зарегистрировать модель.

@@ -179,7 +179,7 @@ public:
 		physicsWorld->Simulate(frameTime);
 
 		// зарегистрировать все объекты
-		painter->BeginFrame();
+		painter->BeginFrame(frameTime);
 		painter->SetCamera(viewMatrix * projMatrix, cameraPosition);
 		painter->SetAmbientColor(float3(0.2f, 0.2f, 0.2f));
 		for(size_t i = 0; i < cubes.size(); ++i)

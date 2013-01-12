@@ -69,6 +69,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 
 	ugDownsample(NEW(UniformGroup(0))),
 	uDownsampleOffsets(ugDownsample->AddUniform<float4>()),
+	uDownsampleBlend(ugDownsample->AddUniform<float>()),
 	uDownsampleSourceSampler(0),
 	uDownsampleLuminanceSourceSampler(0),
 
@@ -493,7 +494,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("xw")) +
 					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("yz")) +
 					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("yw"))
-					) * Value<float>(0.25f), 0.0f, 0.0f, 1.0f)
+					) * Value<float>(0.25f), 0.0f, 0.0f, uDownsampleBlend)
 				);
 			psDownsampleLuminance = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
 		}
@@ -621,6 +622,13 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			else
 				cs.pixelShader = psDownsampleLuminance;
 		}
+		// для последнего прохода - специальный blend state
+		{
+			ptr<BlendState> bs = device->CreateBlendState();
+			bs->SetColor(BlendState::colorSourceSrcAlpha, BlendState::colorSourceInvSrcAlpha, BlendState::operationAdd);
+			csDownsamples[downsamplingPassesCount - 1].blendState = bs;
+		}
+
 		// самый первый проход bloom (из rbDownsamples[downsamplingStepForBloom] в rbBloom2)
 		csBloomLimit.viewportWidth = bloomMapSize;
 		csBloomLimit.viewportHeight = bloomMapSize;
@@ -666,8 +674,10 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	}
 }
 
-void Painter::BeginFrame()
+void Painter::BeginFrame(float frameTime)
 {
+	this->frameTime = frameTime;
+
 	models.clear();
 	lights.clear();
 }
@@ -873,6 +883,13 @@ void Painter::Draw()
 	float clearColor[] = { 0, 0, 0, 0 };
 
 	// downsampling
+	/*
+	за секунду - остаётся K
+	за 2 секунды - остаётся K^2
+	за t секунд - pow(K, t) = exp(t * log(K))
+	*/
+	static bool veryFirstDownsampling = true;
+	uDownsampleBlend.SetValue(1.0f - exp(frameTime * (-0.79f)));
 	for(int i = 0; i < downsamplingPassesCount; ++i)
 	{
 		float halfSourcePixelWidth = 0.5f / (i == 0 ? screenWidth : (1 << (downsamplingPassesCount - i)));
@@ -880,9 +897,11 @@ void Painter::Draw()
 		uDownsampleOffsets.SetValue(float4(-halfSourcePixelWidth, halfSourcePixelWidth, -halfSourcePixelHeight, halfSourcePixelHeight));
 		context->SetUniformBufferData(ubDownsample, ugDownsample->GetData(), ugDownsample->GetSize());
 		cs = csDownsamples[i];
-		context->ClearRenderBuffer(rbDownsamples[i], clearColor);
+		if(veryFirstDownsampling || i < downsamplingPassesCount - 1)
+			context->ClearRenderBuffer(rbDownsamples[i], clearColor);
 		context->Draw();
 	}
+	veryFirstDownsampling = false;
 
 	// bloom
 	uBloomLimit.SetValue(1.0f);
