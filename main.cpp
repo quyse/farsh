@@ -67,6 +67,17 @@ public:
 		float frameTime = lastTick ? (tick - lastTick) * tickCoef : 0;
 		lastTick = tick;
 
+		static int fpsTickCount = 0;
+		static float fpsTimeSum = 0;
+		static const int fpsTickSpan = 100;
+		fpsTimeSum += frameTime;
+		if(++fpsTickCount >= fpsTickSpan)
+		{
+			printf("FPS: %.6f\n", fpsTickSpan / fpsTimeSum);
+			fpsTickCount = 0;
+			fpsTimeSum = 0;
+		}
+
 		const float maxAngleChange = frameTime * 50;
 
 		ptr<Input::Frame> inputFrame = inputManager->GetCurrentFrame();
