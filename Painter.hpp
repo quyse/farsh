@@ -100,6 +100,8 @@ private:
 	Uniform<float4> uDownsampleOffsets;
 	/// Исходный семплер.
 	Sampler<float3, float2> uDownsampleSourceSampler;
+	/// Исходный семплер для освещённости.
+	Sampler<float, float2> uDownsampleLuminanceSourceSampler;
 
 	///*** Uniform-группа bloom.
 	ptr<UniformGroup> ugBloom;
@@ -119,7 +121,7 @@ private:
 	/// Семплер экрана.
 	Sampler<float3, float2> uToneScreenSampler;
 	/// Семплер результата downsample для средней освещённости.
-	Sampler<float3, float2> uToneAverageSampler;
+	Sampler<float, float2> uToneAverageSampler;
 
 	//*** Uniform-буферы.
 	ptr<UniformBuffer> ubCamera;
