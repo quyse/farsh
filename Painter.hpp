@@ -93,26 +93,41 @@ private:
 	/// Матрицы мира.
 	UniformArray<float4x4> uWorlds;
 
-	///*** Uniform-группа постпроцессинга.
-	ptr<UniformGroup> ugPostprocess;
+	///*** Uniform-группа даунсемплинга.
+	ptr<UniformGroup> ugDownsample;
+	/// Смещения для семплов.
+	/** Смещения это xz, xw, yz, yw. */
+	Uniform<float4> uDownsampleOffsets;
+	/// Исходный семплер.
+	Sampler<float3, float2> uDownsampleSourceSampler;
+
+	///*** Uniform-группа bloom.
+	ptr<UniformGroup> ugBloom;
 	/// Ограничение по освещённости для bloom.
 	Uniform<float> uBloomLimit;
-	/// Средняя освещённость.
-	Uniform<float> uAdaptationLuminance;
-	/// Коэффициент для получения относительной освещённости.
-	Uniform<float> uLuminanceKey;
-	/// Максимальная освещённость.
-	Uniform<float> uMaxLuminance;
 	/// Семплер исходника для bloom.
 	Sampler<float3, float2> uBloomSourceSampler;
+
+	///*** Uniform-группа tone mapping.
+	ptr<UniformGroup> ugTone;
+	/// Коэффициент для получения относительной освещённости.
+	Uniform<float> uToneLuminanceKey;
+	/// Максимальная освещённость.
+	Uniform<float> uToneMaxLuminance;
+	/// Семплер результата bloom.
+	Sampler<float3, float2> uToneBloomSampler;
 	/// Семплер экрана.
-	Sampler<float3, float2> uScreenSampler;
+	Sampler<float3, float2> uToneScreenSampler;
+	/// Семплер результата downsample для средней освещённости.
+	Sampler<float3, float2> uToneAverageSampler;
 
 	//*** Uniform-буферы.
 	ptr<UniformBuffer> ubCamera;
 	ptr<UniformBuffer> ubMaterial;
 	ptr<UniformBuffer> ubModel;
-	ptr<UniformBuffer> ubPostprocess;
+	ptr<UniformBuffer> ubDownsample;
+	ptr<UniformBuffer> ubBloom;
+	ptr<UniformBuffer> ubTone;
 
 	//** Состояния конвейера.
 	/// Состояние для shadow pass.
@@ -122,20 +137,30 @@ private:
 	static const int shadowMapSize;
 	/// Размер случайной текстуры.
 	static const int randomMapSize;
+	/// Количество проходов downsampling.
+	static const int downsamplingPassesCount = 10;
+	/// Номер прохода, после которого делать bloom.
+	static const int downsamplingStepForBloom;
+	/// Размер карты для bloom.
+	static const int bloomMapSize;
 
 	//** Постпроцессинг.
-	// Самый первый проход Bloom.
+	/// Состояния для downsampling.
+	ContextState csDownsamples[downsamplingPassesCount];
+	/// Самый первый проход bloom.
 	ContextState csBloomLimit;
-	/// Первый проход Bloom.
+	/// Первый проход bloom.
 	ContextState csBloom1;
-	/// Второй проход Bloom.
+	/// Второй проход bloom.
 	ContextState csBloom2;
-	/// Окончательный постпроцессинг.
-	ContextState csFinal;
+	/// Tone mapping.
+	ContextState csTone;
 
 	//** Рендербуферы.
 	/// HDR-текстура для изначального рисования.
 	ptr<RenderBuffer> rbScreen;
+	/// HDR-буферы для downsampling.
+	ptr<RenderBuffer> rbDownsamples[downsamplingPassesCount];
 	/// HDR-буферы для Bloom.
 	ptr<RenderBuffer> rbBloom1, rbBloom2;
 	/// Backbuffer.

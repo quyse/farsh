@@ -2,6 +2,8 @@
 
 const int Painter::shadowMapSize = 512;
 const int Painter::randomMapSize = 64;
+const int Painter::downsamplingStepForBloom = 1;
+const int Painter::bloomMapSize = 1 << (Painter::downsamplingPassesCount - 1 - Painter::downsamplingStepForBloom);
 
 Painter::BasicLight::BasicLight(ptr<UniformGroup> ug) :
 	uLightPosition(ug->AddUniform<float3>()),
@@ -65,24 +67,35 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	ugModel(NEW(UniformGroup(3))),
 	uWorlds(ugModel->AddUniformArray<float4x4>(maxInstancesCount)),
 
-	ugPostprocess(NEW(UniformGroup(0))),
-	uBloomLimit(ugPostprocess->AddUniform<float>()),
-	uAdaptationLuminance(ugPostprocess->AddUniform<float>()),
-	uLuminanceKey(ugPostprocess->AddUniform<float>()),
-	uMaxLuminance(ugPostprocess->AddUniform<float>()),
+	ugDownsample(NEW(UniformGroup(0))),
+	uDownsampleOffsets(ugDownsample->AddUniform<float4>()),
+	uDownsampleSourceSampler(0),
+
+	ugBloom(NEW(UniformGroup(0))),
+	uBloomLimit(ugBloom->AddUniform<float>()),
 	uBloomSourceSampler(0),
-	uScreenSampler(1),
+
+	ugTone(NEW(UniformGroup(0))),
+	uToneLuminanceKey(ugTone->AddUniform<float>()),
+	uToneMaxLuminance(ugTone->AddUniform<float>()),
+	uToneBloomSampler(0),
+	uToneScreenSampler(1),
+	uToneAverageSampler(2),
 
 	ubCamera(device->CreateUniformBuffer(ugCamera->GetSize())),
 	ubMaterial(device->CreateUniformBuffer(ugMaterial->GetSize())),
 	ubModel(device->CreateUniformBuffer(ugModel->GetSize())),
-	ubPostprocess(device->CreateUniformBuffer(ugPostprocess->GetSize()))
+	ubDownsample(device->CreateUniformBuffer(ugDownsample->GetSize())),
+	ubBloom(device->CreateUniformBuffer(ugBloom->GetSize())),
+	ubTone(device->CreateUniformBuffer(ugTone->GetSize()))
 {
 	// финализировать uniform группы
 	ugCamera->Finalize();
 	ugMaterial->Finalize();
 	ugModel->Finalize();
-	ugPostprocess->Finalize();
+	ugDownsample->Finalize();
+	ugBloom->Finalize();
+	ugTone->Finalize();
 
 	// создать ресурсы
 	// запомнить размеры
@@ -97,9 +110,12 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 
 	// экранный буфер
 	rbScreen = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatR11G11B10);
+	// буферы для downsample
+	for(int i = 0; i < downsamplingPassesCount; ++i)
+		rbDownsamples[i] = device->CreateRenderBuffer(1 << (downsamplingPassesCount - 1 - i), 1 << (downsamplingPassesCount - 1 - i), PixelFormats::floatR11G11B10);
 	// буферы для Bloom
-	rbBloom1 = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatR11G11B10);
-	rbBloom2 = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatR11G11B10);
+	rbBloom1 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatR11G11B10);
+	rbBloom2 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatR11G11B10);
 
 	shadowSamplerState = device->CreateSamplerState();
 	shadowSamplerState->SetWrap(SamplerState::wrapBorder, SamplerState::wrapBorder, SamplerState::wrapBorder);
@@ -414,7 +430,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		csFilter.viewportHeight = screenHeight;
 		csFilter.vertexBuffer = vertexBuffer;
 		csFilter.indexBuffer = indexBuffer;
-		csFilter.uniformBuffers[ugPostprocess->GetSlot()] = ubPostprocess;
 
 		// атрибуты
 		Attribute<float4> aPosition(0);
@@ -433,10 +448,26 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 
 		csFilter.vertexShader = vertexShader;
 
+		// пиксельный шейдер для downsample
+		ptr<PixelShader> psDownsample;
+		{
+			Expression shader = (
+				iPosition,
+				iTexcoord,
+				fTarget = newfloat4((
+					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("xz")) +
+					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("xw")) +
+					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("yz")) +
+					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("yw"))
+					) * Value<float>(0.25f), 1.0f)
+				);
+			psDownsample = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
+		}
+
 		// точки для шейдера
 		//const float offsets[] = { -7, -3, -1, 0, 1, 3, 7 };
 		const float offsets[] = { -7, -5.9f, -3.2f, -2.1f, -1.1f, -0.5f, 0, 0.5f, 1.1f, 2.1f, 3.2f, 5.9f, 7 };
-		const float offsetScaleX = 1.0f / screenWidth, offsetScaleY = 1.0f / screenHeight;
+		const float offsetScaleX = 1.0f / bloomMapSize, offsetScaleY = 1.0f / bloomMapSize;
 		// пиксельный шейдер для самого первого прохода (с ограничением по освещённости)
 		ptr<PixelShader> psBloomLimit;
 		{
@@ -497,27 +528,28 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 				));
 			psBloom2 = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
 		}
-		// финальный шейдер
-		ptr<PixelShader> psFinal;
+		// шейдер tone mapping
+		ptr<PixelShader> psTone;
 		{
-			Temp<float3> color;
+			Temp<float3> color, luminanceCoef;
 			Temp<float> luminance, relativeLuminance, intensity;
 			Expression shader = (
 				iPosition,
 				iTexcoord,
-				color = uScreenSampler.Sample(iTexcoord) + uBloomSourceSampler.Sample(iTexcoord),
-				luminance = dot(color, newfloat3(0.2126f, 0.7152f, 0.0722f)),
-				relativeLuminance = uLuminanceKey * luminance / uAdaptationLuminance,
-				intensity = relativeLuminance * (Value<float>(1) + relativeLuminance / uMaxLuminance) / (Value<float>(1) + relativeLuminance),
+				color = uToneScreenSampler.Sample(iTexcoord) + uToneBloomSampler.Sample(iTexcoord),
+				luminanceCoef = newfloat3(0.2126f, 0.7152f, 0.0722f),
+				luminance = dot(color, luminanceCoef),
+				relativeLuminance = uToneLuminanceKey * luminance / dot(uToneAverageSampler.Sample(newfloat2(0.5f, 0.5f)), luminanceCoef),
+				intensity = relativeLuminance * (Value<float>(1) + relativeLuminance / uToneMaxLuminance) / (Value<float>(1) + relativeLuminance),
 				fTarget = newfloat4(color * (intensity / luminance), 1.0f)
 				);
-			psFinal = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
+			psTone = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
 		}
 
 		csBloomLimit = csFilter;
 		csBloom1 = csFilter;
 		csBloom2 = csFilter;
-		csFinal = csFilter;
+		csTone = csFilter;
 
 		ptr<SamplerState> pointSampler = device->CreateSamplerState();
 		pointSampler->SetFilter(SamplerState::filterPoint, SamplerState::filterPoint, SamplerState::filterPoint);
@@ -526,33 +558,63 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		linearSampler->SetFilter(SamplerState::filterLinear, SamplerState::filterLinear, SamplerState::filterLinear);
 		linearSampler->SetWrap(SamplerState::wrapClamp, SamplerState::wrapClamp, SamplerState::wrapClamp);
 
-		uScreenSampler.SetTexture(rbScreen->GetTexture());
-		uScreenSampler.SetSamplerState(pointSampler);
-		// самый первый проход bloom (из rbScreen в rbBloom2)
+		// проходы даунсемплинга
+		for(int i = 0; i < downsamplingPassesCount; ++i)
+		{
+			ContextState& cs = csDownsamples[i];
+			cs = csFilter;
+
+			cs.renderBuffers[0] = rbDownsamples[i];
+			cs.viewportWidth = 1 << (downsamplingPassesCount - 1 - i);
+			cs.viewportHeight = 1 << (downsamplingPassesCount - 1 - i);
+			cs.uniformBuffers[ugDownsample->GetSlot()] = ubDownsample;
+			uDownsampleSourceSampler.SetTexture(i == 0 ? rbScreen->GetTexture() : rbDownsamples[i - 1]->GetTexture());
+			uDownsampleSourceSampler.SetSamplerState(i == 0 ? linearSampler : pointSampler);
+			uDownsampleSourceSampler.Apply(cs);
+			cs.pixelShader = psDownsample;
+		}
+		// самый первый проход bloom (из rbDownsamples[downsamplingStepForBloom] в rbBloom2)
+		csBloomLimit.viewportWidth = bloomMapSize;
+		csBloomLimit.viewportHeight = bloomMapSize;
 		csBloomLimit.renderBuffers[0] = rbBloom2;
-		uBloomSourceSampler.SetTexture(rbScreen->GetTexture());
+		uBloomSourceSampler.SetTexture(rbDownsamples[downsamplingStepForBloom]->GetTexture());
 		uBloomSourceSampler.SetSamplerState(linearSampler);
 		uBloomSourceSampler.Apply(csBloomLimit);
+		csBloomLimit.uniformBuffers[ugBloom->GetSlot()] = ubBloom;
 		csBloomLimit.pixelShader = psBloomLimit;
 		// первый проход bloom (из rbBloom1 в rbBloom2)
+		csBloom1.viewportWidth = bloomMapSize;
+		csBloom1.viewportHeight = bloomMapSize;
 		csBloom1.renderBuffers[0] = rbBloom2;
 		uBloomSourceSampler.SetTexture(rbBloom1->GetTexture());
 		uBloomSourceSampler.SetSamplerState(linearSampler);
 		uBloomSourceSampler.Apply(csBloom1);
+		csBloom1.uniformBuffers[ugBloom->GetSlot()] = ubBloom;
 		csBloom1.pixelShader = psBloom1;
 		// второй проход bloom (из rbBloom2 в rbBloom1)
+		csBloom2.viewportWidth = bloomMapSize;
+		csBloom2.viewportHeight = bloomMapSize;
 		csBloom2.renderBuffers[0] = rbBloom1;
 		uBloomSourceSampler.SetTexture(rbBloom2->GetTexture());
 		uBloomSourceSampler.SetSamplerState(linearSampler);
 		uBloomSourceSampler.Apply(csBloom2);
+		csBloom2.uniformBuffers[ugBloom->GetSlot()] = ubBloom;
 		csBloom2.pixelShader = psBloom2;
-		// финал
-		csFinal.renderBuffers[0] = rbBack;
-		uBloomSourceSampler.SetTexture(rbBloom1->GetTexture());
-		uBloomSourceSampler.SetSamplerState(pointSampler);
-		uBloomSourceSampler.Apply(csFinal);
-		uScreenSampler.Apply(csFinal);
-		csFinal.pixelShader = psFinal;
+		// tone mapping
+		csTone.viewportWidth = screenWidth;
+		csTone.viewportHeight = screenHeight;
+		csTone.renderBuffers[0] = rbBack;
+		uToneBloomSampler.SetTexture(rbBloom1->GetTexture());
+		uToneBloomSampler.SetSamplerState(linearSampler);
+		uToneBloomSampler.Apply(csTone);
+		uToneScreenSampler.SetTexture(rbScreen->GetTexture());
+		uToneScreenSampler.SetSamplerState(pointSampler);
+		uToneScreenSampler.Apply(csTone);
+		uToneAverageSampler.SetTexture(rbDownsamples[downsamplingPassesCount - 1]->GetTexture());
+		uToneAverageSampler.SetSamplerState(pointSampler);
+		uToneAverageSampler.Apply(csTone);
+		csTone.uniformBuffers[ugTone->GetSlot()] = ubTone;
+		csTone.pixelShader = psTone;
 	}
 }
 
@@ -760,13 +822,23 @@ void Painter::Draw()
 	}
 
 	// всё, теперь постпроцессинг
-	uBloomLimit.SetValue(1.0f);
-	uAdaptationLuminance.SetValue(0.5f);
-	uLuminanceKey.SetValue(0.5f);
-	uMaxLuminance.SetValue(2.0f);
-	context->SetUniformBufferData(ubPostprocess, ugPostprocess->GetData(), ugPostprocess->GetSize());
-
 	float clearColor[] = { 0, 0, 0, 0 };
+
+	// downsampling
+	for(int i = 0; i < downsamplingPassesCount; ++i)
+	{
+		float halfSourcePixelWidth = 0.5f / (i == 0 ? screenWidth : (1 << (downsamplingPassesCount - i)));
+		float halfSourcePixelHeight = 0.5f / (i == 0 ? screenHeight : (1 << (downsamplingPassesCount - i)));
+		uDownsampleOffsets.SetValue(float4(-halfSourcePixelWidth, halfSourcePixelWidth, -halfSourcePixelHeight, halfSourcePixelHeight));
+		context->SetUniformBufferData(ubDownsample, ugDownsample->GetData(), ugDownsample->GetSize());
+		cs = csDownsamples[i];
+		context->ClearRenderBuffer(rbDownsamples[i], clearColor);
+		context->Draw();
+	}
+
+	// bloom
+	uBloomLimit.SetValue(1.0f);
+	context->SetUniformBufferData(ubBloom, ugBloom->GetData(), ugBloom->GetSize());
 
 	const int bloomPassesCount = 9;
 
@@ -786,7 +858,11 @@ void Painter::Draw()
 		context->Draw();
 	}
 
-	cs = csFinal;
+	// tone mapping
+	uToneLuminanceKey.SetValue(0.5f);
+	uToneMaxLuminance.SetValue(2.0f);
+	context->SetUniformBufferData(ubTone, ugTone->GetData(), ugTone->GetSize());
+	cs = csTone;
 	context->ClearRenderBuffer(rbBack, clearColor);
 	context->Draw();
 }
