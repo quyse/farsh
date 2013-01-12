@@ -65,14 +65,24 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	ugModel(NEW(UniformGroup(3))),
 	uWorlds(ugModel->AddUniformArray<float4x4>(maxInstancesCount)),
 
+	ugPostprocess(NEW(UniformGroup(0))),
+	uBloomLimit(ugPostprocess->AddUniform<float>()),
+	uAdaptationLuminance(ugPostprocess->AddUniform<float>()),
+	uLuminanceKey(ugPostprocess->AddUniform<float>()),
+	uMaxLuminance(ugPostprocess->AddUniform<float>()),
+	uBloomSourceSampler(0),
+	uScreenSampler(1),
+
 	ubCamera(device->CreateUniformBuffer(ugCamera->GetSize())),
 	ubMaterial(device->CreateUniformBuffer(ugMaterial->GetSize())),
-	ubModel(device->CreateUniformBuffer(ugModel->GetSize()))
+	ubModel(device->CreateUniformBuffer(ugModel->GetSize())),
+	ubPostprocess(device->CreateUniformBuffer(ugPostprocess->GetSize()))
 {
 	// финализировать uniform группы
 	ugCamera->Finalize();
 	ugMaterial->Finalize();
 	ugModel->Finalize();
+	ugPostprocess->Finalize();
 
 	// создать ресурсы
 	// запомнить размеры
@@ -84,6 +94,12 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	dsbDepth = device->CreateDepthStencilBuffer(screenWidth, screenHeight);
 	for(int i = 0; i < maxShadowLightsCount; ++i)
 		dsbShadows[i] = device->CreateDepthStencilBuffer(shadowMapSize, shadowMapSize, true);
+
+	// экранный буфер
+	rbScreen = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatR11G11B10);
+	// буферы для Bloom
+	rbBloom1 = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatR11G11B10);
+	rbBloom2 = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatR11G11B10);
 
 	shadowSamplerState = device->CreateSamplerState();
 	shadowSamplerState->SetWrap(SamplerState::wrapBorder, SamplerState::wrapBorder, SamplerState::wrapBorder);
@@ -124,9 +140,12 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 
 	//** инициализировать состояния конвейера
 	ContextState cleanState;
-	cleanState.blendState = device->CreateBlendState();
-	cleanState.blendState->SetColor(BlendState::colorSourceSrcAlpha, BlendState::colorSourceInvSrcAlpha, BlendState::operationAdd);
-	cleanState.blendState->SetAlpha(BlendState::alphaSourceOne, BlendState::alphaSourceZero, BlendState::operationAdd);
+	if(0)
+	{
+		cleanState.blendState = device->CreateBlendState();
+		cleanState.blendState->SetColor(BlendState::colorSourceSrcAlpha, BlendState::colorSourceInvSrcAlpha, BlendState::operationAdd);
+		cleanState.blendState->SetAlpha(BlendState::alphaSourceOne, BlendState::alphaSourceZero, BlendState::operationAdd);
+	}
 
 	// shadow pass
 	shadowContextState = cleanState;
@@ -158,7 +177,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			cs = cleanState;
 			cs.viewportWidth = screenWidth;
 			cs.viewportHeight = screenHeight;
-			cs.renderBuffers[0] = rbBack;
+			cs.renderBuffers[0] = rbScreen;
 			cs.depthStencilBuffer = dsbDepth;
 			cs.uniformBuffers[ugCamera->GetSlot()] = ubCamera;
 			cs.uniformBuffers[lightVariant.ugLight->GetSlot()] = lightVariant.ubLight;
@@ -178,7 +197,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			}
 		}
 
-	//** шейдеры
+	//** шейдеры материалов
 
 	// генератор шейдеров и компилятор
 	ptr<HlslGenerator> shaderGenerator = NEW(HlslGenerator());
@@ -269,15 +288,9 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			Temp<float4> random;
 			if(shadowLightsCount)
 			{
-#if 0
-				shader.Assign((shader,
-					random = (uRandomSampler.Sample(tPosition.Swizzle<float2>("xy") * Value<float>(1.0f / randomMapSize)) - Value<float>(0.5f)) * Value<float>(32.0f / shadowMapSize)
-					));
-#else
 				shader.Assign((shader,
 					random = uRandomSampler.Sample(tPosition.Swizzle<float2>("xy") * Value<float>(1.0f / randomMapSize)) * newfloat4(16, 16, 2.0f / shadowMapSize, 2.0f / shadowMapSize)
 					));
-#endif
 			}
 			// учесть все источники света с тенями
 			for(int i = 0; i < shadowLightsCount; ++i)
@@ -314,25 +327,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 						,
 					shadowMultiplier = 0
 					));
-#if 0
-				static const struct
-				{
-					const char* swizzle;
-					int sign;
-				} mx[8][2] =
-				{
-					{ { "x", 1 }, { "y", 1 } },
-					{ { "y", -1 }, { "z", 1 } },
-					{ { "z", 1 }, { "w", -1 } },
-					{ { "w", -1 }, { "x", -1 } },
-					{ { "z", 1 }, { "x", 1 } },
-					{ { "w", -1 }, { "y", 1 } },
-					{ { "x", 1 }, { "z", -1 } },
-					{ { "y", -1 }, { "w", -1 } }
-				};
-#elif 0
-				static const char* const mx[8] = { "xy", "yz", "zw", "wx", "zx", "wy", "xz", "yw" };
-#else
 				static const float poissonDisk[11][2] =
 				{
 					{ 0.756607, -0.0438077 },
@@ -347,33 +341,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 					{ -0.109598, -0.29099 },
 					{ -0.0102734, -0.763004 }
 				};
-#endif
-				// старый способ - дизеринг
-#if 0
-				for(int j = 0; j < 8; ++j)
-				{
-					shader.Assign((shader,
-#if 0
-						shadowMultiplier = shadowMultiplier + (shadowLight.uShadowSampler.Sample(shadowCoordsXY +
-							newfloat2(
-								mx[j][0].sign > 0 ? random.Swizzle<float>(mx[j][0].swizzle) : -random.Swizzle<float>(mx[j][0].swizzle),
-								mx[j][1].sign > 0 ? random.Swizzle<float>(mx[j][1].swizzle) : -random.Swizzle<float>(mx[j][1].swizzle)
-							)) > originZ)
-#else
-						shadowMultiplier = shadowMultiplier +
-							(shadowLight.uShadowSampler.Sample(shadowCoordsXY + random.Swizzle<float2>(mx[j])) /*+ Value<float>(0.0001f)*/ > originZ)
-#endif
-					));
-				}
-				shader.Assign((shader,
-					shadowMultiplier = shadowMultiplier * lighted / Value<float>(8)
-					));
-#elif 0
-				// новый способ
-				shader.Assign((shader,
-					shadowMultiplier = saturate(exp(shadowLight.uShadowSampler.Sample(shadowCoordsXY)) / exp(originZ))
-					));
-#else
 				// самый новый способ
 				const float m = 1.0f / shadowMapSize;
 				Temp<float2> rotate1, rotate2;
@@ -394,13 +361,12 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 				shader.Assign((shader,
 					shadowMultiplier = shadowMultiplier * lighted * Value<float>(1.0f / 11)
 					));
-#endif
 
 				// добавка к цвету
 				Temp<float3> toLight;
 				shader.Assign((shader,
 					toLight = shadowLight.uLightPosition - tmpWorldPosition.Swizzle<float3>("xyz"),
-					tmpColor = tmpColor + shadowLight.uLightColor /** exp(length(toLight) * Value<float>(-0.05f))*/ * shadowMultiplier * (diffuse + specular) * Value<float>(0.5f)
+					tmpColor = tmpColor + shadowLight.uLightColor /** exp(length(toLight) * Value<float>(-0.05f))*/ * shadowMultiplier * (diffuse + specular)
 					));
 			}
 
@@ -414,6 +380,180 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 
 			shaders[shaderKey] = Shader(vertexShader, pixelShader);
 		}
+
+	//** шейдеры и геометрия постпроцессинга
+	{
+		// вершина для фильтра
+		struct Vertex
+		{
+			float4 position;
+			float2 texcoord;
+			float2 gap;
+		};
+		// геометрия полноэкранного квадрата
+		Vertex vertices[] =
+		{
+			{ float4(-1, -1, 0, 1), float2(0, 1) },
+			{ float4(1, -1, 0, 1), float2(1, 1) },
+			{ float4(1, 1, 0, 1), float2(1, 0) },
+			{ float4(-1, 1, 0, 1), float2(0, 0) }
+		};
+		unsigned short indices[] = { 0, 2, 1, 0, 3, 2 };
+
+		// разметка геометрии
+		std::vector<Layout::Element> layoutElements;
+		layoutElements.push_back(Layout::Element(DataTypes::Float4, 0, 0));
+		layoutElements.push_back(Layout::Element(DataTypes::Float2, 16, 1));
+		ptr<Layout> layout = NEW(Layout(layoutElements, sizeof(Vertex)));
+
+		ptr<VertexBuffer> vertexBuffer = device->CreateVertexBuffer(MemoryFile::CreateViaCopy(vertices, sizeof(vertices)), layout);
+		ptr<IndexBuffer> indexBuffer = device->CreateIndexBuffer(MemoryFile::CreateViaCopy(indices, sizeof(indices)), sizeof(unsigned short));
+
+		ContextState csFilter;
+		csFilter.viewportWidth = screenWidth;
+		csFilter.viewportHeight = screenHeight;
+		csFilter.vertexBuffer = vertexBuffer;
+		csFilter.indexBuffer = indexBuffer;
+		csFilter.uniformBuffers[ugPostprocess->GetSlot()] = ubPostprocess;
+
+		// атрибуты
+		Attribute<float4> aPosition(0);
+		Attribute<float2> aTexcoord(1);
+		// промежуточные
+		Interpolant<float4> iPosition(Semantics::VertexPosition);
+		Interpolant<float2> iTexcoord(Semantics::CustomTexcoord0);
+		// результат
+		Fragment<float4> fTarget(Semantics::TargetColor0);
+
+		// вершинный шейдер - общий для всех постпроцессингов
+		ptr<VertexShader> vertexShader = device->CreateVertexShader(shaderCompiler->Compile(shaderGenerator->Generate((
+			iPosition = aPosition,
+			iTexcoord = aTexcoord
+			), ShaderTypes::vertex)));
+
+		csFilter.vertexShader = vertexShader;
+
+		// точки для шейдера
+		//const float offsets[] = { -7, -3, -1, 0, 1, 3, 7 };
+		const float offsets[] = { -7, -5.9f, -3.2f, -2.1f, -1.1f, -0.5f, 0, 0.5f, 1.1f, 2.1f, 3.2f, 5.9f, 7 };
+		const float offsetScaleX = 1.0f / screenWidth, offsetScaleY = 1.0f / screenHeight;
+		// пиксельный шейдер для самого первого прохода (с ограничением по освещённости)
+		ptr<PixelShader> psBloomLimit;
+		{
+			Temp<float3> sum;
+			Expression shader = (
+				iPosition,
+				iTexcoord,
+				sum = newfloat3(0, 0, 0)
+				);
+			for(int i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i)
+			{
+				shader.Append((
+					sum = sum + max(uBloomSourceSampler.Sample(iTexcoord + newfloat2(offsets[i] * offsetScaleX, 0)) - uBloomLimit, newfloat3(0, 0, 0))
+					));
+			}
+			shader.Append((
+				fTarget = newfloat4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f)
+				));
+			psBloomLimit = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
+		}
+		// пиксельный шейдер для первого прохода
+		ptr<PixelShader> psBloom1;
+		{
+			Temp<float3> sum;
+			Expression shader = (
+				iPosition,
+				iTexcoord,
+				sum = newfloat3(0, 0, 0)
+				);
+			for(int i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i)
+			{
+				shader.Append((
+					sum = sum + uBloomSourceSampler.Sample(iTexcoord + newfloat2(offsets[i] * offsetScaleX, 0))
+					));
+			}
+			shader.Append((
+				fTarget = newfloat4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f)
+				));
+			psBloom1 = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
+		}
+		// пиксельный шейдер для второго прохода
+		ptr<PixelShader> psBloom2;
+		{
+			Temp<float3> sum;
+			Expression shader = (
+				iPosition,
+				iTexcoord,
+				sum = newfloat3(0, 0, 0)
+				);
+			for(int i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i)
+			{
+				shader.Append((
+					sum = sum + uBloomSourceSampler.Sample(iTexcoord + newfloat2(0, offsets[i] * offsetScaleY))
+					));
+			}
+			shader.Append((
+				fTarget = newfloat4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f)
+				));
+			psBloom2 = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
+		}
+		// финальный шейдер
+		ptr<PixelShader> psFinal;
+		{
+			Temp<float3> color;
+			Temp<float> luminance, relativeLuminance, intensity;
+			Expression shader = (
+				iPosition,
+				iTexcoord,
+				color = uScreenSampler.Sample(iTexcoord) + uBloomSourceSampler.Sample(iTexcoord),
+				luminance = dot(color, newfloat3(0.2126f, 0.7152f, 0.0722f)),
+				relativeLuminance = uLuminanceKey * luminance / uAdaptationLuminance,
+				intensity = relativeLuminance * (Value<float>(1) + relativeLuminance / uMaxLuminance) / (Value<float>(1) + relativeLuminance),
+				fTarget = newfloat4(color * (intensity / luminance), 1.0f)
+				);
+			psFinal = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
+		}
+
+		csBloomLimit = csFilter;
+		csBloom1 = csFilter;
+		csBloom2 = csFilter;
+		csFinal = csFilter;
+
+		ptr<SamplerState> pointSampler = device->CreateSamplerState();
+		pointSampler->SetFilter(SamplerState::filterPoint, SamplerState::filterPoint, SamplerState::filterPoint);
+		pointSampler->SetWrap(SamplerState::wrapClamp, SamplerState::wrapClamp, SamplerState::wrapClamp);
+		ptr<SamplerState> linearSampler = device->CreateSamplerState();
+		linearSampler->SetFilter(SamplerState::filterLinear, SamplerState::filterLinear, SamplerState::filterLinear);
+		linearSampler->SetWrap(SamplerState::wrapClamp, SamplerState::wrapClamp, SamplerState::wrapClamp);
+
+		uScreenSampler.SetTexture(rbScreen->GetTexture());
+		uScreenSampler.SetSamplerState(pointSampler);
+		// самый первый проход bloom (из rbScreen в rbBloom2)
+		csBloomLimit.renderBuffers[0] = rbBloom2;
+		uBloomSourceSampler.SetTexture(rbScreen->GetTexture());
+		uBloomSourceSampler.SetSamplerState(linearSampler);
+		uBloomSourceSampler.Apply(csBloomLimit);
+		csBloomLimit.pixelShader = psBloomLimit;
+		// первый проход bloom (из rbBloom1 в rbBloom2)
+		csBloom1.renderBuffers[0] = rbBloom2;
+		uBloomSourceSampler.SetTexture(rbBloom1->GetTexture());
+		uBloomSourceSampler.SetSamplerState(linearSampler);
+		uBloomSourceSampler.Apply(csBloom1);
+		csBloom1.pixelShader = psBloom1;
+		// второй проход bloom (из rbBloom2 в rbBloom1)
+		csBloom2.renderBuffers[0] = rbBloom1;
+		uBloomSourceSampler.SetTexture(rbBloom2->GetTexture());
+		uBloomSourceSampler.SetSamplerState(linearSampler);
+		uBloomSourceSampler.Apply(csBloom2);
+		csBloom2.pixelShader = psBloom2;
+		// финал
+		csFinal.renderBuffers[0] = rbBack;
+		uBloomSourceSampler.SetTexture(rbBloom1->GetTexture());
+		uBloomSourceSampler.SetSamplerState(pointSampler);
+		uBloomSourceSampler.Apply(csFinal);
+		uScreenSampler.Apply(csFinal);
+		csFinal.pixelShader = psFinal;
+	}
 }
 
 void Painter::BeginFrame()
@@ -518,7 +658,7 @@ void Painter::Draw()
 
 	// очистить рендербуферы
 	float color[4] = { 1, 0, 0, 0 };
-	context->ClearRenderBuffer(rbBack, color);
+	context->ClearRenderBuffer(rbScreen, color);
 	context->ClearDepthStencilBuffer(dsbDepth, 1.0f);
 
 	ContextState& cs = context->GetTargetState();
@@ -618,8 +758,35 @@ void Painter::Draw()
 
 		i += materialBatchCount;
 	}
-}
 
-void Painter::DoShadowPass(int shadowNumber, const float4x4& shadowViewProj)
-{
+	// всё, теперь постпроцессинг
+	uBloomLimit.SetValue(1.0f);
+	uAdaptationLuminance.SetValue(0.5f);
+	uLuminanceKey.SetValue(0.5f);
+	uMaxLuminance.SetValue(2.0f);
+	context->SetUniformBufferData(ubPostprocess, ugPostprocess->GetData(), ugPostprocess->GetSize());
+
+	float clearColor[] = { 0, 0, 0, 0 };
+
+	const int bloomPassesCount = 9;
+
+	cs = csBloomLimit;
+	context->ClearRenderBuffer(rbBloom2, clearColor);
+	context->Draw();
+	cs = csBloom2;
+	context->ClearRenderBuffer(rbBloom1, clearColor);
+	context->Draw();
+	for(int i = 1; i < bloomPassesCount; ++i)
+	{
+		cs = csBloom1;
+		context->ClearRenderBuffer(rbBloom2, clearColor);
+		context->Draw();
+		cs = csBloom2;
+		context->ClearRenderBuffer(rbBloom1, clearColor);
+		context->Draw();
+	}
+
+	cs = csFinal;
+	context->ClearRenderBuffer(rbBack, clearColor);
+	context->Draw();
 }

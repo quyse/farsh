@@ -16,7 +16,6 @@ private:
 	/// Случайная текстура.
 	ptr<Texture> randomTexture;
 
-public:
 	/// Максимальное количество источников света без теней.
 	static const int maxBasicLightsCount = 4;
 	/// Максимальное количество источников света с тенями.
@@ -94,11 +93,26 @@ public:
 	/// Матрицы мира.
 	UniformArray<float4x4> uWorlds;
 
+	///*** Uniform-группа постпроцессинга.
+	ptr<UniformGroup> ugPostprocess;
+	/// Ограничение по освещённости для bloom.
+	Uniform<float> uBloomLimit;
+	/// Средняя освещённость.
+	Uniform<float> uAdaptationLuminance;
+	/// Коэффициент для получения относительной освещённости.
+	Uniform<float> uLuminanceKey;
+	/// Максимальная освещённость.
+	Uniform<float> uMaxLuminance;
+	/// Семплер исходника для bloom.
+	Sampler<float3, float2> uBloomSourceSampler;
+	/// Семплер экрана.
+	Sampler<float3, float2> uScreenSampler;
+
 	//*** Uniform-буферы.
-	ptr<UniformBuffer> ubShadow;
 	ptr<UniformBuffer> ubCamera;
 	ptr<UniformBuffer> ubMaterial;
 	ptr<UniformBuffer> ubModel;
+	ptr<UniformBuffer> ubPostprocess;
 
 	//** Состояния конвейера.
 	/// Состояние для shadow pass.
@@ -109,7 +123,22 @@ public:
 	/// Размер случайной текстуры.
 	static const int randomMapSize;
 
+	//** Постпроцессинг.
+	// Самый первый проход Bloom.
+	ContextState csBloomLimit;
+	/// Первый проход Bloom.
+	ContextState csBloom1;
+	/// Второй проход Bloom.
+	ContextState csBloom2;
+	/// Окончательный постпроцессинг.
+	ContextState csFinal;
+
 	//** Рендербуферы.
+	/// HDR-текстура для изначального рисования.
+	ptr<RenderBuffer> rbScreen;
+	/// HDR-буферы для Bloom.
+	ptr<RenderBuffer> rbBloom1, rbBloom2;
+	/// Backbuffer.
 	ptr<RenderBuffer> rbBack;
 	/// Буфер глубины.
 	ptr<DepthStencilBuffer> dsbDepth;
@@ -197,10 +226,6 @@ public:
 
 	/// Выполнить рисование.
 	void Draw();
-
-private:
-	/// Выполнить shadow pass.
-	void DoShadowPass(int shadowNumber, const float4x4& shadowViewProj);
 };
 
 #endif
