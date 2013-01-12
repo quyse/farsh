@@ -954,7 +954,7 @@ void Painter::Draw()
 	veryFirstDownsampling = false;
 
 	// bloom
-	uBloomLimit.SetValue(10.0f);
+	uBloomLimit.SetValue(1.0f);
 	context->SetUniformBufferData(ubBloom, ugBloom->GetData(), ugBloom->GetSize());
 
 	const int bloomPassesCount = 9;
@@ -985,8 +985,8 @@ void Painter::Draw()
 	}
 
 	// tone mapping
-	uToneLuminanceKey.SetValue(0.5f);
-	uToneMaxLuminance.SetValue(2.0f);
+	uToneLuminanceKey.SetValue(0.1f);
+	uToneMaxLuminance.SetValue(1.0f);
 	context->SetUniformBufferData(ubTone, ugTone->GetData(), ugTone->GetSize());
 	cs = csTone;
 	context->ClearRenderBuffer(rbBack, clearColor);

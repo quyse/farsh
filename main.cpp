@@ -185,7 +185,7 @@ public:
 		//painter->SetAmbientColor(float3(0.2f, 0.2f, 0.2f));
 		for(size_t i = 0; i < cubes.size(); ++i)
 			painter->AddModel(diffuseTexture, specularTexture, vertexBuffer, indexBuffer, CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform());
-		//painter->AddModel(diffuseTexture, specularTexture, knotVertexBuffer, knotIndexBuffer, CreateScalingMatrix(0.3f, 0.3f, 0.3f) * CreateTranslationMatrix(10, 10, 2));
+		painter->AddModel(diffuseTexture, specularTexture, knotVertexBuffer, knotIndexBuffer, CreateScalingMatrix(0.3f, 0.3f, 0.3f) * CreateTranslationMatrix(10, 10, 2));
 		painter->AddShadowLight(shadowLightPosition, float3(1.0f, 1.0f, 1.0f) * 0.4f, shadowLightTransform);
 		painter->AddShadowLight(shadowLightPosition2, float3(1.0f, 1.0f, 1.0f) * 0.2f, shadowLightTransform2);
 
