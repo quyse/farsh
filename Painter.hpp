@@ -93,6 +93,13 @@ private:
 	/// Матрицы мира.
 	UniformArray<float4x4> uWorlds;
 
+	///*** Uniform-группа размытия тени.
+	ptr<UniformGroup> ugShadowBlur;
+	/// Вектор направления размытия.
+	Uniform<float2> uShadowBlurDirection;
+	/// Семплер для тени.
+	Sampler<float, float2> uShadowBlurSourceSampler;
+
 	///*** Uniform-группа даунсемплинга.
 	ptr<UniformGroup> ugDownsample;
 	/// Смещения для семплов.
@@ -129,6 +136,7 @@ private:
 	ptr<UniformBuffer> ubCamera;
 	ptr<UniformBuffer> ubMaterial;
 	ptr<UniformBuffer> ubModel;
+	ptr<UniformBuffer> ubShadowBlur;
 	ptr<UniformBuffer> ubDownsample;
 	ptr<UniformBuffer> ubBloom;
 	ptr<UniformBuffer> ubTone;
@@ -136,6 +144,8 @@ private:
 	//** Состояния конвейера.
 	/// Состояние для shadow pass.
 	ContextState shadowContextState;
+	/// Состояние для прохода размытия.
+	ContextState csShadowBlur;
 
 	/// Размер карты теней.
 	static const int shadowMapSize;
@@ -171,8 +181,12 @@ private:
 	ptr<RenderBuffer> rbBack;
 	/// Буфер глубины.
 	ptr<DepthStencilBuffer> dsbDepth;
+	/// Буфер глубины для карт теней.
+	ptr<DepthStencilBuffer> dsbShadow;
 	/// Карты теней.
-	ptr<DepthStencilBuffer> dsbShadows[maxShadowLightsCount];
+	ptr<RenderBuffer> rbShadows[maxShadowLightsCount];
+	/// Вспомогательная карта для размытия.
+	ptr<RenderBuffer> rbShadowBlur;
 
 private:
 	/// Ключ шейдеров в кэше.

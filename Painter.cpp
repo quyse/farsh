@@ -67,6 +67,10 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	ugModel(NEW(UniformGroup(3))),
 	uWorlds(ugModel->AddUniformArray<float4x4>(maxInstancesCount)),
 
+	ugShadowBlur(NEW(UniformGroup(0))),
+	uShadowBlurDirection(ugShadowBlur->AddUniform<float2>()),
+	uShadowBlurSourceSampler(0),
+
 	ugDownsample(NEW(UniformGroup(0))),
 	uDownsampleOffsets(ugDownsample->AddUniform<float4>()),
 	uDownsampleBlend(ugDownsample->AddUniform<float>()),
@@ -87,6 +91,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	ubCamera(device->CreateUniformBuffer(ugCamera->GetSize())),
 	ubMaterial(device->CreateUniformBuffer(ugMaterial->GetSize())),
 	ubModel(device->CreateUniformBuffer(ugModel->GetSize())),
+	ubShadowBlur(device->CreateUniformBuffer(ugShadowBlur->GetSize())),
 	ubDownsample(device->CreateUniformBuffer(ugDownsample->GetSize())),
 	ubBloom(device->CreateUniformBuffer(ugBloom->GetSize())),
 	ubTone(device->CreateUniformBuffer(ugTone->GetSize()))
@@ -95,6 +100,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	ugCamera->Finalize();
 	ugMaterial->Finalize();
 	ugModel->Finalize();
+	ugShadowBlur->Finalize();
 	ugDownsample->Finalize();
 	ugBloom->Finalize();
 	ugTone->Finalize();
@@ -107,8 +113,10 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	//** создать ресурсы
 	rbBack = presenter->GetBackBuffer();
 	dsbDepth = device->CreateDepthStencilBuffer(screenWidth, screenHeight);
+	dsbShadow = device->CreateDepthStencilBuffer(shadowMapSize, shadowMapSize);
 	for(int i = 0; i < maxShadowLightsCount; ++i)
-		dsbShadows[i] = device->CreateDepthStencilBuffer(shadowMapSize, shadowMapSize, true);
+		rbShadows[i] = device->CreateRenderBuffer(shadowMapSize, shadowMapSize, PixelFormats::floatR16);
+	rbShadowBlur = device->CreateRenderBuffer(shadowMapSize, shadowMapSize, PixelFormats::floatR16);
 
 	// экранный буфер
 	rbScreen = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatR11G11B10);
@@ -157,6 +165,37 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		uRandomSampler.SetSamplerState(ss);
 	}
 
+	// геометрия полноэкранного прохода
+	ptr<VertexBuffer> quadVertexBuffer;
+	ptr<IndexBuffer> quadIndexBuffer;
+	{
+		// вершина для фильтра
+		struct Vertex
+		{
+			float4 position;
+			float2 texcoord;
+			float2 gap;
+		};
+		// геометрия полноэкранного квадрата
+		Vertex vertices[] =
+		{
+			{ float4(-1, -1, 0, 1), float2(0, 1) },
+			{ float4(1, -1, 0, 1), float2(1, 1) },
+			{ float4(1, 1, 0, 1), float2(1, 0) },
+			{ float4(-1, 1, 0, 1), float2(0, 0) }
+		};
+		unsigned short indices[] = { 0, 2, 1, 0, 3, 2 };
+
+		// разметка геометрии
+		std::vector<Layout::Element> layoutElements;
+		layoutElements.push_back(Layout::Element(DataTypes::Float4, 0, 0));
+		layoutElements.push_back(Layout::Element(DataTypes::Float2, 16, 1));
+		ptr<Layout> layout = NEW(Layout(layoutElements, sizeof(Vertex)));
+
+		quadVertexBuffer = device->CreateVertexBuffer(MemoryFile::CreateViaCopy(vertices, sizeof(vertices)), layout);
+		quadIndexBuffer = device->CreateIndexBuffer(MemoryFile::CreateViaCopy(indices, sizeof(indices)), sizeof(unsigned short));
+	}
+
 	//** инициализировать состояния конвейера
 	ContextState cleanState;
 	if(0)
@@ -170,6 +209,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	shadowContextState = cleanState;
 	shadowContextState.viewportWidth = shadowMapSize;
 	shadowContextState.viewportHeight = shadowMapSize;
+	shadowContextState.depthStencilBuffer = dsbShadow;
 	shadowContextState.uniformBuffers[ugCamera->GetSlot()] = ubCamera;
 	shadowContextState.uniformBuffers[ugModel->GetSlot()] = ubModel;
 
@@ -210,7 +250,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			for(int i = 0; i < shadowLightsCount; ++i)
 			{
 				ShadowLight& shadowLight = lightVariant.shadowLights[i];
-				shadowLight.uShadowSampler.SetTexture(dsbShadows[i]->GetTexture());
+				shadowLight.uShadowSampler.SetTexture(rbShadows[i]->GetTexture());
 				shadowLight.uShadowSampler.SetSamplerState(shadowSamplerState);
 				shadowLight.uShadowSampler.Apply(cs);
 			}
@@ -228,6 +268,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	Interpolant<float3> tNormal(Semantics::CustomNormal);
 	Interpolant<float2> tTexcoord(Semantics::CustomTexcoord0);
 	Interpolant<float3> tWorldPosition(Semantic(Semantics::CustomTexcoord0 + 1));
+	Interpolant<float> tDepth(Semantics::CustomTexcoord0);
 	Fragment<float4> tTarget(Semantics::TargetColor0);
 	// номер instance
 	Value<unsigned int> instanceID = NEW(SpecialNode(DataTypes::UInt, Semantics::Instance));
@@ -243,10 +284,16 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	ptr<VertexShader> vertexShader = device->CreateVertexShader(shaderCompiler->Compile(vertexShaderSource));
 
 	// вершинный шейдер для теней
-	ptr<ShaderSource> shadowVertexShaderSource = shaderGenerator->Generate(Expression((
-		tPosition = mul(mul(aPosition, uWorlds[instanceID]), uViewProj)
-		)), ShaderTypes::vertex);
-	shadowContextState.vertexShader = device->CreateVertexShader(shaderCompiler->Compile(shadowVertexShaderSource));
+	shadowContextState.vertexShader = device->CreateVertexShader(shaderCompiler->Compile(shaderGenerator->Generate(Expression((
+		tPosition = mul(mul(aPosition, uWorlds[instanceID]), uViewProj),
+		tDepth = tPosition.Swizzle<float>("z")// / tPosition.Swizzle<float>("w")
+		)), ShaderTypes::vertex)));
+	// пиксельный шейдер для теней
+	shadowContextState.pixelShader = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(Expression((
+		tPosition,
+		tDepth,
+		tTarget = newfloat4(tDepth, 0, 0, 0)
+		)), ShaderTypes::pixel)));
 
 	// варианты шейдеров
 	for(int basicLightsCount = 0; basicLightsCount <= maxBasicLightsCount; ++basicLightsCount)
@@ -332,58 +379,20 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 				Temp<float4> shadowCoords;
 				Temp<float> shadowMultiplier;
 				Temp<float2> shadowCoordsXY;
-				Temp<float> originZ;
+				Temp<float> linearShadowZ;
 				Temp<float> lighted;
-				shader.Assign((shader,
+				Temp<float> expCoef;
+				Temp<float3> toLight;
+				shader.Append((
 					shadowCoords = mul(tmpWorldPosition, shadowLight.uLightTransform),
 					lighted = shadowCoords.Swizzle<float>("w") > Value<float>(0),
+					linearShadowZ = shadowCoords.Swizzle<float>("z"),
 					shadowCoords = shadowCoords / shadowCoords.Swizzle<float>("w"),
-					originZ = shadowCoords.Swizzle<float>("z") - Value<float>(0.0005f),
 					shadowCoordsXY = newfloat2(
 						(shadowCoords.Swizzle<float>("x") + Value<float>(1.0f)) * Value<float>(0.5f),
-						(Value<float>(1.0f) - shadowCoords.Swizzle<float>("y")) * Value<float>(0.5f))
-						+ random.Swizzle<float2>("zw")
-						,
-					shadowMultiplier = 0
-					));
-				static const float poissonDisk[11][2] =
-				{
-					{ 0.756607, -0.0438077 },
-					{ 0.461417, -0.537318 },
-					{ 0.549276, 0.44852 },
-					{ 0.272938, 0.0256119 },
-					{ -0.701909, 0.0956898 },
-					{ -0.189804, 0.183371 },
-					{ -0.579847, -0.459086 },
-					{ -0.427713, 0.61854 },
-					{ 0.108073, 0.727706 },
-					{ -0.109598, -0.29099 },
-					{ -0.0102734, -0.763004 }
-				};
-				// самый новый способ
-				const float m = 1.0f / shadowMapSize;
-				Temp<float2> rotate1, rotate2;
-				shader.Assign((shader,
-					rotate1 = newfloat2(cos(random.Swizzle<float>("x")), sin(random.Swizzle<float>("x"))),
-					rotate2 = newfloat2(-rotate1.Swizzle<float>("y"), rotate1.Swizzle<float>("x"))
-					));
-				for(int j = 0; j < 11; ++j)
-				{
-					Temp<float2> v;
-					shader.Assign((shader,
-						v = newfloat2(poissonDisk[j][0] * m, poissonDisk[j][1] * m),
-						v = newfloat2(dot(v, rotate1), dot(v, rotate2)),
-						shadowMultiplier = shadowMultiplier +
-						(shadowLight.uShadowSampler.Sample(shadowCoordsXY + v) > originZ)
-						));
-				}
-				shader.Assign((shader,
-					shadowMultiplier = shadowMultiplier * lighted * Value<float>(1.0f / 11)
-					));
-
-				// добавка к цвету
-				Temp<float3> toLight;
-				shader.Assign((shader,
+						(Value<float>(1.0f) - shadowCoords.Swizzle<float>("y")) * Value<float>(0.5f)),
+					expCoef = Value<float>(4),
+					shadowMultiplier = lighted * saturate(exp(expCoef * (shadowLight.uShadowSampler.Sample(shadowCoordsXY) - linearShadowZ))),
 					toLight = shadowLight.uLightPosition - tmpWorldPosition.Swizzle<float3>("xyz"),
 					tmpColor = tmpColor + shadowLight.uLightColor /** exp(length(toLight) * Value<float>(-0.05f))*/ * shadowMultiplier * (diffuse + specular)
 					));
@@ -400,39 +409,13 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			shaders[shaderKey] = Shader(vertexShader, pixelShader);
 		}
 
-	//** шейдеры и геометрия постпроцессинга
+	//** шейдеры и состояния постпроцессинга и размытия теней
 	{
-		// вершина для фильтра
-		struct Vertex
-		{
-			float4 position;
-			float2 texcoord;
-			float2 gap;
-		};
-		// геометрия полноэкранного квадрата
-		Vertex vertices[] =
-		{
-			{ float4(-1, -1, 0, 1), float2(0, 1) },
-			{ float4(1, -1, 0, 1), float2(1, 1) },
-			{ float4(1, 1, 0, 1), float2(1, 0) },
-			{ float4(-1, 1, 0, 1), float2(0, 0) }
-		};
-		unsigned short indices[] = { 0, 2, 1, 0, 3, 2 };
-
-		// разметка геометрии
-		std::vector<Layout::Element> layoutElements;
-		layoutElements.push_back(Layout::Element(DataTypes::Float4, 0, 0));
-		layoutElements.push_back(Layout::Element(DataTypes::Float2, 16, 1));
-		ptr<Layout> layout = NEW(Layout(layoutElements, sizeof(Vertex)));
-
-		ptr<VertexBuffer> vertexBuffer = device->CreateVertexBuffer(MemoryFile::CreateViaCopy(vertices, sizeof(vertices)), layout);
-		ptr<IndexBuffer> indexBuffer = device->CreateIndexBuffer(MemoryFile::CreateViaCopy(indices, sizeof(indices)), sizeof(unsigned short));
-
 		ContextState csFilter;
 		csFilter.viewportWidth = screenWidth;
 		csFilter.viewportHeight = screenHeight;
-		csFilter.vertexBuffer = vertexBuffer;
-		csFilter.indexBuffer = indexBuffer;
+		csFilter.vertexBuffer = quadVertexBuffer;
+		csFilter.indexBuffer = quadIndexBuffer;
 
 		// атрибуты
 		Attribute<float4> aPosition(0);
@@ -450,6 +433,26 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			), ShaderTypes::vertex)));
 
 		csFilter.vertexShader = vertexShader;
+
+		// пиксельный шейдер для размытия тени
+		ptr<PixelShader> psShadowBlur;
+		{
+			Temp<float> sum;
+			Expression shader = (
+				iPosition,
+				iTexcoord,
+				sum = 0
+				);
+			static const float taps[] = { 0.006f, 0.061f, 0.242f, 0.383f, 0.242f, 0.061f, 0.006f };
+			for(int i = 0; i < sizeof(taps) / sizeof(taps[0]); ++i)
+				shader.Append((
+					sum = sum + exp(uShadowBlurSourceSampler.Sample(iTexcoord + uShadowBlurDirection * Value<float>((float)i - 3))) * Value<float>(taps[i])
+					));
+			shader.Append((
+				fTarget = newfloat4(log(sum), 0, 0, 1)
+				));
+			psShadowBlur = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
+		}
 
 		// пиксельный шейдер для downsample
 		ptr<PixelShader> psDownsample;
@@ -575,22 +578,40 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 				luminance = dot(color, newfloat3(0.2126f, 0.7152f, 0.0722f)),
 				relativeLuminance = uToneLuminanceKey * luminance / exp(uToneAverageSampler.Sample(newfloat2(0.5f, 0.5f))),
 				intensity = relativeLuminance * (Value<float>(1) + relativeLuminance / uToneMaxLuminance) / (Value<float>(1) + relativeLuminance),
+				//fTarget = newfloat4(color, 1.0f)
 				fTarget = newfloat4(color * (intensity / luminance), 1.0f)
 				);
 			psTone = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
 		}
 
+		csShadowBlur = csFilter;
 		csBloomLimit = csFilter;
 		csBloom1 = csFilter;
 		csBloom2 = csFilter;
 		csTone = csFilter;
 
+		// point sampler
 		ptr<SamplerState> pointSampler = device->CreateSamplerState();
 		pointSampler->SetFilter(SamplerState::filterPoint, SamplerState::filterPoint, SamplerState::filterPoint);
 		pointSampler->SetWrap(SamplerState::wrapClamp, SamplerState::wrapClamp, SamplerState::wrapClamp);
+		// linear sampler
 		ptr<SamplerState> linearSampler = device->CreateSamplerState();
 		linearSampler->SetFilter(SamplerState::filterLinear, SamplerState::filterLinear, SamplerState::filterLinear);
 		linearSampler->SetWrap(SamplerState::wrapClamp, SamplerState::wrapClamp, SamplerState::wrapClamp);
+		// point sampler with border=0
+		ptr<SamplerState> pointBorderSampler = device->CreateSamplerState();
+		pointBorderSampler->SetFilter(SamplerState::filterPoint, SamplerState::filterPoint, SamplerState::filterPoint);
+		pointBorderSampler->SetWrap(SamplerState::wrapBorder, SamplerState::wrapBorder, SamplerState::wrapBorder);
+		float borderColor[] = { 0, 0, 0, 0 };
+		pointBorderSampler->SetBorderColor(borderColor);
+
+		// состояние для размытия тени
+		csShadowBlur.viewportWidth = shadowMapSize;
+		csShadowBlur.viewportHeight = shadowMapSize;
+		uShadowBlurSourceSampler.SetSamplerState(pointBorderSampler);
+		uShadowBlurSourceSampler.Apply(csShadowBlur);
+		csShadowBlur.uniformBuffers[ugShadowBlur->GetSlot()] = ubShadowBlur;
+		csShadowBlur.pixelShader = psShadowBlur;
 
 		// проходы даунсемплинга
 		for(int i = 0; i < downsamplingPassesCount; ++i)
@@ -722,16 +743,20 @@ void Painter::Draw()
 	if(shadowLightsCount > maxShadowLightsCount)
 		THROW_PRIMARY_EXCEPTION("Too many shadow lights");
 
+	float zeroColor[] = { 0, 0, 0, 0 };
+	float farColor[] = { 1e8, 1e8, 1e8, 1e8 };
+
 	// выполнить теневые проходы
-	context->GetTargetState() = shadowContextState;
 	int shadowPassNumber = 0;
 	for(size_t i = 0; i < lights.size(); ++i)
 		if(lights[i].shadow)
 		{
-			// очистить карту теней
-			context->ClearDepthStencilBuffer(dsbShadows[shadowPassNumber], 1.0f);
-			context->GetTargetState().depthStencilBuffer = dsbShadows[shadowPassNumber];
-			shadowPassNumber++;
+			ContextState& cs = context->GetTargetState();
+
+			cs = shadowContextState;
+
+			ptr<RenderBuffer> rb = rbShadows[shadowPassNumber];
+			cs.renderBuffers[0] = rb;
 
 			// указать трансформацию
 			uViewProj.SetValue(lights[i].transform);
@@ -747,8 +772,11 @@ void Painter::Draw()
 			};
 			std::sort(models.begin(), models.end(), GeometrySorter());
 
+			// очистить карту теней
+			context->ClearDepthStencilBuffer(dsbShadow, 1.0f);
+			context->ClearRenderBuffer(rb, farColor);
+
 			// нарисовать
-			ContextState& cs = context->GetTargetState();
 			for(size_t j = 0; j < models.size(); )
 			{
 				// количество рисуемых объектов
@@ -765,7 +793,7 @@ void Painter::Draw()
 				cs.indexBuffer = models[j].indexBuffer;
 				// установить uniform'ы
 				for(int k = 0; k < batchCount; ++k)
-					uWorlds.SetValue(j, models[j + k].worldTransform);
+					uWorlds.SetValue(k, models[j + k].worldTransform);
 				// и залить в GPU
 				context->SetUniformBufferData(ubModel, ugModel->GetData(), ugModel->GetSize());
 
@@ -774,6 +802,28 @@ void Painter::Draw()
 
 				j += batchCount;
 			}
+
+			// выполнить размытие тени
+			// первый проход
+			cs = csShadowBlur;
+			cs.renderBuffers[0] = rbShadowBlur;
+			uShadowBlurSourceSampler.SetTexture(rb->GetTexture());
+			uShadowBlurSourceSampler.Apply(cs);
+			uShadowBlurDirection.SetValue(float2(1.0f / shadowMapSize, 0));
+			context->SetUniformBufferData(ubShadowBlur, ugShadowBlur->GetData(), ugShadowBlur->GetSize());
+			context->ClearRenderBuffer(rbShadowBlur, zeroColor);
+			context->Draw();
+			// второй проход
+			cs = csShadowBlur;
+			cs.renderBuffers[0] = rb;
+			uShadowBlurSourceSampler.SetTexture(rbShadowBlur->GetTexture());
+			uShadowBlurSourceSampler.Apply(cs);
+			uShadowBlurDirection.SetValue(float2(0, 1.0f / shadowMapSize));
+			context->SetUniformBufferData(ubShadowBlur, ugShadowBlur->GetData(), ugShadowBlur->GetSize());
+			context->ClearRenderBuffer(rb, zeroColor);
+			context->Draw();
+
+			shadowPassNumber++;
 		}
 
 	// очистить рендербуферы
@@ -904,25 +954,34 @@ void Painter::Draw()
 	veryFirstDownsampling = false;
 
 	// bloom
-	uBloomLimit.SetValue(1.0f);
+	uBloomLimit.SetValue(10.0f);
 	context->SetUniformBufferData(ubBloom, ugBloom->GetData(), ugBloom->GetSize());
 
 	const int bloomPassesCount = 9;
 
-	cs = csBloomLimit;
-	context->ClearRenderBuffer(rbBloom2, clearColor);
-	context->Draw();
-	cs = csBloom2;
-	context->ClearRenderBuffer(rbBloom1, clearColor);
-	context->Draw();
-	for(int i = 1; i < bloomPassesCount; ++i)
+	bool enableBloom = true;
+
+	if(enableBloom)
 	{
-		cs = csBloom1;
+		cs = csBloomLimit;
 		context->ClearRenderBuffer(rbBloom2, clearColor);
 		context->Draw();
 		cs = csBloom2;
 		context->ClearRenderBuffer(rbBloom1, clearColor);
 		context->Draw();
+		for(int i = 1; i < bloomPassesCount; ++i)
+		{
+			cs = csBloom1;
+			context->ClearRenderBuffer(rbBloom2, clearColor);
+			context->Draw();
+			cs = csBloom2;
+			context->ClearRenderBuffer(rbBloom1, clearColor);
+			context->Draw();
+		}
+	}
+	else
+	{
+		context->ClearRenderBuffer(rbBloom1, clearColor);
 	}
 
 	// tone mapping

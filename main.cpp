@@ -30,8 +30,8 @@ private:
 
 	float alpha;
 
-	ptr<VertexBuffer> vertexBuffer;
-	ptr<IndexBuffer> indexBuffer;
+	ptr<VertexBuffer> vertexBuffer, knotVertexBuffer;
+	ptr<IndexBuffer> indexBuffer, knotIndexBuffer;
 	ptr<Texture> diffuseTexture;
 	ptr<Texture> specularTexture;
 
@@ -169,9 +169,9 @@ public:
 		float4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, float3(0, 0, 1));
 		float4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 0.1f, 100.0f);
 
-		//float3 shadowLightPosition = cameraPosition;
+		//float3 shadowLightPosition = cameraPosition + cameraRightDirection;
 		//float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, cameraPosition + cameraDirection, float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
-		float3 shadowLightPosition(0, 0, 10);
+		float3 shadowLightPosition(10, 0, 10);
 		float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, float3(10, 10, 0), float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
 		float3 shadowLightPosition2(20, 20, 10);
 		float4x4 shadowLightTransform2 = CreateLookAtMatrix(shadowLightPosition2, float3(10, 10, 0), float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
@@ -181,11 +181,13 @@ public:
 		// зарегистрировать все объекты
 		painter->BeginFrame(frameTime);
 		painter->SetCamera(viewMatrix * projMatrix, cameraPosition);
-		painter->SetAmbientColor(float3(0.2f, 0.2f, 0.2f));
+		painter->SetAmbientColor(float3(0, 0, 0));
+		//painter->SetAmbientColor(float3(0.2f, 0.2f, 0.2f));
 		for(size_t i = 0; i < cubes.size(); ++i)
 			painter->AddModel(diffuseTexture, specularTexture, vertexBuffer, indexBuffer, CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform());
-		painter->AddShadowLight(shadowLightPosition, float3(1.0f, 1.0f, 1.0f), shadowLightTransform);
-		painter->AddShadowLight(shadowLightPosition2, float3(1.0f, 1.0f, 1.0f), shadowLightTransform2);
+		//painter->AddModel(diffuseTexture, specularTexture, knotVertexBuffer, knotIndexBuffer, CreateScalingMatrix(0.3f, 0.3f, 0.3f) * CreateTranslationMatrix(10, 10, 2));
+		painter->AddShadowLight(shadowLightPosition, float3(1.0f, 1.0f, 1.0f) * 0.4f, shadowLightTransform);
+		painter->AddShadowLight(shadowLightPosition2, float3(1.0f, 1.0f, 1.0f) * 0.2f, shadowLightTransform2);
 
 		painter->Draw();
 
@@ -254,6 +256,8 @@ public:
 //		drawingState.indexBuffer = device->CreateIndexBuffer(fs->LoadFile("circular.geo.indices"), layout);
 		vertexBuffer = device->CreateVertexBuffer(fs->LoadFile("box.geo.vertices"), layout);
 		indexBuffer = device->CreateIndexBuffer(fs->LoadFile("box.geo.indices"), layout);
+		knotVertexBuffer = device->CreateVertexBuffer(fs->LoadFile("knot.geo.vertices"), layout);
+		knotIndexBuffer = device->CreateIndexBuffer(fs->LoadFile("knot.geo.indices"), layout);
 		//vertexBuffer = device->CreateVertexBuffer(fs->LoadFile("statuya.geo.vertices"), layout);
 		//indexBuffer = device->CreateIndexBuffer(fs->LoadFile("statuya.geo.indices"), layout);
 #endif
