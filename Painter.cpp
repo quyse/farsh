@@ -94,6 +94,8 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	aPosition(0),
 	aNormal(1),
 	aTexcoord(2),
+	aBoneNumbers(3),
+	aBoneWeights(4),
 
 	ugCamera(NEW(UniformGroup(0))),
 	uViewProj(ugCamera->AddUniform<float4x4>()),
@@ -115,6 +117,8 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	uWorlds(ugInstancedModel->AddUniformArray<float4x4>(maxInstancesCount)),
 
 	ugSkinnedModel(NEW(UniformGroup(3))),
+	uBoneOrientations(ugSkinnedModel->AddUniformArray<float4>(maxBonesCount)),
+	uBoneOffsets(ugSkinnedModel->AddUniformArray<float4>(maxBonesCount)),
 
 	ugShadowBlur(NEW(UniformGroup(0))),
 	uShadowBlurDirection(ugShadowBlur->AddUniform<float2>()),
@@ -623,6 +627,56 @@ Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)
 	return lightVariantsCache.find(key)->second;
 }
 
+Value<float3> Painter::ApplyQuaternion(Value<float4> q, Value<float3> v)
+{
+	return v + cross(q.Swizzle<float3>("xyz"), cross(q.Swizzle<float3>("xyz"), v) + v * q.Swizzle<float>("w")) * Value<float>(2);
+}
+
+Expression Painter::GetWorldPositionAndNormal(bool instanced, bool skinned)
+{
+	if(skinned)
+	{
+		Value<float3> position = aPosition.Swizzle<float3>("xyz");
+		Value<uint> boneNumbers[] =
+		{
+			aBoneNumbers.Swizzle<uint>("x"),
+			aBoneNumbers.Swizzle<uint>("y"),
+			aBoneNumbers.Swizzle<uint>("z"),
+			aBoneNumbers.Swizzle<uint>("w")
+		};
+		Value<float> boneWeights[] =
+		{
+			aBoneWeights.Swizzle<float>("x"),
+			aBoneWeights.Swizzle<float>("y"),
+			aBoneWeights.Swizzle<float>("z"),
+			aBoneWeights.Swizzle<float>("w")
+		};
+		return
+			tmpVertexPosition = newfloat4(
+				(ApplyQuaternion(uBoneOrientations[boneNumbers[0]], position) + uBoneOffsets[boneNumbers[0]].Swizzle<float3>("xyz")) * boneWeights[0] +
+				(ApplyQuaternion(uBoneOrientations[boneNumbers[1]], position) + uBoneOffsets[boneNumbers[1]].Swizzle<float3>("xyz")) * boneWeights[1] +
+				(ApplyQuaternion(uBoneOrientations[boneNumbers[2]], position) + uBoneOffsets[boneNumbers[2]].Swizzle<float3>("xyz")) * boneWeights[2] +
+				(ApplyQuaternion(uBoneOrientations[boneNumbers[3]], position) + uBoneOffsets[boneNumbers[3]].Swizzle<float3>("xyz")) * boneWeights[3],
+				1.0f),
+			tmpVertexNormal =
+				ApplyQuaternion(uBoneOrientations[boneNumbers[0]], aNormal) * boneWeights[0] +
+				ApplyQuaternion(uBoneOrientations[boneNumbers[1]], aNormal) * boneWeights[1] +
+				ApplyQuaternion(uBoneOrientations[boneNumbers[2]], aNormal) * boneWeights[2] +
+				ApplyQuaternion(uBoneOrientations[boneNumbers[3]], aNormal) * boneWeights[3];
+	}
+	else
+	{
+		Temp<float4x4> tmpWorld;
+		return
+			tmpWorld = (instanced ?
+				uWorlds[Value<unsigned int>(NEW(SpecialNode(DataTypes::UInt, Semantics::Instance)))]
+				:
+				uWorld),
+			tmpVertexPosition = mul(aPosition, tmpWorld),
+			tmpVertexNormal = mul(aNormal, tmpWorld.Cast<float3x3>());
+	}
+}
+
 ptr<VertexShader> Painter::GetVertexShader(const VertexShaderKey& key)
 {
 	// если есть в кэше, вернуть
@@ -633,20 +687,13 @@ ptr<VertexShader> Painter::GetVertexShader(const VertexShaderKey& key)
 	}
 
 	// делаем новый
-	// TEMP
-	if(key.skinned)
-		THROW_PRIMARY_EXCEPTION("skinned not implemented");
-
-	Temp<float4x4> tmpWorld;
-	Temp<float4> tmpWorldPosition;
 
 	ptr<VertexShader> vertexShader = GenerateVS(Expression((
-		tmpWorld = key.instanced ? uWorlds[Value<unsigned int>(NEW(SpecialNode(DataTypes::UInt, Semantics::Instance)))] : uWorld,
-		tmpWorldPosition = mul(aPosition, tmpWorld),
-		iPosition = mul(tmpWorldPosition, uViewProj),
-		iNormal = mul(aNormal, tmpWorld.Cast<float3x3>()),
+		GetWorldPositionAndNormal(key.instanced, key.skinned),
+		iPosition = mul(tmpVertexPosition, uViewProj),
+		iNormal = tmpVertexNormal,
 		iTexcoord = aTexcoord,
-		iWorldPosition = tmpWorldPosition.Swizzle<float3>("xyz")
+		iWorldPosition = tmpVertexPosition.Swizzle<float3>("xyz")
 		)));
 
 	// добавить и вернуть
@@ -664,15 +711,10 @@ ptr<VertexShader> Painter::GetVertexShadowShader(const VertexShaderKey& key)
 	}
 
 	// делаем новый
-	// TEMP
-	if(key.skinned)
-		THROW_PRIMARY_EXCEPTION("skinned not implemented");
-
-	Temp<float4x4> tmpWorld;
 
 	ptr<VertexShader> vertexShader = GenerateVS(Expression((
-		tmpWorld = key.instanced ? uWorlds[Value<unsigned int>(NEW(SpecialNode(DataTypes::UInt, Semantics::Instance)))] : uWorld,
-		iPosition = mul(mul(aPosition, tmpWorld), uViewProj),
+		GetWorldPositionAndNormal(key.instanced, key.skinned),
+		iPosition = mul(tmpVertexPosition, uViewProj),
 		iDepth = iPosition.Swizzle<float>("z")
 		)));
 

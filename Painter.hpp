@@ -30,11 +30,15 @@ private:
 	static const int maxShadowLightsCount = 4;
 	/// Количество для instancing'а.
 	static const int maxInstancesCount = 64;
+	/// Количество костей для skinning.
+	static const int maxBonesCount = 64;
 
 	//*** Атрибуты.
 	Attribute<float4> aPosition;
 	Attribute<float3> aNormal;
 	Attribute<float2> aTexcoord;
+	Attribute<uint4> aBoneNumbers;
+	Attribute<float4> aBoneWeights;
 
 	///*** Uniform-группа камеры.
 	ptr<UniformGroup> ugCamera;
@@ -133,6 +137,10 @@ private:
 
 	///*** Uniform-группа skinned-модели.
 	ptr<UniformGroup> ugSkinnedModel;
+	/// Кватернионы костей.
+	UniformArray<float4> uBoneOrientations;
+	/// Смещения костей.
+	UniformArray<float4> uBoneOffsets;
 
 	///*** Uniform-группа размытия тени.
 	ptr<UniformGroup> ugShadowBlur;
@@ -269,6 +277,15 @@ public:
 	};
 
 private:
+	Temp<float4> tmpVertexPosition;
+	Temp<float3> tmpVertexNormal;
+
+	/// Повернуть вектор кватернионом.
+	static Value<float3> ApplyQuaternion(Value<float4> q, Value<float3> v);
+	/// Получить положение вершины и нормаль в мире.
+	/** Возвращает выражение, которое записывает положение и нормаль во
+	временные переменные tmpVertexPosition и tmpVertexNormal. */
+	Expression GetWorldPositionAndNormal(bool instanced, bool skinned);
 
 	/// Ключ вершинного шейдера в кэше.
 	struct VertexShaderKey
