@@ -84,22 +84,55 @@ private:
 
 		LightVariant();
 	};
+	/// Структура ключа варианта света.
+	struct LightVariantKey
+	{
+		int basicLightsCount;
+		int shadowLightsCount;
+
+		LightVariantKey(int basicLightsCount, int shadowLightsCount)
+		: basicLightsCount(basicLightsCount), shadowLightsCount(shadowLightsCount)
+		{}
+
+		operator size_t() const
+		{
+			return basicLightsCount | (shadowLightsCount << 3);
+		}
+	};
 	/// Варианты света.
-	LightVariant lightVariants[maxBasicLightsCount + 1][maxShadowLightsCount + 1];
+	std::unordered_map<LightVariantKey, LightVariant> lightVariantsCache;
+	/// Получить вариант света.
+	LightVariant& GetLightVariant(const LightVariantKey& key);
 
 	///*** Uniform-группа материала.
 	ptr<UniformGroup> ugMaterial;
-	/// Семплер случайной текстуры.
-	Sampler<float4, float2> uRandomSampler;
+	/// Диффузный цвет.
+	Uniform<float3> uDiffuse;
+	/// Specular.
+	Uniform<float3> uSpecular;
+	/// Specular power.
+	Uniform<float3> uSpecularPower;
 	/// Семплер диффузной текстуры.
 	Sampler<float3, float2> uDiffuseSampler;
 	/// Семплер specular текстуры.
 	Sampler<float3, float2> uSpecularSampler;
+	/// Семплер specular power текстуры.
+	Sampler<float3, float2> uSpecularPowerSampler;
+	/// Семплер карты нормалей.
+	Sampler<float3, float2> uNormalSampler;
 
 	///*** Uniform-группа модели.
 	ptr<UniformGroup> ugModel;
+	/// Матрица мира.
+	Uniform<float4x4> uWorld;
+
+	///*** Uniform-группа instanced-модели.
+	ptr<UniformGroup> ugInstancedModel;
 	/// Матрицы мира.
 	UniformArray<float4x4> uWorlds;
+
+	///*** Uniform-группа skinned-модели.
+	ptr<UniformGroup> ugSkinnedModel;
 
 	///*** Uniform-группа размытия тени.
 	ptr<UniformGroup> ugShadowBlur;
@@ -144,14 +177,26 @@ private:
 	ptr<UniformBuffer> ubCamera;
 	ptr<UniformBuffer> ubMaterial;
 	ptr<UniformBuffer> ubModel;
+	ptr<UniformBuffer> ubInstancedModel;
+	ptr<UniformBuffer> ubSkinnedModel;
 	ptr<UniformBuffer> ubShadowBlur;
 	ptr<UniformBuffer> ubDownsample;
 	ptr<UniformBuffer> ubBloom;
 	ptr<UniformBuffer> ubTone;
 
+	//*** Промежуточные переменные.
+	Interpolant<float4> iPosition;
+	Interpolant<float3> iNormal;
+	Interpolant<float2> iTexcoord;
+	Interpolant<float3> iWorldPosition;
+	Interpolant<float> iDepth;
+
+	//*** Выходные переменные.
+	Fragment<float4> fTarget;
+
 	//** Состояния конвейера.
 	/// Состояние для shadow pass.
-	ContextState shadowContextState;
+	ContextState csShadow;
 	/// Состояние для прохода размытия.
 	ContextState csShadowBlur;
 
@@ -196,32 +241,76 @@ private:
 	/// Вспомогательная карта для размытия.
 	ptr<RenderBuffer> rbShadowBlur;
 
+public:
+	/// Структура ключа материала.
+	struct MaterialKey
+	{
+		bool hasDiffuseTexture;
+		bool hasSpecularTexture;
+		bool hasSpecularPowerTexture;
+		bool hasNormalTexture;
+
+		MaterialKey(bool hasDiffuseTexture, bool hasSpecularTexture, bool hasSpecularPowerTexture, bool hasNormalTexture);
+		operator size_t() const;
+	};
+
+	/// Структура материала.
+	struct Material : public Object
+	{
+		ptr<Texture> diffuseTexture;
+		ptr<Texture> specularTexture;
+		ptr<Texture> specularPowerTexture;
+		ptr<Texture> normalTexture;
+		float3 diffuse;
+		float3 specular;
+		float3 specularPower;
+
+		MaterialKey GetKey() const;
+	};
+
 private:
-	/// Ключ шейдеров в кэше.
-	struct ShaderKey
+
+	/// Ключ вершинного шейдера в кэше.
+	struct VertexShaderKey
+	{
+		/// Instanced?
+		bool instanced;
+		/// Скиннинг?
+		/** Только при instanced=false. */
+		bool skinned;
+
+		VertexShaderKey(bool instanced, bool skinned);
+
+		operator size_t() const;
+	};
+	/// Кэш вершинных шейдеров.
+	std::unordered_map<VertexShaderKey, ptr<VertexShader> > vertexShaderCache;
+	/// Получить вершинный шейдер.
+	ptr<VertexShader> GetVertexShader(const VertexShaderKey& key);
+	/// Кэш вершинных шейдеров для теневого прохода.
+	std::unordered_map<VertexShaderKey, ptr<VertexShader> > vertexShadowShaderCache;
+	/// Получить вершинный шейдер для теневого прохода.
+	ptr<VertexShader> GetVertexShadowShader(const VertexShaderKey& key);
+
+	/// Ключ пиксельного шейдера в кэше.
+	struct PixelShaderKey
 	{
 		/// Количество источников света без теней.
 		int basicLightsCount;
 		/// Количество источников света с тенями.
 		int shadowLightsCount;
-		/// Skinned?
-		bool skinned;
+		/// Ключ материала.
+		MaterialKey materialKey;
 
-		ShaderKey(int basicLightsCount, int shadowLightsCount, bool skinned);
+		PixelShaderKey(int basicLightsCount, int shadowLightsCount, const MaterialKey& materialKey);
 
 		/// Получить хеш.
 		operator size_t() const;
 	};
-	/// Шейдер в кэше.
-	struct Shader
-	{
-		ptr<VertexShader> vertexShader;
-		ptr<PixelShader> pixelShader;
-		Shader();
-		Shader(ptr<VertexShader> vertexShader, ptr<PixelShader> pixelShader);
-	};
-	/// Кэш шейдеров материалов.
-	std::unordered_map<ShaderKey, Shader> shaders;
+	/// Кэш пиксельных шейдеров.
+	std::unordered_map<PixelShaderKey, ptr<PixelShader> > pixelShaderCache;
+	/// Получить пиксельный шейдер.
+	ptr<PixelShader> GetPixelShader(const PixelShaderKey& key);
 
 	/// Текущее время кадра.
 	float frameTime;
@@ -235,13 +324,11 @@ private:
 	/// Список моделей для рисования.
 	struct Model
 	{
-		ptr<Texture> diffuseTexture;
-		ptr<Texture> specularTexture;
-		ptr<VertexBuffer> vertexBuffer;
-		ptr<IndexBuffer> indexBuffer;
+		ptr<Material> material;
+		ptr<Geometry> geometry;
 		float4x4 worldTransform;
 
-		Model(ptr<Texture> diffuseTexture, ptr<Texture> specularTexture, ptr<VertexBuffer> vertexBuffer, ptr<IndexBuffer> indexBuffer, const float4x4& worldTransform);
+		Model(ptr<Material> material, ptr<Geometry> geometry, const float4x4& worldTransform);
 	};
 	std::vector<Model> models;
 
@@ -275,7 +362,7 @@ public:
 	/// Установить камеру.
 	void SetCamera(const float4x4& cameraViewProj, const float3& cameraPosition);
 	/// Зарегистрировать модель.
-	void AddModel(ptr<Texture> diffuseTexture, ptr<Texture> specularTexture, ptr<VertexBuffer> vertexBuffer, ptr<IndexBuffer> indexBuffer, const float4x4& worldTransform);
+	void AddModel(ptr<Material> material, ptr<Geometry> geometry, const float4x4& worldTransform);
 	/// Установить рассеянный свет.
 	void SetAmbientColor(const float3& ambientColor);
 	/// Зарегистрировать простой источник света.

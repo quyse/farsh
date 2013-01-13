@@ -32,10 +32,8 @@ private:
 
 	float alpha;
 
-	ptr<VertexBuffer> vertexBuffer, knotVertexBuffer;
-	ptr<IndexBuffer> indexBuffer, knotIndexBuffer;
-	ptr<Texture> diffuseTexture;
-	ptr<Texture> specularTexture;
+	ptr<Geometry> geometryCube, geometryKnot;
+	ptr<Painter::Material> texturedMaterial, greenMaterial;
 
 	PresentMode mode;
 
@@ -186,8 +184,8 @@ public:
 		painter->SetAmbientColor(float3(0, 0, 0));
 		//painter->SetAmbientColor(float3(0.2f, 0.2f, 0.2f));
 		for(size_t i = 0; i < cubes.size(); ++i)
-			painter->AddModel(diffuseTexture, specularTexture, vertexBuffer, indexBuffer, CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform());
-		painter->AddModel(diffuseTexture, specularTexture, knotVertexBuffer, knotIndexBuffer, CreateScalingMatrix(0.3f, 0.3f, 0.3f) * CreateTranslationMatrix(10, 10, 2));
+			painter->AddModel(texturedMaterial, geometryCube, CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform());
+		painter->AddModel(greenMaterial, geometryKnot, CreateScalingMatrix(0.3f, 0.3f, 0.3f) * CreateTranslationMatrix(10, 10, 2));
 		painter->AddShadowLight(shadowLightPosition, float3(1.0f, 1.0f, 1.0f) * 0.4f, shadowLightTransform);
 		painter->AddShadowLight(shadowLightPosition2, float3(1.0f, 1.0f, 1.0f) * 0.2f, shadowLightTransform2);
 
@@ -248,32 +246,21 @@ public:
 
 		ptr<FileSystem> fs = FolderFileSystem::GetNativeFileSystem();
 
-#if 0
-		ptr<File> vertexBufferFile = NEW(MemoryFile(sizeof(Vertex) * 3));
-		Vertex* vertexBufferData = (Vertex*)vertexBufferFile->GetData();
-		vertexBufferData[0].position = float3(-0.5f, -0.5f, 0);
-		vertexBufferData[1].position = float3(0, 0.5f, 0);
-		vertexBufferData[2].position = float3(0.5, 0, 0);
-		drawingState.vertexBuffer = device->CreateVertexBuffer(vertexBufferFile, layout);
-		ptr<File> indexBufferFile = NEW(MemoryFile(sizeof(short) * 3));
-		short* indexBufferData = (short*)indexBufferFile->GetData();
-		indexBufferData[0] = 0;
-		indexBufferData[1] = 1;
-		indexBufferData[2] = 2;
-		drawingState.indexBuffer = device->CreateIndexBuffer(indexBufferFile, sizeof(short));
-#else
-//		drawingState.vertexBuffer = device->CreateVertexBuffer(fs->LoadFile("circular.geo.vertices"), layout);
-//		drawingState.indexBuffer = device->CreateIndexBuffer(fs->LoadFile("circular.geo.indices"), layout);
-		vertexBuffer = device->CreateVertexBuffer(fs->LoadFile("box.geo.vertices"), layout);
-		indexBuffer = device->CreateIndexBuffer(fs->LoadFile("box.geo.indices"), layout);
-		knotVertexBuffer = device->CreateVertexBuffer(fs->LoadFile("knot.geo.vertices"), layout);
-		knotIndexBuffer = device->CreateIndexBuffer(fs->LoadFile("knot.geo.indices"), layout);
-		//vertexBuffer = device->CreateVertexBuffer(fs->LoadFile("statuya.geo.vertices"), layout);
-		//indexBuffer = device->CreateIndexBuffer(fs->LoadFile("statuya.geo.indices"), layout);
-#endif
+		geometryCube = NEW(Geometry(
+			device->CreateVertexBuffer(fs->LoadFile("box.geo.vertices"), layout),
+			device->CreateIndexBuffer(fs->LoadFile("box.geo.indices"), layout)));
+		geometryKnot = NEW(Geometry(
+			device->CreateVertexBuffer(fs->LoadFile("knot.geo.vertices"), layout),
+			device->CreateIndexBuffer(fs->LoadFile("knot.geo.indices"), layout)));
 
-		diffuseTexture = device->CreateStaticTexture(fs->LoadFile("diffuse.jpg"));
-		specularTexture = device->CreateStaticTexture(fs->LoadFile("specular.jpg"));
+		texturedMaterial = NEW(Painter::Material());
+		texturedMaterial->diffuseTexture = device->CreateStaticTexture(fs->LoadFile("diffuse.jpg"));
+		texturedMaterial->specularTexture = device->CreateStaticTexture(fs->LoadFile("specular.jpg"));
+		texturedMaterial->specularPower = float3(4, 4, 4);
+		greenMaterial = NEW(Painter::Material());
+		greenMaterial->diffuse = float3(0, 1, 0);
+		greenMaterial->specularTexture = texturedMaterial->specularTexture;
+		greenMaterial->specularPower = float3(10, 10, 10);
 
 		physicsWorld = NEW(Physics::BtWorld());
 

@@ -6,10 +6,14 @@ const int Painter::randomMapSize = 64;
 const int Painter::downsamplingStepForBloom = 1;
 const int Painter::bloomMapSize = 1 << (Painter::downsamplingPassesCount - 1 - Painter::downsamplingStepForBloom);
 
+//*** Painter::BasicLight
+
 Painter::BasicLight::BasicLight(ptr<UniformGroup> ug) :
 	uLightPosition(ug->AddUniform<float3>()),
 	uLightColor(ug->AddUniform<float3>())
 {}
+
+//*** Painter::ShadowLight
 
 Painter::ShadowLight::ShadowLight(ptr<UniformGroup> ug, int samplerNumber) :
 	BasicLight(ug),
@@ -17,33 +21,66 @@ Painter::ShadowLight::ShadowLight(ptr<UniformGroup> ug, int samplerNumber) :
 	uShadowSampler(samplerNumber)
 {}
 
+// Painter::LightVariant
+
 Painter::LightVariant::LightVariant() :
 	ugLight(NEW(UniformGroup(1))),
 	uAmbientColor(ugLight->AddUniform<float3>())
 {}
 
-Painter::ShaderKey::ShaderKey(int basicLightsCount, int shadowLightsCount, bool skinned) :
-basicLightsCount(basicLightsCount), shadowLightsCount(shadowLightsCount), skinned(skinned)
+//*** Painter::MaterialKey
+
+Painter::MaterialKey::MaterialKey(bool hasDiffuseTexture, bool hasSpecularTexture, bool hasSpecularPowerTexture, bool hasNormalTexture)
+: hasDiffuseTexture(hasDiffuseTexture), hasSpecularTexture(hasSpecularTexture), hasSpecularPowerTexture(hasSpecularPowerTexture), hasNormalTexture(hasNormalTexture)
 {}
 
-Painter::ShaderKey::operator size_t() const
+Painter::MaterialKey::operator size_t() const
 {
-	return basicLightsCount | (shadowLightsCount << 3) | (skinned << 6);
+	return (size_t)hasDiffuseTexture | ((size_t)hasSpecularTexture << 1) | ((size_t)hasSpecularPowerTexture << 2) | ((size_t)hasNormalTexture << 3);
 }
 
-Painter::Shader::Shader() {}
+//*** Painter::VertexShaderKey
 
-Painter::Shader::Shader(ptr<VertexShader> vertexShader, ptr<PixelShader> pixelShader)
-: vertexShader(vertexShader), pixelShader(pixelShader) {}
+Painter::VertexShaderKey::VertexShaderKey(bool instanced, bool skinned)
+: instanced(instanced), skinned(skinned) {}
 
-Painter::Model::Model(ptr<Texture> diffuseTexture, ptr<Texture> specularTexture, ptr<VertexBuffer> vertexBuffer, ptr<IndexBuffer> indexBuffer, const float4x4& worldTransform)
-: diffuseTexture(diffuseTexture), specularTexture(specularTexture), vertexBuffer(vertexBuffer), indexBuffer(indexBuffer), worldTransform(worldTransform) {}
+Painter::VertexShaderKey::operator size_t() const
+{
+	return (size_t)instanced | ((size_t)skinned << 1);
+}
+
+//*** Painter::PixelShaderKey
+
+Painter::PixelShaderKey::PixelShaderKey(int basicLightsCount, int shadowLightsCount, const MaterialKey& materialKey) :
+basicLightsCount(basicLightsCount), shadowLightsCount(shadowLightsCount), materialKey(materialKey)
+{}
+
+Painter::PixelShaderKey::operator size_t() const
+{
+	return basicLightsCount | (shadowLightsCount << 3) | (((size_t)materialKey) << 6);
+}
+
+//*** Painter::Material
+
+Painter::MaterialKey Painter::Material::GetKey() const
+{
+	return MaterialKey(diffuseTexture, specularTexture, specularPowerTexture, normalTexture);
+}
+
+//*** Painter::Model
+
+Painter::Model::Model(ptr<Material> material, ptr<Geometry> geometry, const float4x4& worldTransform)
+: material(material), geometry(geometry), worldTransform(worldTransform) {}
+
+//*** Painter::Light
 
 Painter::Light::Light(const float3& position, const float3& color)
 : position(position), color(color), shadow(false) {}
 
 Painter::Light::Light(const float3& position, const float3& color, const float4x4& transform)
 : position(position), color(color), transform(transform), shadow(true) {}
+
+//*** Painter
 
 Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, int screenWidth, int screenHeight, ptr<ShaderCache> shaderCache) :
 	device(device),
@@ -63,12 +100,21 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	uCameraPosition(ugCamera->AddUniform<float3>()),
 
 	ugMaterial(NEW(UniformGroup(2))),
-	uRandomSampler(0),
-	uDiffuseSampler(1),
-	uSpecularSampler(2),
+	uDiffuse(ugMaterial->AddUniform<float3>()),
+	uSpecular(ugMaterial->AddUniform<float3>()),
+	uSpecularPower(ugMaterial->AddUniform<float3>()),
+	uDiffuseSampler(0),
+	uSpecularSampler(1),
+	uSpecularPowerSampler(2),
+	uNormalSampler(3),
 
 	ugModel(NEW(UniformGroup(3))),
-	uWorlds(ugModel->AddUniformArray<float4x4>(maxInstancesCount)),
+	uWorld(ugModel->AddUniform<float4x4>()),
+
+	ugInstancedModel(NEW(UniformGroup(3))),
+	uWorlds(ugInstancedModel->AddUniformArray<float4x4>(maxInstancesCount)),
+
+	ugSkinnedModel(NEW(UniformGroup(3))),
 
 	ugShadowBlur(NEW(UniformGroup(0))),
 	uShadowBlurDirection(ugShadowBlur->AddUniform<float2>()),
@@ -94,15 +140,28 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	ubCamera(device->CreateUniformBuffer(ugCamera->GetSize())),
 	ubMaterial(device->CreateUniformBuffer(ugMaterial->GetSize())),
 	ubModel(device->CreateUniformBuffer(ugModel->GetSize())),
+	ubInstancedModel(device->CreateUniformBuffer(ugInstancedModel->GetSize())),
+	ubSkinnedModel(device->CreateUniformBuffer(ugSkinnedModel->GetSize())),
 	ubShadowBlur(device->CreateUniformBuffer(ugShadowBlur->GetSize())),
 	ubDownsample(device->CreateUniformBuffer(ugDownsample->GetSize())),
 	ubBloom(device->CreateUniformBuffer(ugBloom->GetSize())),
-	ubTone(device->CreateUniformBuffer(ugTone->GetSize()))
+	ubTone(device->CreateUniformBuffer(ugTone->GetSize())),
+
+	iPosition(Semantics::VertexPosition),
+	iNormal(Semantics::CustomNormal),
+	iTexcoord(Semantics::CustomTexcoord0),
+	iWorldPosition(Semantic(Semantics::CustomTexcoord0 + 1)),
+	iDepth(Semantics::CustomTexcoord0),
+
+	fTarget(Semantics::TargetColor0)
+
 {
 	// финализировать uniform группы
 	ugCamera->Finalize();
 	ugMaterial->Finalize();
 	ugModel->Finalize();
+	ugInstancedModel->Finalize();
+	ugSkinnedModel->Finalize();
 	ugShadowBlur->Finalize();
 	ugDownsample->Finalize();
 	ugBloom->Finalize();
@@ -140,6 +199,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	}
 
 	// создать случайную текстуру
+	if(0)
 	{
 		int width = randomMapSize, height = randomMapSize;
 		ptr<File> randomTextureFile = NEW(MemoryFile(sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + width * height * 4));
@@ -162,10 +222,10 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		for(int i = 0; i < count; ++i)
 			pixels[i] = rand() % 256;
 		randomTexture = device->CreateStaticTexture(randomTextureFile);
-		uRandomSampler.SetTexture(randomTexture);
+		//uRandomSampler.SetTexture(randomTexture);
 		ptr<SamplerState> ss = device->CreateSamplerState();
 		ss->SetWrap(SamplerState::wrapRepeat, SamplerState::wrapRepeat, SamplerState::wrapRepeat);
-		uRandomSampler.SetSamplerState(ss);
+		//uRandomSampler.SetSamplerState(ss);
 	}
 
 	// геометрия полноэкранного прохода
@@ -200,212 +260,19 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	}
 
 	//** инициализировать состояния конвейера
-	ContextState cleanState;
-	if(0)
-	{
-		cleanState.blendState = device->CreateBlendState();
-		cleanState.blendState->SetColor(BlendState::colorSourceSrcAlpha, BlendState::colorSourceInvSrcAlpha, BlendState::operationAdd);
-		cleanState.blendState->SetAlpha(BlendState::alphaSourceOne, BlendState::alphaSourceZero, BlendState::operationAdd);
-	}
 
 	// shadow pass
-	shadowContextState = cleanState;
-	shadowContextState.viewportWidth = shadowMapSize;
-	shadowContextState.viewportHeight = shadowMapSize;
-	shadowContextState.depthStencilBuffer = dsbShadow;
-	shadowContextState.uniformBuffers[ugCamera->GetSlot()] = ubCamera;
-	shadowContextState.uniformBuffers[ugModel->GetSlot()] = ubModel;
+	csShadow.viewportWidth = shadowMapSize;
+	csShadow.viewportHeight = shadowMapSize;
+	csShadow.depthStencilBuffer = dsbShadow;
+	csShadow.uniformBuffers[ugCamera->GetSlot()] = ubCamera;
 
-	// варианты света
-	for(int basicLightsCount = 0; basicLightsCount <= maxBasicLightsCount; ++basicLightsCount)
-		for(int shadowLightsCount = 0; shadowLightsCount <= maxShadowLightsCount; ++shadowLightsCount)
-		{
-			LightVariant& lightVariant = lightVariants[basicLightsCount][shadowLightsCount];
-
-			// инициализировать uniform'ы
-			for(int i = 0; i < basicLightsCount; ++i)
-				lightVariant.basicLights.push_back(BasicLight(lightVariant.ugLight));
-			for(int i = 0; i < shadowLightsCount; ++i)
-				// первые три семплера - для рандомной текстуры и материала
-				lightVariant.shadowLights.push_back(ShadowLight(lightVariant.ugLight, i + 3));
-
-			lightVariant.ugLight->Finalize();
-
-			// создать uniform-буфер для параметров
-			lightVariant.ubLight = device->CreateUniformBuffer(lightVariant.ugLight->GetSize());
-
-			// инициализировать состояние контекста
-			ContextState& cs = lightVariant.csOpaque;
-			cs = cleanState;
-			cs.viewportWidth = screenWidth;
-			cs.viewportHeight = screenHeight;
-			cs.renderBuffers[0] = rbScreen;
-			cs.depthStencilBuffer = dsbDepth;
-			cs.uniformBuffers[ugCamera->GetSlot()] = ubCamera;
-			cs.uniformBuffers[lightVariant.ugLight->GetSlot()] = lightVariant.ubLight;
-			cs.uniformBuffers[ugMaterial->GetSlot()] = ubMaterial;
-			cs.uniformBuffers[ugModel->GetSlot()] = ubModel;
-
-			// применить семплер случайной текстуры
-			uRandomSampler.Apply(cs);
-
-			// применить семплеры карт теней
-			for(int i = 0; i < shadowLightsCount; ++i)
-			{
-				ShadowLight& shadowLight = lightVariant.shadowLights[i];
-				shadowLight.uShadowSampler.SetTexture(rbShadows[i]->GetTexture());
-				shadowLight.uShadowSampler.SetSamplerState(shadowSamplerState);
-				shadowLight.uShadowSampler.Apply(cs);
-			}
-		}
-
-	//** шейдеры материалов
-
-	// переменные шейдеров
-	Temp<float4x4> tmpWorld;
-	Temp<float4> tmpWorldPosition;
-	Interpolant<float4> tPosition(Semantics::VertexPosition);
-	Interpolant<float3> tNormal(Semantics::CustomNormal);
-	Interpolant<float2> tTexcoord(Semantics::CustomTexcoord0);
-	Interpolant<float3> tWorldPosition(Semantic(Semantics::CustomTexcoord0 + 1));
-	Interpolant<float> tDepth(Semantics::CustomTexcoord0);
-	Fragment<float4> tTarget(Semantics::TargetColor0);
-	// номер instance
-	Value<unsigned int> instanceID = NEW(SpecialNode(DataTypes::UInt, Semantics::Instance));
-	// вершинный шейдер
-	ptr<VertexShader> vertexShader = GenerateVS(Expression((
-		tmpWorld = uWorlds[instanceID],
-		tmpWorldPosition = mul(aPosition, tmpWorld),
-		tPosition = mul(tmpWorldPosition, uViewProj),
-		tNormal = mul(aNormal, tmpWorld.Cast<float3x3>()),
-		tTexcoord = aTexcoord,
-		tWorldPosition = tmpWorldPosition.Swizzle<float3>("xyz")
-		)));
-
-	// вершинный шейдер для теней
-	shadowContextState.vertexShader = GenerateVS(Expression((
-		tPosition = mul(mul(aPosition, uWorlds[instanceID]), uViewProj),
-		tDepth = tPosition.Swizzle<float>("z")// / tPosition.Swizzle<float>("w")
-		)));
 	// пиксельный шейдер для теней
-	shadowContextState.pixelShader = GeneratePS(Expression((
-		tPosition,
-		tDepth,
-		tTarget = newfloat4(tDepth, 0, 0, 0)
+	csShadow.pixelShader = GeneratePS(Expression((
+		iPosition,
+		iDepth,
+		fTarget = newfloat4(iDepth, 0, 0, 0)
 		)));
-
-	// варианты шейдеров
-	for(int basicLightsCount = 0; basicLightsCount <= maxBasicLightsCount; ++basicLightsCount)
-		for(int shadowLightsCount = 0; shadowLightsCount <= maxShadowLightsCount; ++shadowLightsCount)
-		{
-			ShaderKey shaderKey(basicLightsCount, shadowLightsCount, false);
-
-			LightVariant& lightVariant = lightVariants[basicLightsCount][shadowLightsCount];
-
-			// пиксельный шейдер
-			Temp<float4> tmpWorldPosition;
-			Temp<float3> tmpNormalizedNormal;
-			Temp<float3> tmpToCamera;
-			Temp<float3> tmpDiffuse;
-			Temp<float3> tmpSpecular;
-			Temp<float3> tmpColor;
-			Expression shader = (
-				tPosition,
-				tNormal,
-				tTexcoord,
-				tWorldPosition,
-				tmpWorldPosition = newfloat4(tWorldPosition, 1.0f),
-				tmpNormalizedNormal = normalize(tNormal),
-				tmpToCamera = normalize(uCameraPosition - tWorldPosition),
-				//tmpDiffuse = newfloat3(0, 0, 1),
-				//tmpSpecular = newfloat3(0, 1, 0),
-				//tmpDiffuse = newfloat3(0.5f, 0.5f, 0.5f),
-				//tmpSpecular = newfloat3(0.5f, 0.5f, 0.5f),
-				tmpDiffuse = uDiffuseSampler.Sample(tTexcoord),
-				tmpSpecular = uSpecularSampler.Sample(tTexcoord),
-				tmpColor = lightVariant.uAmbientColor * tmpDiffuse
-				);
-
-			// учесть все простые источники света
-			for(int i = 0; i < basicLightsCount; ++i)
-			{
-				BasicLight& basicLight = lightVariant.basicLights[i];
-
-				// направление на источник света
-				Temp<float3> tmpToLight;
-				shader.Assign((shader,
-					tmpToLight = normalize(basicLight.uLightPosition - tWorldPosition)
-					));
-				// диффузная составляющая
-				Value<float3> diffuse =
-					tmpDiffuse * max(dot(tmpNormalizedNormal, tmpToLight), 0);
-				// specular составляющая
-				Value<float3> specular =
-					tmpSpecular * pow(max(dot(tmpToLight + tmpToCamera, tmpNormalizedNormal), 0), 4.0f);
-
-				// добавка к цвету
-				shader.Assign((shader,
-					tmpColor = tmpColor + basicLight.uLightColor * (diffuse + specular)
-					));
-			}
-
-			// общие переменные для источников света с тенями
-			Temp<float4> random;
-			if(shadowLightsCount)
-			{
-				shader.Assign((shader,
-					random = uRandomSampler.Sample(tPosition.Swizzle<float2>("xy") * Value<float>(1.0f / randomMapSize)) * newfloat4(16, 16, 2.0f / shadowMapSize, 2.0f / shadowMapSize)
-					));
-			}
-			// учесть все источники света с тенями
-			for(int i = 0; i < shadowLightsCount; ++i)
-			{
-				ShadowLight& shadowLight = lightVariant.shadowLights[i];
-
-				// направление на источник света
-				Temp<float3> tmpToLight;
-				shader.Assign((shader,
-					tmpToLight = normalize(shadowLight.uLightPosition - tWorldPosition)
-					));
-				// диффузная составляющая
-				Value<float3> diffuse =
-					tmpDiffuse * max(dot(tmpNormalizedNormal, tmpToLight), 0);
-				// specular составляющая
-				Value<float3> specular =
-					tmpSpecular * pow(max(dot(tmpToLight + tmpToCamera, tmpNormalizedNormal), 0), 4.0f);
-
-				// тень
-				Temp<float4> shadowCoords;
-				Temp<float> shadowMultiplier;
-				Temp<float2> shadowCoordsXY;
-				Temp<float> linearShadowZ;
-				Temp<float> lighted;
-				Temp<float> expCoef;
-				Temp<float3> toLight;
-				shader.Append((
-					shadowCoords = mul(tmpWorldPosition, shadowLight.uLightTransform),
-					lighted = shadowCoords.Swizzle<float>("w") > Value<float>(0),
-					linearShadowZ = shadowCoords.Swizzle<float>("z"),
-					shadowCoords = shadowCoords / shadowCoords.Swizzle<float>("w"),
-					shadowCoordsXY = newfloat2(
-						(shadowCoords.Swizzle<float>("x") + Value<float>(1.0f)) * Value<float>(0.5f),
-						(Value<float>(1.0f) - shadowCoords.Swizzle<float>("y")) * Value<float>(0.5f)),
-					expCoef = Value<float>(4),
-					shadowMultiplier = lighted * saturate(exp(expCoef * (shadowLight.uShadowSampler.Sample(shadowCoordsXY) - linearShadowZ))),
-					toLight = shadowLight.uLightPosition - tmpWorldPosition.Swizzle<float3>("xyz"),
-					tmpColor = tmpColor + shadowLight.uLightColor /** exp(length(toLight) * Value<float>(-0.05f))*/ * shadowMultiplier * (diffuse + specular)
-					));
-			}
-
-			// вернуть цвет
-			shader.Assign((shader,
-				tTarget = newfloat4(tmpColor, 1.0f)
-				));
-
-			ptr<PixelShader> pixelShader = GeneratePS(shader);
-
-			shaders[shaderKey] = Shader(vertexShader, pixelShader);
-		}
 
 	//** шейдеры и состояния постпроцессинга и размытия теней
 	{
@@ -703,6 +570,233 @@ ptr<PixelShader> Painter::GeneratePS(Expression expression)
 	return shaderCache->GetPixelShader(shaderGenerator->Generate(expression, ShaderTypes::pixel));
 }
 
+Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)
+{
+	// если он уже есть в кэше, вернуть
+	{
+		std::unordered_map<LightVariantKey, LightVariant>::iterator i = lightVariantsCache.find(key);
+		if(i != lightVariantsCache.end())
+			return i->second;
+	}
+
+	// создаём новый
+	int basicLightsCount = key.basicLightsCount;
+	int shadowLightsCount = key.shadowLightsCount;
+
+	LightVariant lightVariant;
+
+	// инициализировать uniform'ы
+	for(int i = 0; i < basicLightsCount; ++i)
+		lightVariant.basicLights.push_back(BasicLight(lightVariant.ugLight));
+	for(int i = 0; i < shadowLightsCount; ++i)
+		// первые 4 семплера - для материала
+		lightVariant.shadowLights.push_back(ShadowLight(lightVariant.ugLight, i + 4));
+
+	lightVariant.ugLight->Finalize();
+
+	// создать uniform-буфер для параметров
+	lightVariant.ubLight = device->CreateUniformBuffer(lightVariant.ugLight->GetSize());
+
+	// инициализировать состояние контекста
+	ContextState& cs = lightVariant.csOpaque;
+	cs.viewportWidth = screenWidth;
+	cs.viewportHeight = screenHeight;
+	cs.renderBuffers[0] = rbScreen;
+	cs.depthStencilBuffer = dsbDepth;
+	cs.uniformBuffers[ugCamera->GetSlot()] = ubCamera;
+	cs.uniformBuffers[lightVariant.ugLight->GetSlot()] = lightVariant.ubLight;
+	cs.uniformBuffers[ugMaterial->GetSlot()] = ubMaterial;
+
+	// применить семплеры карт теней
+	for(int i = 0; i < shadowLightsCount; ++i)
+	{
+		ShadowLight& shadowLight = lightVariant.shadowLights[i];
+		shadowLight.uShadowSampler.SetTexture(rbShadows[i]->GetTexture());
+		shadowLight.uShadowSampler.SetSamplerState(shadowSamplerState);
+		shadowLight.uShadowSampler.Apply(cs);
+	}
+
+	// добавить вариант
+	lightVariantsCache.insert(std::make_pair(key, lightVariant));
+
+	// вернуть
+	return lightVariantsCache.find(key)->second;
+}
+
+ptr<VertexShader> Painter::GetVertexShader(const VertexShaderKey& key)
+{
+	// если есть в кэше, вернуть
+	{
+		std::unordered_map<VertexShaderKey, ptr<VertexShader> >::iterator i = vertexShaderCache.find(key);
+		if(i != vertexShaderCache.end())
+			return i->second;
+	}
+
+	// делаем новый
+	// TEMP
+	if(key.skinned)
+		THROW_PRIMARY_EXCEPTION("skinned not implemented");
+
+	Temp<float4x4> tmpWorld;
+	Temp<float4> tmpWorldPosition;
+
+	ptr<VertexShader> vertexShader = GenerateVS(Expression((
+		tmpWorld = key.instanced ? uWorlds[Value<unsigned int>(NEW(SpecialNode(DataTypes::UInt, Semantics::Instance)))] : uWorld,
+		tmpWorldPosition = mul(aPosition, tmpWorld),
+		iPosition = mul(tmpWorldPosition, uViewProj),
+		iNormal = mul(aNormal, tmpWorld.Cast<float3x3>()),
+		iTexcoord = aTexcoord,
+		iWorldPosition = tmpWorldPosition.Swizzle<float3>("xyz")
+		)));
+
+	// добавить и вернуть
+	vertexShaderCache.insert(std::make_pair(key, vertexShader));
+	return vertexShaderCache.find(key)->second;
+}
+
+ptr<VertexShader> Painter::GetVertexShadowShader(const VertexShaderKey& key)
+{
+	// если есть в кэше, вернуть
+	{
+		std::unordered_map<VertexShaderKey, ptr<VertexShader> >::iterator i = vertexShadowShaderCache.find(key);
+		if(i != vertexShadowShaderCache.end())
+			return i->second;
+	}
+
+	// делаем новый
+	// TEMP
+	if(key.skinned)
+		THROW_PRIMARY_EXCEPTION("skinned not implemented");
+
+	Temp<float4x4> tmpWorld;
+
+	ptr<VertexShader> vertexShader = GenerateVS(Expression((
+		tmpWorld = key.instanced ? uWorlds[Value<unsigned int>(NEW(SpecialNode(DataTypes::UInt, Semantics::Instance)))] : uWorld,
+		iPosition = mul(mul(aPosition, tmpWorld), uViewProj),
+		iDepth = iPosition.Swizzle<float>("z")
+		)));
+
+	// добавить и вернуть
+	vertexShadowShaderCache.insert(std::make_pair(key, vertexShader));
+	return vertexShadowShaderCache.find(key)->second;
+}
+
+ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
+{
+	// если есть в кэше, вернуть
+	{
+		std::unordered_map<PixelShaderKey, ptr<PixelShader> >::iterator i = pixelShaderCache.find(key);
+		if(i != pixelShaderCache.end())
+			return i->second;
+	}
+
+	// создаём новый
+	// TEMP
+	if(key.materialKey.hasNormalTexture)
+		THROW_PRIMARY_EXCEPTION("normal map not implemented");
+
+	int basicLightsCount = key.basicLightsCount;
+	int shadowLightsCount = key.shadowLightsCount;
+
+	// получить вариант света
+	LightVariant& lightVariant = GetLightVariant(LightVariantKey(basicLightsCount, shadowLightsCount));
+
+	// пиксельный шейдер
+	Temp<float4> tmpWorldPosition;
+	Temp<float3> tmpNormalizedNormal;
+	Temp<float3> tmpToCamera;
+	Temp<float3> tmpDiffuse, tmpSpecular, tmpSpecularPower;
+	Temp<float3> tmpColor;
+	Expression shader = (
+		iPosition,
+		iNormal,
+		iTexcoord,
+		iWorldPosition,
+		tmpWorldPosition = newfloat4(iWorldPosition, 1.0f),
+		tmpNormalizedNormal = normalize(iNormal),
+		tmpToCamera = normalize(uCameraPosition - iWorldPosition),
+		tmpDiffuse = key.materialKey.hasDiffuseTexture ? uDiffuseSampler.Sample(iTexcoord) : uDiffuse,
+		tmpSpecular = key.materialKey.hasSpecularTexture ? uSpecularSampler.Sample(iTexcoord) : uSpecular,
+		tmpSpecularPower = key.materialKey.hasSpecularPowerTexture ? uSpecularPowerSampler.Sample(iTexcoord) : uSpecularPower,
+		tmpColor = lightVariant.uAmbientColor * tmpDiffuse
+		);
+
+	// учесть все простые источники света
+	for(int i = 0; i < basicLightsCount; ++i)
+	{
+		BasicLight& basicLight = lightVariant.basicLights[i];
+
+		// направление на источник света
+		Temp<float3> tmpToLight;
+		shader.Assign((shader,
+			tmpToLight = normalize(basicLight.uLightPosition - iWorldPosition)
+			));
+		// диффузная составляющая
+		Value<float3> diffuse =
+			tmpDiffuse * max(dot(tmpNormalizedNormal, tmpToLight), 0);
+		// specular составляющая
+		Value<float3> specular =
+			tmpSpecular * pow(max(dot(tmpToLight + tmpToCamera, tmpNormalizedNormal), 0), 4.0f);
+
+		// добавка к цвету
+		shader.Assign((shader,
+			tmpColor = tmpColor + basicLight.uLightColor * (diffuse + specular)
+			));
+	}
+
+	// учесть все источники света с тенями
+	for(int i = 0; i < shadowLightsCount; ++i)
+	{
+		ShadowLight& shadowLight = lightVariant.shadowLights[i];
+
+		// направление на источник света
+		Temp<float3> diffusePart, specularPart;
+		Temp<float> specularCoef;
+		Temp<float3> tmpToLight;
+		shader.Append((
+			tmpToLight = normalize(shadowLight.uLightPosition - iWorldPosition),
+			// диффузная составляющая
+			diffusePart = tmpDiffuse * max(dot(tmpNormalizedNormal, tmpToLight), 0),
+			// specular составляющая
+			specularCoef = max(dot(tmpToLight + tmpToCamera, tmpNormalizedNormal), 0),
+			specularPart = tmpSpecular * pow(newfloat3(specularCoef, specularCoef, specularCoef), tmpSpecularPower)
+			));
+
+		// тень
+		Temp<float4> shadowCoords;
+		Temp<float> shadowMultiplier;
+		Temp<float2> shadowCoordsXY;
+		Temp<float> linearShadowZ;
+		Temp<float> lighted;
+		Temp<float> expCoef;
+		Temp<float3> toLight;
+		shader.Append((
+			shadowCoords = mul(tmpWorldPosition, shadowLight.uLightTransform),
+			lighted = shadowCoords.Swizzle<float>("w") > Value<float>(0),
+			linearShadowZ = shadowCoords.Swizzle<float>("z"),
+			shadowCoords = shadowCoords / shadowCoords.Swizzle<float>("w"),
+			shadowCoordsXY = newfloat2(
+				(shadowCoords.Swizzle<float>("x") + Value<float>(1.0f)) * Value<float>(0.5f),
+				(Value<float>(1.0f) - shadowCoords.Swizzle<float>("y")) * Value<float>(0.5f)),
+			expCoef = Value<float>(4),
+			shadowMultiplier = lighted * saturate(exp(expCoef * (shadowLight.uShadowSampler.Sample(shadowCoordsXY) - linearShadowZ))),
+			toLight = shadowLight.uLightPosition - tmpWorldPosition.Swizzle<float3>("xyz"),
+			tmpColor = tmpColor + shadowLight.uLightColor /** exp(length(toLight) * Value<float>(-0.05f))*/ * shadowMultiplier * (diffusePart + specularPart)
+			));
+	}
+
+	// вернуть цвет
+	shader.Assign((shader,
+		fTarget = newfloat4(tmpColor, 1.0f)
+		));
+
+	ptr<PixelShader> pixelShader = GeneratePS(shader);
+
+	// добавить и вернуть
+	pixelShaderCache.insert(std::make_pair(key, pixelShader));
+	return pixelShaderCache.find(key)->second;
+}
+
 void Painter::BeginFrame(float frameTime)
 {
 	this->frameTime = frameTime;
@@ -717,9 +811,9 @@ void Painter::SetCamera(const float4x4& cameraViewProj, const float3& cameraPosi
 	this->cameraPosition = cameraPosition;
 }
 
-void Painter::AddModel(ptr<Texture> diffuseTexture, ptr<Texture> specularTexture, ptr<VertexBuffer> vertexBuffer, ptr<IndexBuffer> indexBuffer, const float4x4& worldTransform)
+void Painter::AddModel(ptr<Material> material, ptr<Geometry> geometry, const float4x4& worldTransform)
 {
-	models.push_back(Model(diffuseTexture, specularTexture, vertexBuffer, indexBuffer, worldTransform));
+	models.push_back(Model(material, geometry, worldTransform));
 }
 
 void Painter::SetAmbientColor(const float3& ambientColor)
@@ -745,12 +839,6 @@ void Painter::Draw()
 	for(size_t i = 0; i < lights.size(); ++i)
 		++(lights[i].shadow ? shadowLightsCount : basicLightsCount);
 
-	// проверить ограничения
-	if(basicLightsCount > maxBasicLightsCount)
-		THROW_PRIMARY_EXCEPTION("Too many basic lights");
-	if(shadowLightsCount > maxShadowLightsCount)
-		THROW_PRIMARY_EXCEPTION("Too many shadow lights");
-
 	float zeroColor[] = { 0, 0, 0, 0 };
 	float farColor[] = { 1e8, 1e8, 1e8, 1e8 };
 
@@ -761,7 +849,7 @@ void Painter::Draw()
 		{
 			ContextState& cs = context->GetTargetState();
 
-			cs = shadowContextState;
+			cs = csShadow;
 
 			ptr<RenderBuffer> rb = rbShadows[shadowPassNumber];
 			cs.renderBuffers[0] = rb;
@@ -775,7 +863,7 @@ void Painter::Draw()
 			{
 				bool operator()(const Model& a, const Model& b) const
 				{
-					return a.vertexBuffer < b.vertexBuffer || a.vertexBuffer == b.vertexBuffer && a.indexBuffer < b.indexBuffer;
+					return a.geometry < b.geometry;
 				}
 			};
 			std::sort(models.begin(), models.end(), GeometrySorter());
@@ -784,7 +872,11 @@ void Painter::Draw()
 			context->ClearDepthStencilBuffer(dsbShadow, 1.0f);
 			context->ClearRenderBuffer(rb, farColor);
 
-			// нарисовать
+			// установить вершинный шейдер
+			cs.vertexShader = GetVertexShadowShader(VertexShaderKey(true, false));
+
+			// нарисовать инстансингом с группировкой по геометрии
+			cs.uniformBuffers[ugInstancedModel->GetSlot()] = ubInstancedModel;
 			for(size_t j = 0; j < models.size(); )
 			{
 				// количество рисуемых объектов
@@ -792,18 +884,17 @@ void Painter::Draw()
 				for(batchCount = 1;
 					batchCount < maxInstancesCount &&
 					j + batchCount < models.size() &&
-					models[j].vertexBuffer == models[j + batchCount].vertexBuffer &&
-					models[j].indexBuffer == models[j + batchCount].indexBuffer;
+					models[j].geometry == models[j + batchCount].geometry;
 					++batchCount);
 
 				// установить геометрию
-				cs.vertexBuffer = models[j].vertexBuffer;
-				cs.indexBuffer = models[j].indexBuffer;
+				cs.vertexBuffer = models[j].geometry->GetVertexBuffer();
+				cs.indexBuffer = models[j].geometry->GetIndexBuffer();
 				// установить uniform'ы
 				for(int k = 0; k < batchCount; ++k)
 					uWorlds.SetValue(k, models[j + k].worldTransform);
 				// и залить в GPU
-				context->SetUniformBufferData(ubModel, ugModel->GetData(), ugModel->GetSize());
+				context->SetUniformBufferData(ubInstancedModel, ugInstancedModel->GetData(), ugInstancedModel->GetSize());
 
 				// нарисовать
 				context->DrawInstanced(batchCount);
@@ -847,7 +938,7 @@ void Painter::Draw()
 	context->SetUniformBufferData(ubCamera, ugCamera->GetData(), ugCamera->GetSize());
 
 	// установить параметры источников света
-	LightVariant& lightVariant = lightVariants[basicLightsCount][shadowLightsCount];
+	LightVariant& lightVariant = GetLightVariant(LightVariantKey(basicLightsCount, shadowLightsCount));
 	cs = lightVariant.csOpaque;
 	lightVariant.uAmbientColor.SetValue(ambientColor);
 	int basicLightNumber = 0;
@@ -868,24 +959,12 @@ void Painter::Draw()
 		}
 	context->SetUniformBufferData(lightVariant.ubLight, lightVariant.ugLight->GetData(), lightVariant.ugLight->GetSize());
 
-	// установить шейдеры
-	std::unordered_map<ShaderKey, Shader>::const_iterator it = shaders.find(ShaderKey(basicLightsCount, shadowLightsCount, false/*skinned*/));
-	if(it == shaders.end())
-		THROW_PRIMARY_EXCEPTION("Shader not compiled");
-	const Shader& shader = it->second;
-	cs.vertexShader = shader.vertexShader;
-	cs.pixelShader = shader.pixelShader;
-
 	// отсортировать объекты по материалу, а затем по геометрии
 	struct Sorter
 	{
 		bool operator()(const Model& a, const Model& b) const
 		{
-			return
-				a.diffuseTexture < b.diffuseTexture || a.diffuseTexture == b.diffuseTexture && (
-				a.specularTexture < b.specularTexture || a.specularTexture == b.specularTexture && (
-				a.vertexBuffer < b.vertexBuffer || a.vertexBuffer == b.vertexBuffer && (
-				a.indexBuffer < b.indexBuffer)));
+			return a.material < b.material || a.material == b.material && a.geometry < b.geometry;
 		}
 	};
 	std::sort(models.begin(), models.end(), Sorter());
@@ -894,39 +973,53 @@ void Painter::Draw()
 	for(size_t i = 0; i < models.size(); )
 	{
 		// выяснить размер батча по материалу
+		ptr<Material> material = models[i].material;
 		int materialBatchCount;
 		for(materialBatchCount = 1;
 			i + materialBatchCount < models.size() &&
-			models[i].diffuseTexture == models[i + materialBatchCount].diffuseTexture &&
-			models[i].specularTexture == models[i + materialBatchCount].specularTexture;
+			material == models[i + materialBatchCount].material;
 			++materialBatchCount);
 
 		// установить параметры материала
-		uDiffuseSampler.SetTexture(models[i].diffuseTexture);
+		uDiffuseSampler.SetTexture(material->diffuseTexture);
 		uDiffuseSampler.Apply(cs);
-		uSpecularSampler.SetTexture(models[i].specularTexture);
+		uSpecularSampler.SetTexture(material->specularTexture);
 		uSpecularSampler.Apply(cs);
+		uSpecularPowerSampler.SetTexture(material->specularPowerTexture);
+		uSpecularPowerSampler.Apply(cs);
+		uNormalSampler.SetTexture(material->normalTexture);
+		uNormalSampler.Apply(cs);
+		uDiffuse.SetValue(material->diffuse);
+		uSpecular.SetValue(material->specular);
+		uSpecularPower.SetValue(material->specularPower);
+		context->SetUniformBufferData(ubMaterial, ugMaterial->GetData(), ugMaterial->GetSize());
 
+		// рисуем инстансингом обычные модели
+		// получить шейдеры
+		cs.vertexShader = GetVertexShader(VertexShaderKey(true, false));
+		cs.pixelShader = GetPixelShader(PixelShaderKey(basicLightsCount, shadowLightsCount, material->GetKey()));
+		// установить константный буфер
+		cs.uniformBuffers[ugInstancedModel->GetSlot()] = ubInstancedModel;
 		// цикл по батчам по геометрии
 		for(int j = 0; j < materialBatchCount; )
 		{
 			// выяснить размер батча по геометрии
+			ptr<Geometry> geometry = models[i + j].geometry;
 			int geometryBatchCount;
 			for(geometryBatchCount = 1;
 				geometryBatchCount < maxInstancesCount &&
 				j + geometryBatchCount < materialBatchCount &&
-				models[i + j].vertexBuffer == models[i + j + geometryBatchCount].vertexBuffer &&
-				models[i + j].indexBuffer == models[i + j + geometryBatchCount].indexBuffer;
+				geometry == models[i + j + geometryBatchCount].geometry;
 				++geometryBatchCount);
 
 			// установить геометрию
-			cs.vertexBuffer = models[i + j].vertexBuffer;
-			cs.indexBuffer = models[i + j].indexBuffer;
+			cs.vertexBuffer = geometry->GetVertexBuffer();
+			cs.indexBuffer = geometry->GetIndexBuffer();
 
 			// установить uniform'ы
 			for(int k = 0; k < geometryBatchCount; ++k)
 				uWorlds.SetValue(k, models[i + j + k].worldTransform);
-			context->SetUniformBufferData(ubModel, ugModel->GetData(), ugModel->GetSize());
+			context->SetUniformBufferData(ubInstancedModel, ugInstancedModel->GetData(), ugInstancedModel->GetSize());
 
 			// нарисовать
 			context->DrawInstanced(geometryBatchCount);
