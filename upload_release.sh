@@ -1,3 +1,3 @@
 #!/bin/sh
 
-cp -f box.geo.indices box.geo.vertices knot.geo.vertices knot.geo.indices diffuse.jpg specular.jpg labyrint.txt release/F.A.R.S.H.exe ../../drive/F.A.R.S.H.\ Release
+cp -f box.geo.indices box.geo.vertices knot.geo.vertices knot.geo.indices diffuse.jpg specular.jpg labyrint.txt shaders release/F.A.R.S.H.exe ../../drive/F.A.R.S.H.\ Release
