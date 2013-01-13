@@ -1,5 +1,6 @@
 #include "Painter.hpp"
 #include "ShaderCache.hpp"
+#include "BoneAnimation.hpp"
 
 const int Painter::shadowMapSize = 512;
 const int Painter::randomMapSize = 64;
@@ -71,6 +72,11 @@ Painter::MaterialKey Painter::Material::GetKey() const
 
 Painter::Model::Model(ptr<Material> material, ptr<Geometry> geometry, const float4x4& worldTransform)
 : material(material), geometry(geometry), worldTransform(worldTransform) {}
+
+//*** Painter::SkinnedModel
+
+Painter::SkinnedModel::SkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimationFrame> animationFrame)
+: material(material), geometry(geometry), animationFrame(animationFrame) {}
 
 //*** Painter::Light
 
@@ -778,7 +784,7 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 			tmpDiffuse * max(dot(tmpNormalizedNormal, tmpToLight), 0);
 		// specular составляющая
 		Value<float3> specular =
-			tmpSpecular * pow(max(dot(tmpToLight + tmpToCamera, tmpNormalizedNormal), 0), 4.0f);
+			tmpSpecular * pow(max(dot(normalize(tmpToLight + tmpToCamera), tmpNormalizedNormal), 0), 4.0f);
 
 		// добавка к цвету
 		shader.Assign((shader,
@@ -800,7 +806,7 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 			// диффузная составляющая
 			diffusePart = tmpDiffuse * max(dot(tmpNormalizedNormal, tmpToLight), 0),
 			// specular составляющая
-			specularCoef = max(dot(tmpToLight + tmpToCamera, tmpNormalizedNormal), 0),
+			specularCoef = max(dot(normalize(tmpToLight + tmpToCamera), tmpNormalizedNormal), 0),
 			specularPart = tmpSpecular * pow(newfloat3(specularCoef, specularCoef, specularCoef), tmpSpecularPower)
 			));
 
@@ -844,6 +850,7 @@ void Painter::BeginFrame(float frameTime)
 	this->frameTime = frameTime;
 
 	models.clear();
+	skinnedModels.clear();
 	lights.clear();
 }
 
@@ -856,6 +863,11 @@ void Painter::SetCamera(const float4x4& cameraViewProj, const float3& cameraPosi
 void Painter::AddModel(ptr<Material> material, ptr<Geometry> geometry, const float4x4& worldTransform)
 {
 	models.push_back(Model(material, geometry, worldTransform));
+}
+
+void Painter::AddSkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimationFrame> animationFrame)
+{
+	skinnedModels.push_back(SkinnedModel(material, geometry, animationFrame));
 }
 
 void Painter::SetAmbientColor(const float3& ambientColor)
@@ -900,25 +912,34 @@ void Painter::Draw()
 			uViewProj.SetValue(lights[i].transform);
 			context->SetUniformBufferData(ubCamera, ugCamera->GetData(), ugCamera->GetSize());
 
-			// отсортировать объекты по геометрии
+			// очистить карту теней
+			context->ClearDepthStencilBuffer(dsbShadow, 1.0f);
+			context->ClearRenderBuffer(rb, farColor);
+
+			// сортировщик моделей по геометрии
 			struct GeometrySorter
 			{
 				bool operator()(const Model& a, const Model& b) const
 				{
 					return a.geometry < b.geometry;
 				}
+				bool operator()(const SkinnedModel& a, const SkinnedModel& b) const
+				{
+					return a.geometry < b.geometry;
+				}
 			};
-			std::sort(models.begin(), models.end(), GeometrySorter());
 
-			// очистить карту теней
-			context->ClearDepthStencilBuffer(dsbShadow, 1.0f);
-			context->ClearRenderBuffer(rb, farColor);
+			//** рисуем простые модели
+
+			// отсортировать объекты по геометрии
+			std::sort(models.begin(), models.end(), GeometrySorter());
 
 			// установить вершинный шейдер
 			cs.vertexShader = GetVertexShadowShader(VertexShaderKey(true, false));
+			// установить константный буфер
+			cs.uniformBuffers[ugInstancedModel->GetSlot()] = ubInstancedModel;
 
 			// нарисовать инстансингом с группировкой по геометрии
-			cs.uniformBuffers[ugInstancedModel->GetSlot()] = ubInstancedModel;
 			for(size_t j = 0; j < models.size(); )
 			{
 				// количество рисуемых объектов
@@ -942,6 +963,45 @@ void Painter::Draw()
 				context->DrawInstanced(batchCount);
 
 				j += batchCount;
+			}
+
+			//** рисуем skinned-модели
+
+			// отсортировать объекты по геометрии
+			std::sort(skinnedModels.begin(), skinnedModels.end(), GeometrySorter());
+
+			// установить вершинный шейдер
+			cs.vertexShader = GetVertexShadowShader(VertexShaderKey(false, true));
+			// установить константный буфер
+			cs.uniformBuffers[ugSkinnedModel->GetSlot()] = ubSkinnedModel;
+
+			// нарисовать с группировкой по геометрии
+			ptr<Geometry> lastGeometry;
+			for(size_t j = 0; j < skinnedModels.size(); ++j)
+			{
+				const SkinnedModel& skinnedModel = skinnedModels[j];
+				// установить геометрию, если отличается
+				if(lastGeometry != skinnedModel.geometry)
+				{
+					cs.vertexBuffer = skinnedModel.geometry->GetVertexBuffer();
+					cs.indexBuffer = skinnedModel.geometry->GetIndexBuffer();
+					lastGeometry = skinnedModel.geometry;
+				}
+				// установить uniform'ы костей
+				ptr<BoneAnimationFrame> animationFrame = skinnedModel.animationFrame;
+				const std::vector<quaternion>& orientations = animationFrame->orientations;
+				const std::vector<float3>& offsets = animationFrame->offsets;
+				int bonesCount = (int)orientations.size();
+				for(int k = 0; k < bonesCount; ++k)
+				{
+					uBoneOrientations.SetValue(k, orientations[k]);
+					uBoneOffsets.SetValue(k, float4(offsets[k].x, offsets[k].y, offsets[k].z, 0));
+				}
+				// и залить в GPU
+				context->SetUniformBufferData(ubSkinnedModel, ugSkinnedModel->GetData(), ugSkinnedModel->GetSize());
+
+				// нарисовать
+				context->Draw();
 			}
 
 			// выполнить размытие тени
@@ -1001,15 +1061,27 @@ void Painter::Draw()
 		}
 	context->SetUniformBufferData(lightVariant.ubLight, lightVariant.ugLight->GetData(), lightVariant.ugLight->GetSize());
 
-	// отсортировать объекты по материалу, а затем по геометрии
+	// сортировщик моделей по материалу, а затем по геометрии
 	struct Sorter
 	{
 		bool operator()(const Model& a, const Model& b) const
 		{
 			return a.material < b.material || a.material == b.material && a.geometry < b.geometry;
 		}
+		bool operator()(const SkinnedModel& a, const SkinnedModel& b) const
+		{
+			return a.material < b.material || a.material == b.material && a.geometry < b.geometry;
+		}
 	};
+
+	//** нарисовать простые модели
+
 	std::sort(models.begin(), models.end(), Sorter());
+
+	// установить вершинный шейдер
+	cs.vertexShader = GetVertexShader(VertexShaderKey(true, false));
+	// установить константный буфер
+	cs.uniformBuffers[ugInstancedModel->GetSlot()] = ubInstancedModel;
 
 	// нарисовать
 	for(size_t i = 0; i < models.size(); )
@@ -1037,11 +1109,8 @@ void Painter::Draw()
 		context->SetUniformBufferData(ubMaterial, ugMaterial->GetData(), ugMaterial->GetSize());
 
 		// рисуем инстансингом обычные модели
-		// получить шейдеры
-		cs.vertexShader = GetVertexShader(VertexShaderKey(true, false));
+		// установить пиксельный шейдер
 		cs.pixelShader = GetPixelShader(PixelShaderKey(basicLightsCount, shadowLightsCount, material->GetKey()));
-		// установить константный буфер
-		cs.uniformBuffers[ugInstancedModel->GetSlot()] = ubInstancedModel;
 		// цикл по батчам по геометрии
 		for(int j = 0; j < materialBatchCount; )
 		{
@@ -1070,6 +1139,70 @@ void Painter::Draw()
 		}
 
 		i += materialBatchCount;
+	}
+
+	//** нарисовать skinned-модели
+
+	std::sort(skinnedModels.begin(), skinnedModels.end(), Sorter());
+
+	// установить вершинный шейдер
+	cs.vertexShader = GetVertexShader(VertexShaderKey(false, true));
+	// установить константный буфер
+	cs.uniformBuffers[ugSkinnedModel->GetSlot()] = ubSkinnedModel;
+
+	// нарисовать
+	ptr<Material> lastMaterial;
+	ptr<Geometry> lastGeometry;
+	for(size_t i = 0; i < skinnedModels.size(); ++i)
+	{
+		const SkinnedModel& skinnedModel = skinnedModels[i];
+
+		// установить параметры материала, если изменился
+		ptr<Material> material = skinnedModel.material;
+		if(lastMaterial != material)
+		{
+			uDiffuseSampler.SetTexture(material->diffuseTexture);
+			uDiffuseSampler.Apply(cs);
+			uSpecularSampler.SetTexture(material->specularTexture);
+			uSpecularSampler.Apply(cs);
+			uSpecularPowerSampler.SetTexture(material->specularPowerTexture);
+			uSpecularPowerSampler.Apply(cs);
+			uNormalSampler.SetTexture(material->normalTexture);
+			uNormalSampler.Apply(cs);
+			uDiffuse.SetValue(material->diffuse);
+			uSpecular.SetValue(material->specular);
+			uSpecularPower.SetValue(material->specularPower);
+			context->SetUniformBufferData(ubMaterial, ugMaterial->GetData(), ugMaterial->GetSize());
+
+			lastMaterial = material;
+		}
+
+		// установить пиксельный шейдер
+		cs.pixelShader = GetPixelShader(PixelShaderKey(basicLightsCount, shadowLightsCount, material->GetKey()));
+
+		// установить геометрию, если изменилась
+		ptr<Geometry> geometry = skinnedModel.geometry;
+		if(lastGeometry != geometry)
+		{
+			cs.vertexBuffer = geometry->GetVertexBuffer();
+			cs.indexBuffer = geometry->GetIndexBuffer();
+			lastGeometry = geometry;
+		}
+
+		// установить uniform'ы костей
+		ptr<BoneAnimationFrame> animationFrame = skinnedModel.animationFrame;
+		const std::vector<quaternion>& orientations = animationFrame->orientations;
+		const std::vector<float3>& offsets = animationFrame->offsets;
+		int bonesCount = (int)orientations.size();
+		for(int k = 0; k < bonesCount; ++k)
+		{
+			uBoneOrientations.SetValue(k, orientations[k]);
+			uBoneOffsets.SetValue(k, float4(offsets[k].x, offsets[k].y, offsets[k].z, 0));
+		}
+		context->SetUniformBufferData(ubSkinnedModel, ugSkinnedModel->GetData(), ugSkinnedModel->GetSize());
+
+		// нарисовать
+		context->Draw();
 	}
 
 	// всё, теперь постпроцессинг

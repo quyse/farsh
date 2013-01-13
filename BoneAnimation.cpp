@@ -36,10 +36,8 @@ ptr<BoneAnimation> BoneAnimation::Deserialize(ptr<InputStream> inputStream, ptr<
 
 		std::vector<std::vector<Key> > keys(bonesCount);
 
-		// длительность анимации
-		float length = reader.Read<float>();
 		// общее количество ключей
-		size_t allKeysCount = reader.Read<int>();
+		size_t allKeysCount = reader.ReadShortly();
 
 		// для корневой кости особые ключи
 		struct RootKey
@@ -167,7 +165,7 @@ void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& ori
 		if(boneNumber == 0)
 		{
 			orientations[boneNumber] = bone.originalOrientation * dynamicOrientations[boneNumber];
-			offsets[boneNumber] = rootBoneOffset + bone.originalOffset;
+			offsets[boneNumber] = rootBoneOffset;
 		}
 		else
 		{

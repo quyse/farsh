@@ -1,6 +1,7 @@
 #include "general.hpp"
 #include "Painter.hpp"
 #include "ShaderCache.hpp"
+#include "BoneAnimation.hpp"
 #include "../inanity2/inanity-sqlitefs.hpp"
 #include <sstream>
 #include <iostream>
@@ -32,7 +33,7 @@ private:
 
 	float alpha;
 
-	ptr<Geometry> geometryCube, geometryKnot;
+	ptr<Geometry> geometryCube, geometryKnot, geometryZombi;
 	ptr<Painter::Material> texturedMaterial, greenMaterial;
 
 	PresentMode mode;
@@ -185,7 +186,8 @@ public:
 		//painter->SetAmbientColor(float3(0.2f, 0.2f, 0.2f));
 		for(size_t i = 0; i < cubes.size(); ++i)
 			painter->AddModel(texturedMaterial, geometryCube, CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform());
-		painter->AddModel(greenMaterial, geometryKnot, CreateScalingMatrix(0.3f, 0.3f, 0.3f) * CreateTranslationMatrix(10, 10, 2));
+		//painter->AddModel(greenMaterial, geometryKnot, CreateScalingMatrix(0.3f, 0.3f, 0.3f) * CreateTranslationMatrix(10, 10, 2));
+		painter->AddModel(greenMaterial, geometryZombi, CreateTranslationMatrix(10, 10, 0));
 		painter->AddShadowLight(shadowLightPosition, float3(1.0f, 1.0f, 1.0f) * 0.4f, shadowLightTransform);
 		painter->AddShadowLight(shadowLightPosition2, float3(1.0f, 1.0f, 1.0f) * 0.2f, shadowLightTransform2);
 
@@ -242,6 +244,11 @@ public:
 		layoutElements.push_back(Layout::Element(DataTypes::Float2, 24, 2));
 		ptr<Layout> layout = NEW(Layout(layoutElements, sizeof(Vertex)));
 
+		// разметка для skinning
+		layoutElements.push_back(Layout::Element(DataTypes::UInt4, 32, 3));
+		layoutElements.push_back(Layout::Element(DataTypes::Float4, 48, 4));
+		ptr<Layout> skinLayout = NEW(Layout(layoutElements, 64));
+
 		alpha = 0;
 
 		ptr<FileSystem> fs = FolderFileSystem::GetNativeFileSystem();
@@ -252,6 +259,9 @@ public:
 		geometryKnot = NEW(Geometry(
 			device->CreateVertexBuffer(fs->LoadFile("knot.geo.vertices"), layout),
 			device->CreateIndexBuffer(fs->LoadFile("knot.geo.indices"), layout)));
+		geometryZombi = NEW(Geometry(
+			device->CreateVertexBuffer(fs->LoadFile("zombi.geo.vertices"), skinLayout),
+			device->CreateIndexBuffer(fs->LoadFile("zombi.geo.indices"), skinLayout)));
 
 		texturedMaterial = NEW(Painter::Material());
 		texturedMaterial->diffuseTexture = device->CreateStaticTexture(fs->LoadFile("diffuse.jpg"));

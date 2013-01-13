@@ -13,8 +13,6 @@ class BoneAnimation : public Object
 private:
 	ptr<Skeleton> skeleton;
 
-	/// Длительность анимации.
-	float length;
 	/// Структура ключа анимации.
 	struct Key
 	{

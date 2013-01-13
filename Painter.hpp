@@ -5,6 +5,7 @@
 #include <unordered_map>
 
 class ShaderCache;
+class BoneAnimationFrame;
 
 /// Класс, занимающийся рисованием моделей.
 class Painter : public Object
@@ -338,7 +339,7 @@ private:
 	float4x4 cameraViewProj;
 	float3 cameraPosition;
 
-	/// Список моделей для рисования.
+	/// Модель для рисования.
 	struct Model
 	{
 		ptr<Material> material;
@@ -348,6 +349,18 @@ private:
 		Model(ptr<Material> material, ptr<Geometry> geometry, const float4x4& worldTransform);
 	};
 	std::vector<Model> models;
+
+	/// Skinned модель для рисования.
+	struct SkinnedModel
+	{
+		ptr<Material> material;
+		ptr<Geometry> geometry;
+		/// Настроенный кадр анимации.
+		ptr<BoneAnimationFrame> animationFrame;
+
+		SkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimationFrame> animationFrame);
+	};
+	std::vector<SkinnedModel> skinnedModels;
 
 	// Источники света.
 	/// Рассеянный свет.
@@ -380,6 +393,8 @@ public:
 	void SetCamera(const float4x4& cameraViewProj, const float3& cameraPosition);
 	/// Зарегистрировать модель.
 	void AddModel(ptr<Material> material, ptr<Geometry> geometry, const float4x4& worldTransform);
+	/// Зарегистрировать skinned-модель.
+	void AddSkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimationFrame> animationFrame);
 	/// Установить рассеянный свет.
 	void SetAmbientColor(const float3& ambientColor);
 	/// Зарегистрировать простой источник света.
