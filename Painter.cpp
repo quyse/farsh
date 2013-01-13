@@ -1,4 +1,5 @@
 #include "Painter.hpp"
+#include "ShaderCache.hpp"
 
 const int Painter::shadowMapSize = 512;
 const int Painter::randomMapSize = 64;
@@ -44,12 +45,14 @@ Painter::Light::Light(const float3& position, const float3& color)
 Painter::Light::Light(const float3& position, const float3& color, const float4x4& transform)
 : position(position), color(color), transform(transform), shadow(true) {}
 
-Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, int screenWidth, int screenHeight) :
+Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, int screenWidth, int screenHeight, ptr<ShaderCache> shaderCache) :
 	device(device),
 	context(context),
 	presenter(presenter),
 	screenWidth(screenWidth),
 	screenHeight(screenHeight),
+	shaderCache(shaderCache),
+	shaderGenerator(NEW(HlslGenerator())),
 
 	aPosition(0),
 	aNormal(1),
@@ -258,9 +261,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 
 	//** шейдеры материалов
 
-	// генератор шейдеров и компилятор
-	ptr<HlslGenerator> shaderGenerator = NEW(HlslGenerator());
-	ptr<DxShaderCompiler> shaderCompiler = NEW(DxShaderCompiler());
 	// переменные шейдеров
 	Temp<float4x4> tmpWorld;
 	Temp<float4> tmpWorldPosition;
@@ -273,27 +273,26 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	// номер instance
 	Value<unsigned int> instanceID = NEW(SpecialNode(DataTypes::UInt, Semantics::Instance));
 	// вершинный шейдер
-	ptr<ShaderSource> vertexShaderSource = shaderGenerator->Generate(Expression((
+	ptr<VertexShader> vertexShader = GenerateVS(Expression((
 		tmpWorld = uWorlds[instanceID],
 		tmpWorldPosition = mul(aPosition, tmpWorld),
 		tPosition = mul(tmpWorldPosition, uViewProj),
 		tNormal = mul(aNormal, tmpWorld.Cast<float3x3>()),
 		tTexcoord = aTexcoord,
 		tWorldPosition = tmpWorldPosition.Swizzle<float3>("xyz")
-		)), ShaderTypes::vertex);
-	ptr<VertexShader> vertexShader = device->CreateVertexShader(shaderCompiler->Compile(vertexShaderSource));
+		)));
 
 	// вершинный шейдер для теней
-	shadowContextState.vertexShader = device->CreateVertexShader(shaderCompiler->Compile(shaderGenerator->Generate(Expression((
+	shadowContextState.vertexShader = GenerateVS(Expression((
 		tPosition = mul(mul(aPosition, uWorlds[instanceID]), uViewProj),
 		tDepth = tPosition.Swizzle<float>("z")// / tPosition.Swizzle<float>("w")
-		)), ShaderTypes::vertex)));
+		)));
 	// пиксельный шейдер для теней
-	shadowContextState.pixelShader = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(Expression((
+	shadowContextState.pixelShader = GeneratePS(Expression((
 		tPosition,
 		tDepth,
 		tTarget = newfloat4(tDepth, 0, 0, 0)
-		)), ShaderTypes::pixel)));
+		)));
 
 	// варианты шейдеров
 	for(int basicLightsCount = 0; basicLightsCount <= maxBasicLightsCount; ++basicLightsCount)
@@ -403,8 +402,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 				tTarget = newfloat4(tmpColor, 1.0f)
 				));
 
-			ptr<ShaderSource> pixelShaderSource = shaderGenerator->Generate(shader, ShaderTypes::pixel);
-			ptr<PixelShader> pixelShader = device->CreatePixelShader(shaderCompiler->Compile(pixelShaderSource));
+			ptr<PixelShader> pixelShader = GeneratePS(shader);
 
 			shaders[shaderKey] = Shader(vertexShader, pixelShader);
 		}
@@ -427,10 +425,10 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		Fragment<float4> fTarget(Semantics::TargetColor0);
 
 		// вершинный шейдер - общий для всех постпроцессингов
-		ptr<VertexShader> vertexShader = device->CreateVertexShader(shaderCompiler->Compile(shaderGenerator->Generate((
+		ptr<VertexShader> vertexShader = GenerateVS((
 			iPosition = aPosition,
 			iTexcoord = aTexcoord
-			), ShaderTypes::vertex)));
+			));
 
 		csFilter.vertexShader = vertexShader;
 
@@ -451,7 +449,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			shader.Append((
 				fTarget = newfloat4(log(sum), 0, 0, 1)
 				));
-			psShadowBlur = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
+			psShadowBlur = GeneratePS(shader);
 		}
 
 		// пиксельный шейдер для downsample
@@ -467,7 +465,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("yw"))
 					) * Value<float>(0.25f), 1.0f)
 				);
-			psDownsample = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
+			psDownsample = GeneratePS(shader);
 		}
 		// пиксельный шейдер для первого downsample luminance
 		ptr<PixelShader> psDownsampleLuminanceFirst;
@@ -484,7 +482,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("yw")), luminanceCoef) + Value<float>(0.0001f))
 					) * Value<float>(0.25f), 0.0f, 0.0f, 1.0f)
 				);
-			psDownsampleLuminanceFirst = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
+			psDownsampleLuminanceFirst = GeneratePS(shader);
 		}
 		// пиксельный шейдер для downsample luminance
 		ptr<PixelShader> psDownsampleLuminance;
@@ -499,7 +497,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("yw"))
 					) * Value<float>(0.25f), 0.0f, 0.0f, uDownsampleBlend)
 				);
-			psDownsampleLuminance = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
+			psDownsampleLuminance = GeneratePS(shader);
 		}
 
 		// точки для шейдера
@@ -524,7 +522,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			shader.Append((
 				fTarget = newfloat4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f)
 				));
-			psBloomLimit = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
+			psBloomLimit = GeneratePS(shader);
 		}
 		// пиксельный шейдер для первого прохода
 		ptr<PixelShader> psBloom1;
@@ -544,7 +542,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			shader.Append((
 				fTarget = newfloat4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f)
 				));
-			psBloom1 = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
+			psBloom1 = GeneratePS(shader);
 		}
 		// пиксельный шейдер для второго прохода
 		ptr<PixelShader> psBloom2;
@@ -564,7 +562,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			shader.Append((
 				fTarget = newfloat4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f)
 				));
-			psBloom2 = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
+			psBloom2 = GeneratePS(shader);
 		}
 		// шейдер tone mapping
 		ptr<PixelShader> psTone;
@@ -581,7 +579,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 				//fTarget = newfloat4(color, 1.0f)
 				fTarget = newfloat4(color * (intensity / luminance), 1.0f)
 				);
-			psTone = device->CreatePixelShader(shaderCompiler->Compile(shaderGenerator->Generate(shader, ShaderTypes::pixel)));
+			psTone = GeneratePS(shader);
 		}
 
 		csShadowBlur = csFilter;
@@ -693,6 +691,16 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		csTone.uniformBuffers[ugTone->GetSlot()] = ubTone;
 		csTone.pixelShader = psTone;
 	}
+}
+
+ptr<VertexShader> Painter::GenerateVS(Expression expression)
+{
+	return shaderCache->GetVertexShader(shaderGenerator->Generate(expression, ShaderTypes::vertex));
+}
+
+ptr<PixelShader> Painter::GeneratePS(Expression expression)
+{
+	return shaderCache->GetPixelShader(shaderGenerator->Generate(expression, ShaderTypes::pixel));
 }
 
 void Painter::BeginFrame(float frameTime)

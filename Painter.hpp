@@ -4,6 +4,8 @@
 #include "general.hpp"
 #include <unordered_map>
 
+class ShaderCache;
+
 /// Класс, занимающийся рисованием моделей.
 class Painter : public Object
 {
@@ -13,6 +15,12 @@ private:
 	ptr<Presenter> presenter;
 	//** Размер экрана.
 	int screenWidth, screenHeight;
+	/// Кэш бинарных шейдеров.
+	ptr<ShaderCache> shaderCache;
+
+	/// Генератор шейдеров.
+	ptr<ShaderGenerator> shaderGenerator;
+
 	/// Случайная текстура.
 	ptr<Texture> randomTexture;
 
@@ -212,7 +220,7 @@ private:
 		Shader();
 		Shader(ptr<VertexShader> vertexShader, ptr<PixelShader> pixelShader);
 	};
-	/// Кэш шейдеров.
+	/// Кэш шейдеров материалов.
 	std::unordered_map<ShaderKey, Shader> shaders;
 
 	/// Текущее время кадра.
@@ -253,8 +261,13 @@ private:
 	};
 	std::vector<Light> lights;
 
+	/// Сгенерировать вершинный шейдер.
+	ptr<VertexShader> GenerateVS(Expression expression);
+	/// Сгенерировать пиксельный шейдер.
+	ptr<PixelShader> GeneratePS(Expression expression);
+
 public:
-	Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, int screenWidth, int screenHeight);
+	Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, int screenWidth, int screenHeight, ptr<ShaderCache> shaderCache);
 
 	/// Начать кадр.
 	/** Очистить все регистрационные списки. */

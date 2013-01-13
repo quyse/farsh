@@ -1,5 +1,7 @@
 #include "general.hpp"
 #include "Painter.hpp"
+#include "ShaderCache.hpp"
+#include "../inanity2/inanity-sqlitefs.hpp"
 #include <sstream>
 #include <iostream>
 #include <fstream>
@@ -225,7 +227,15 @@ public:
 
 		context = device->GetContext();
 
-		painter = NEW(Painter(device, context, presenter, mode.width, mode.height));
+		const char* shadersCacheFileName =
+#ifdef _DEBUG
+			"shaders_debug"
+#else
+			"shaders"
+#endif
+			;
+		ptr<ShaderCache> shaderCache = NEW(ShaderCache(NEW(SQLiteFileSystem(shadersCacheFileName)), device, NEW(DxShaderCompiler())));
+		painter = NEW(Painter(device, context, presenter, mode.width, mode.height, shaderCache));
 
 		// разметка
 		std::vector<Layout::Element> layoutElements;

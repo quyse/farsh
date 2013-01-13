@@ -8,6 +8,7 @@
 #include "../inanity2/inanity-input.hpp"
 #include "../inanity2/inanity-physics.hpp"
 #include "../inanity2/inanity-bullet.hpp"
+#include "../inanity2/inanity-crypto.hpp"
 
 using namespace Inanity;
 using namespace Inanity::Graphics;

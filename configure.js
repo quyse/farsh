@@ -15,7 +15,9 @@ var staticLibraries = [
 	'libinanity-lua',
 	'libinanity-input',
 	'libinanity-physics',
-	'libinanity-bullet'
+	'libinanity-bullet',
+	'libinanity-crypto',
+	'libinanity-sqlitefs'
 	];
 var staticDepsLibraries = [
 	{ dir: 'lua', lib: 'liblua' },
@@ -30,7 +32,7 @@ exports.configureLinker = function(executableFile, linker) {
 	var a = /^(([^\/]+)\/)([^\/]+)$/.exec(executableFile);
 	linker.configuration = a[2];
 
-	var objects = ['main', 'Painter'];
+	var objects = ['main', 'Painter', 'ShaderCache'];
 	for ( var i = 0; i < objects.length; ++i)
 		linker.addObjectFile(a[1] + objects[i]);
 
