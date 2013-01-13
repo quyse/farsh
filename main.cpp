@@ -169,10 +169,10 @@ public:
 		float4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, float3(0, 0, 1));
 		float4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 0.1f, 100.0f);
 
-		//float3 shadowLightPosition = cameraPosition + cameraRightDirection;
+		float3 shadowLightPosition = cameraPosition + cameraMoveDirectionFront * 2.0f + cameraMoveDirectionRight * 10.0f + cameraMoveDirectionUp * 10.0f;
 		//float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, cameraPosition + cameraDirection, float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
-		float3 shadowLightPosition(10, 0, 10);
-		float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, float3(10, 10, 0), float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
+		//float3 shadowLightPosition(10, 0, 10);
+		float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, cameraPosition + cameraMoveDirectionFront * 2.0f, float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
 		float3 shadowLightPosition2(20, 20, 10);
 		float4x4 shadowLightTransform2 = CreateLookAtMatrix(shadowLightPosition2, float3(10, 10, 0), float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
 
