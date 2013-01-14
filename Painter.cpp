@@ -657,12 +657,18 @@ Expression Painter::GetWorldPositionAndNormal(bool instanced, bool skinned)
 			aBoneWeights.Swizzle<float>("z"),
 			aBoneWeights.Swizzle<float>("w")
 		};
+		Temp<float3> tmpBoneOffsets[4];
+
 		return
+			tmpBoneOffsets[0] = uBoneOffsets[boneNumbers[0]].Swizzle<float3>("xyz"),
+			tmpBoneOffsets[1] = uBoneOffsets[boneNumbers[1]].Swizzle<float3>("xyz"),
+			tmpBoneOffsets[2] = uBoneOffsets[boneNumbers[2]].Swizzle<float3>("xyz"),
+			tmpBoneOffsets[3] = uBoneOffsets[boneNumbers[3]].Swizzle<float3>("xyz"),
 			tmpVertexPosition = newfloat4(
-				(ApplyQuaternion(uBoneOrientations[boneNumbers[0]], position) + uBoneOffsets[boneNumbers[0]].Swizzle<float3>("xyz")) * boneWeights[0] +
-				(ApplyQuaternion(uBoneOrientations[boneNumbers[1]], position) + uBoneOffsets[boneNumbers[1]].Swizzle<float3>("xyz")) * boneWeights[1] +
-				(ApplyQuaternion(uBoneOrientations[boneNumbers[2]], position) + uBoneOffsets[boneNumbers[2]].Swizzle<float3>("xyz")) * boneWeights[2] +
-				(ApplyQuaternion(uBoneOrientations[boneNumbers[3]], position) + uBoneOffsets[boneNumbers[3]].Swizzle<float3>("xyz")) * boneWeights[3],
+				(ApplyQuaternion(uBoneOrientations[boneNumbers[0]], position) + tmpBoneOffsets[0]) * boneWeights[0] +
+				(ApplyQuaternion(uBoneOrientations[boneNumbers[1]], position) + tmpBoneOffsets[1]) * boneWeights[1] +
+				(ApplyQuaternion(uBoneOrientations[boneNumbers[2]], position) + tmpBoneOffsets[2]) * boneWeights[2] +
+				(ApplyQuaternion(uBoneOrientations[boneNumbers[3]], position) + tmpBoneOffsets[3]) * boneWeights[3],
 				1.0f),
 			tmpVertexNormal =
 				ApplyQuaternion(uBoneOrientations[boneNumbers[0]], aNormal) * boneWeights[0] +

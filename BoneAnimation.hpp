@@ -10,15 +10,19 @@ class BoneAnimationFrame;
 class BoneAnimation : public Object
 {
 	friend class BoneAnimationFrame;
-private:
-	ptr<Skeleton> skeleton;
-
+public:
 	/// Структура ключа анимации.
 	struct Key
 	{
+		/// Время ключа анимации.
 		float time;
+		/// Ориентация относительно родительской кости.
 		quaternion orientation;
 	};
+
+private:
+	ptr<Skeleton> skeleton;
+
 	/// Ключи анимации по костям, отсортированные по времени.
 	std::vector<std::vector<Key> > keys;
 
@@ -38,13 +42,17 @@ class BoneAnimationFrame : public Object
 private:
 	ptr<BoneAnimation> animation;
 
-	/// Текущие динамические ориентации.
-	std::vector<quaternion> dynamicOrientations;
+	/// Анимационные относительные ориентации.
+	std::vector<quaternion> animationRelativeOrientations;
+	/// Анимационные мировые ориентации.
+	std::vector<quaternion> animationWorldOrientations;
+	/// Анимационные мировые позиции.
+	std::vector<float3> animationWorldPositions;
 
 public:
-	/// Результирующие ориентации костей (в мировом пространстве).
+	/// Результирующие преобразования для точек.
 	std::vector<quaternion> orientations;
-	/// Результирующие смещения костей (в мировом пространстве).
+	/// Результирующие смещения для точек.
 	std::vector<float3> offsets;
 
 public:

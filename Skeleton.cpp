@@ -23,9 +23,10 @@ Skeleton::Skeleton(const std::vector<Bone>& bones) : bones(bones)
 
 	// DFS без рекурсии
 	std::stack<int> s;
-	for(size_t i = 0; i < bones.size(); ++i)
+	int bonesCount = (int)bones.size();
+	for(int i = 0; i < bonesCount; ++i)
 	{
-		while(!f[i])
+		while(i >= 0 && !f[i])
 		{
 			f[i] = true;
 			s.push(i);
@@ -63,9 +64,14 @@ ptr<Skeleton> Skeleton::Deserialize(ptr<InputStream> inputStream)
 		for(size_t i = 0; i < bonesCount; ++i)
 		{
 			bones[i].parent = (int)reader.ReadShortly();
-			bones[i].originalOrientation = reader.Read<quaternion>();
-			bones[i].originalOffset = reader.Read<float3>();
+			bones[i].originalWorldOrientation = reader.Read<quaternion>();
+			bones[i].originalWorldPosition = reader.Read<float3>();
 		}
+		bones[0].originalRelativePosition = bones[0].originalWorldPosition;
+		for(size_t i = 1; i < bonesCount; ++i)
+			bones[i].originalRelativePosition =
+				(bones[i].originalWorldPosition - bones[bones[i].parent].originalWorldPosition)
+				* bones[bones[i].parent].originalWorldOrientation.conjugate();
 
 		return NEW(Skeleton(bones));
 	}

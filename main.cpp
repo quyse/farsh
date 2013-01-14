@@ -1,6 +1,7 @@
 #include "general.hpp"
 #include "Painter.hpp"
 #include "ShaderCache.hpp"
+#include "Skeleton.hpp"
 #include "BoneAnimation.hpp"
 #include "../inanity2/inanity-sqlitefs.hpp"
 #include <sstream>
@@ -35,6 +36,9 @@ private:
 
 	ptr<Geometry> geometryCube, geometryKnot, geometryZombi;
 	ptr<Painter::Material> texturedMaterial, greenMaterial;
+	ptr<Skeleton> skeletonZombi;
+	ptr<BoneAnimation> baZombi;
+	ptr<BoneAnimationFrame> bafZombi;
 
 	PresentMode mode;
 
@@ -187,7 +191,16 @@ public:
 		for(size_t i = 0; i < cubes.size(); ++i)
 			painter->AddModel(texturedMaterial, geometryCube, CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform());
 		//painter->AddModel(greenMaterial, geometryKnot, CreateScalingMatrix(0.3f, 0.3f, 0.3f) * CreateTranslationMatrix(10, 10, 2));
-		painter->AddModel(greenMaterial, geometryZombi, CreateTranslationMatrix(10, 10, 0));
+		//painter->AddModel(greenMaterial, geometryZombi, CreateTranslationMatrix(10, 10, 0));
+
+		float intPart;
+		static float t = 0;
+		t += frameTime;
+		//bafZombi->Setup(float3(10, 10, 1), quaternion(0, 0, 0, 1), modf(t, &intPart) * 0.1f);
+		//bafZombi->Setup(float3(10, 10, 1), quaternion(float3(0, 1, 0), modf(t, &intPart) * 2), 0);
+		bafZombi->Setup(float3(10, 10, 1), quaternion(float3(0, 1, 0), modf(t / 3, &intPart) * 3), 0);
+		painter->AddSkinnedModel(texturedMaterial, geometryZombi, bafZombi);
+
 		painter->AddShadowLight(shadowLightPosition, float3(1.0f, 1.0f, 1.0f) * 0.4f, shadowLightTransform);
 		painter->AddShadowLight(shadowLightPosition2, float3(1.0f, 1.0f, 1.0f) * 0.2f, shadowLightTransform2);
 
@@ -259,9 +272,22 @@ public:
 		geometryKnot = NEW(Geometry(
 			device->CreateVertexBuffer(fs->LoadFile("knot.geo.vertices"), layout),
 			device->CreateIndexBuffer(fs->LoadFile("knot.geo.indices"), layout)));
+
+#if 0
 		geometryZombi = NEW(Geometry(
 			device->CreateVertexBuffer(fs->LoadFile("zombi.geo.vertices"), skinLayout),
 			device->CreateIndexBuffer(fs->LoadFile("zombi.geo.indices"), skinLayout)));
+		skeletonZombi = Skeleton::Deserialize(fs->LoadFileAsStream("zombi.skeleton"));
+		baZombi = BoneAnimation::Deserialize(fs->LoadFileAsStream("zombi.ba"), skeletonZombi);
+		bafZombi = NEW(BoneAnimationFrame(baZombi));
+#else
+		geometryZombi = NEW(Geometry(
+			device->CreateVertexBuffer(fs->LoadFile("og.geo.vertices"), skinLayout),
+			device->CreateIndexBuffer(fs->LoadFile("og.geo.indices"), skinLayout)));
+		skeletonZombi = Skeleton::Deserialize(fs->LoadFileAsStream("og.skeleton"));
+		baZombi = BoneAnimation::Deserialize(fs->LoadFileAsStream("og.ba"), skeletonZombi);
+		bafZombi = NEW(BoneAnimationFrame(baZombi));
+#endif
 
 		texturedMaterial = NEW(Painter::Material());
 		texturedMaterial->diffuseTexture = device->CreateStaticTexture(fs->LoadFile("diffuse.jpg"));
