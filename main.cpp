@@ -13,6 +13,8 @@
 
 #include "test.hpp"
 
+#define ZZZ
+
 struct Vertex
 {
 	float3 position;
@@ -196,10 +198,21 @@ public:
 		float intPart;
 		static float t = 0;
 		t += frameTime;
-		//bafZombi->Setup(float3(10, 10, 1), quaternion(0, 0, 0, 1), modf(t, &intPart) * 0.1f);
-		//bafZombi->Setup(float3(10, 10, 1), quaternion(float3(0, 1, 0), modf(t, &intPart) * 2), 0);
-		bafZombi->Setup(float3(10, 10, 1), quaternion(float3(0, 1, 0), modf(t / 3, &intPart) * 3), 0);
-		painter->AddSkinnedModel(texturedMaterial, geometryZombi, bafZombi);
+#ifdef ZZZ
+		//bafZombi->Setup(float3(10, 10, 0), quaternion(0, 0, 0, 1), modf(t * 0.1f, &intPart));
+		bafZombi->Setup(float3(10, 15, 0), quaternion(0, 0, 0, 1), modf(t * 0.1f, &intPart) * 5);
+#else
+		bafZombi->Setup(float3(10, 10, 1), quaternion(0, 0, 0, 1), modf(t / 4, &intPart) * 4);
+#endif
+
+//		for(size_t i = 0; i < bafZombi->animationWorldPositions.size(); ++i)
+//			painter->AddModel(texturedMaterial, geometryCube, (float4x4)bafZombi->orientations[i] * CreateScalingMatrix(0.1f, 0.1f, 0.1f) * CreateTranslationMatrix(bafZombi->animationWorldPositions[i]));
+
+		//bafZombi->Setup(float3(10, 10, 1), quaternion(0, 0, 0, 1), modf(t * 0.1f, &intPart));
+		//bafZombi->Setup(float3(10, 10, 1), quaternion(float3(1, 0, 0), modf(t / 3, &intPart) * 3), 0);
+		//bafZombi->Setup(float3(10, 10, 1), quaternion(0, 0, 0, 1), 0);
+		//bafZombi->orientations[2] = quaternion(float3(1, 0, 0), modf(t / 3, &intPart)) * bafZombi->orientations[2];
+		painter->AddSkinnedModel(greenMaterial, geometryZombi, bafZombi);
 
 		painter->AddShadowLight(shadowLightPosition, float3(1.0f, 1.0f, 1.0f) * 0.4f, shadowLightTransform);
 		painter->AddShadowLight(shadowLightPosition2, float3(1.0f, 1.0f, 1.0f) * 0.2f, shadowLightTransform2);
@@ -227,8 +240,8 @@ public:
 		window->SetInputManager(inputManager);
 
 #ifdef _DEBUG
-		mode.width = 640;
-		mode.height = 480;
+		mode.width = 800;
+		mode.height = 600;
 		mode.fullscreen = false;
 #else
 		mode.width = GetSystemMetrics(SM_CXSCREEN);
@@ -273,7 +286,7 @@ public:
 			device->CreateVertexBuffer(fs->LoadFile("knot.geo.vertices"), layout),
 			device->CreateIndexBuffer(fs->LoadFile("knot.geo.indices"), layout)));
 
-#if 0
+#ifdef ZZZ
 		geometryZombi = NEW(Geometry(
 			device->CreateVertexBuffer(fs->LoadFile("zombi.geo.vertices"), skinLayout),
 			device->CreateIndexBuffer(fs->LoadFile("zombi.geo.indices"), skinLayout)));
@@ -360,6 +373,40 @@ public:
 		window->Run(Win32Window::ActiveHandler::CreateDelegate(MakePointer(this), &Game::onTick));
 	}
 };
+
+template <int n>
+std::ostream& operator<<(std::ostream& s, vector<n> v)
+{
+	for(int i = 0; i < n; ++i)
+	{
+		if(i) s << ' ';
+		s << v.t[i];
+	}
+	return s;
+}
+
+void test()
+{
+	quaternion a(float3(0, 0, 1), 1);
+	quaternion b(float3(1, 0, 0), 2.3f);
+
+	float3 p(3432,6542,453);
+
+	std::cout << a << '\n';
+	std::cout << b << '\n';
+	std::cout << (a * b) << '\n';
+	std::cout << (a * a.conjugate()) << '\n';
+	std::cout << ((a * b) * b) << '\n';
+	std::cout << (a * (b * b)) << '\n';
+	std::cout << (p * a) << '\n';
+	std::cout << ((p * a) * b) << '\n';
+	std::cout << (p * (a * b)) << '\n';
+	// p * a = a * P * a.conjugate()
+	// (p * a) * b = b * a * P * a.conjugate() * b.conjugate()
+	// p * (a * b) = (a * b) * P * (a * b).conjugate()
+
+	quaternion c;
+}
 
 #ifdef _DEBUG
 int main()

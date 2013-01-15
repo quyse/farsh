@@ -1,5 +1,6 @@
 #include "BoneAnimation.hpp"
 #include "Skeleton.hpp"
+#include <iostream>
 
 /*
 Формат файла костной анимации:
@@ -111,6 +112,17 @@ BoneAnimationFrame::BoneAnimationFrame(ptr<BoneAnimation> animation)
 	offsets(animationRelativeOrientations.size())
 {}
 
+template <int n>
+std::ostream& operator<<(std::ostream& s, vector<n> v)
+{
+	for(int i = 0; i < n; ++i)
+	{
+		if(i) s << ' ';
+		s << v.t[i];
+	}
+	return s;
+}
+
 void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& originOrientation, float time)
 {
 	// получить ключи и смещения
@@ -126,6 +138,8 @@ void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& ori
 	} sorter;
 
 	int bonesCount = (int)animationRelativeOrientations.size();
+
+	//std::cout << "Time: " << time << '\n';
 
 	// для каждой кости получить анимационную относительную ориентацию
 	// а для корневой кости получить ещё и позицию
@@ -149,6 +163,8 @@ void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& ori
 			interframeTime = (time - boneKeys[frame - 1].time) / (boneKeys[frame].time - boneKeys[frame - 1].time);
 			animationRelativeOrientation = slerp(boneKeys[frame - 1].orientation, boneKeys[frame].orientation, interframeTime);
 		}
+
+		//std::cout << "ARO " << i << ": " << animationRelativeOrientation << '\n';
 
 		// для корневой кости
 		if(i == 0)
@@ -185,17 +201,30 @@ void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& ori
 //			orientations[boneNumber] = dynamicOrientations[boneNumber] * originOrientation;
 //			offsets[boneNumber] = originOffset + rootBoneOffset * originOrientation;
 			animationWorldOrientations[boneNumber] = animationRelativeOrientations[boneNumber] * originOrientation;
-			animationWorldPositions[boneNumber] = originOffset + bone.originalRelativePosition * originOrientation;
+			animationWorldPositions[boneNumber] = originOffset + rootBoneOffset * originOrientation;
 		}
 		f[boneNumber] = true;
+		//std::cout << "Bone " << boneNumber << ", AWO=" << animationWorldOrientations[boneNumber] << ", AWP=" << animationWorldPositions[boneNumber] << '\n';
 	}
 
 	// вычислить результирующие ориентации для костей
 	for(int i = 0; i < bonesCount; ++i)
 	{
+//		orientations[i] = bones[i].originalWorldOrientation.conjugate() * animationWorldOrientations[i];
+//		offsets[i] = animationWorldPositions[i] - bones[i].originalWorldPosition * orientations[i];
+
+#if 0
+		// это типа неправильно
 		orientations[i] = bones[i].originalWorldOrientation.conjugate() * animationWorldOrientations[i];
-		offsets[i] = animationWorldPositions[i] - bones[i].originalWorldPosition * bones[i].originalWorldOrientation.conjugate() * animationWorldOrientations[i];
+		offsets[i] = animationWorldPositions[i] - bones[i].originalWorldPosition * (bones[i].originalWorldOrientation.conjugate() * animationWorldOrientations[i]);
+#else
+		// это типа правильно
+		orientations[i] = bones[i].originalWorldOrientation * animationWorldOrientations[i].conjugate();
+		offsets[i] = animationWorldPositions[i] - bones[i].originalWorldPosition * orientations[i];
+#endif
+		//std::cout << "Result " << i << " O=" << orientations[i] << ", P=" << offsets[i] << '\n';
 	}
-	std::swap(orientations[1], orientations[2]);
-	std::swap(offsets[1], offsets[2]);
+	//std::cout << '\n';
+	//std::swap(orientations[1], orientations[2]);
+	//std::swap(offsets[1], offsets[2]);
 }
