@@ -201,6 +201,7 @@ public:
 #ifdef ZZZ
 		//bafZombi->Setup(float3(10, 10, 0), quaternion(0, 0, 0, 1), modf(t * 0.1f, &intPart));
 		bafZombi->Setup(float3(10, 15, 0), quaternion(0, 0, 0, 1), modf(t * 0.1f, &intPart) * 5);
+		//bafZombi->Setup(float3(10, 15, 0), quaternion(float3(0, 0, 1), modf(t * 0.1f, &intPart)), 0);
 #else
 		bafZombi->Setup(float3(10, 10, 1), quaternion(0, 0, 0, 1), modf(t / 4, &intPart) * 4);
 #endif
@@ -383,29 +384,6 @@ std::ostream& operator<<(std::ostream& s, vector<n> v)
 		s << v.t[i];
 	}
 	return s;
-}
-
-void test()
-{
-	quaternion a(float3(0, 0, 1), 1);
-	quaternion b(float3(1, 0, 0), 2.3f);
-
-	float3 p(3432,6542,453);
-
-	std::cout << a << '\n';
-	std::cout << b << '\n';
-	std::cout << (a * b) << '\n';
-	std::cout << (a * a.conjugate()) << '\n';
-	std::cout << ((a * b) * b) << '\n';
-	std::cout << (a * (b * b)) << '\n';
-	std::cout << (p * a) << '\n';
-	std::cout << ((p * a) * b) << '\n';
-	std::cout << (p * (a * b)) << '\n';
-	// p * a = a * P * a.conjugate()
-	// (p * a) * b = b * a * P * a.conjugate() * b.conjugate()
-	// p * (a * b) = (a * b) * P * (a * b).conjugate()
-
-	quaternion c;
 }
 
 #ifdef _DEBUG

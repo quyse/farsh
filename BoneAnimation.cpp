@@ -193,13 +193,9 @@ void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& ori
 				THROW_PRIMARY_EXCEPTION("Parent is not calculated");
 			animationWorldOrientations[boneNumber] = animationRelativeOrientations[boneNumber] * animationWorldOrientations[parent];
 			animationWorldPositions[boneNumber] = animationWorldPositions[parent] + bone.originalRelativePosition * animationWorldOrientations[parent];
-//			orientations[boneNumber] = dynamicOrientations[boneNumber] * orientations[parent];
-//			offsets[boneNumber] = offsets[parent] + bone.originalOffset * orientations[parent];
 		}
 		else
 		{
-//			orientations[boneNumber] = dynamicOrientations[boneNumber] * originOrientation;
-//			offsets[boneNumber] = originOffset + rootBoneOffset * originOrientation;
 			animationWorldOrientations[boneNumber] = animationRelativeOrientations[boneNumber] * originOrientation;
 			animationWorldPositions[boneNumber] = originOffset + rootBoneOffset * originOrientation;
 		}
@@ -210,21 +206,9 @@ void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& ori
 	// вычислить результирующие ориентации для костей
 	for(int i = 0; i < bonesCount; ++i)
 	{
-//		orientations[i] = bones[i].originalWorldOrientation.conjugate() * animationWorldOrientations[i];
-//		offsets[i] = animationWorldPositions[i] - bones[i].originalWorldPosition * orientations[i];
-
-#if 0
-		// это типа неправильно
-		orientations[i] = bones[i].originalWorldOrientation.conjugate() * animationWorldOrientations[i];
-		offsets[i] = animationWorldPositions[i] - bones[i].originalWorldPosition * (bones[i].originalWorldOrientation.conjugate() * animationWorldOrientations[i]);
-#else
-		// это типа правильно
-		orientations[i] = bones[i].originalWorldOrientation * animationWorldOrientations[i].conjugate();
+		orientations[i] = animationWorldOrientations[i] * bones[i].originalWorldOrientation.conjugate();
 		offsets[i] = animationWorldPositions[i] - bones[i].originalWorldPosition * orientations[i];
-#endif
 		//std::cout << "Result " << i << " O=" << orientations[i] << ", P=" << offsets[i] << '\n';
 	}
 	//std::cout << '\n';
-	//std::swap(orientations[1], orientations[2]);
-	//std::swap(offsets[1], offsets[2]);
 }

@@ -998,6 +998,10 @@ void Painter::Draw()
 				const std::vector<quaternion>& orientations = animationFrame->orientations;
 				const std::vector<float3>& offsets = animationFrame->offsets;
 				int bonesCount = (int)orientations.size();
+#ifdef _DEBUG
+				if(bonesCount > maxBonesCount)
+					THROW_PRIMARY_EXCEPTION("Too many bones");
+#endif
 				for(int k = 0; k < bonesCount; ++k)
 				{
 					uBoneOrientations.SetValue(k, orientations[k]);
@@ -1200,6 +1204,10 @@ void Painter::Draw()
 		const std::vector<quaternion>& orientations = animationFrame->orientations;
 		const std::vector<float3>& offsets = animationFrame->offsets;
 		int bonesCount = (int)orientations.size();
+#ifdef _DEBUG
+		if(bonesCount > maxBonesCount)
+			THROW_PRIMARY_EXCEPTION("Too many bones");
+#endif
 		for(int k = 0; k < bonesCount; ++k)
 		{
 			uBoneOrientations.SetValue(k, orientations[k]);
