@@ -1276,7 +1276,7 @@ void Painter::Draw()
 
 	// tone mapping
 	uToneLuminanceKey.SetValue(0.1f);
-	uToneMaxLuminance.SetValue(1.0f);
+	uToneMaxLuminance.SetValue(3.0f);
 	context->SetUniformBufferData(ubTone, ugTone->GetData(), ugTone->GetSize());
 	cs = csTone;
 	context->ClearRenderBuffer(rbBack, clearColor);

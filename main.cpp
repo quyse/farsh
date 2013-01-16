@@ -85,6 +85,9 @@ public:
 			fpsTimeSum = 0;
 		}
 
+		static float theTime = 0;
+		static bool theTimePaused = false;
+
 		const float maxAngleChange = frameTime * 50;
 
 		ptr<Input::Frame> inputFrame = inputManager->GetCurrentFrame();
@@ -113,6 +116,9 @@ public:
 							rigidBody->ApplyImpulse(float3(cos(cameraAlpha) * cos(cameraBeta), sin(cameraAlpha) * cos(cameraBeta), sin(cameraBeta)) * 1000);
 							cubes.push_back(rigidBody);
 						}
+						break;
+					case 88://X
+						theTimePaused = !theTimePaused;
 						break;
 					}
 				}
@@ -143,7 +149,7 @@ public:
 		37 38 39 40
 		65 87 68 83 81 69
 		*/
-		float cameraStep = 10;
+		float cameraStep = 2;
 		float3 cameraMove(0, 0, 0);
 		float3 cameraMoveDirectionFront(cos(cameraAlpha), sin(cameraAlpha), 0);
 		float3 cameraMoveDirectionUp(0, 0, 1);
@@ -176,10 +182,11 @@ public:
 		float4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, float3(0, 0, 1));
 		float4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 0.1f, 100.0f);
 
-		float3 shadowLightPosition = cameraPosition + cameraMoveDirectionFront * 2.0f + cameraMoveDirectionRight * 10.0f + cameraMoveDirectionUp * 10.0f;
-		//float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, cameraPosition + cameraDirection, float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
+		//float3 shadowLightPosition = cameraPosition + cameraMoveDirectionFront * 2.0f + cameraMoveDirectionRight * 10.0f + cameraMoveDirectionUp * 10.0f;
+		float3 shadowLightPosition = cameraPosition + cameraMoveDirectionRight * 0.5f;
 		//float3 shadowLightPosition(10, 0, 10);
-		float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, cameraPosition + cameraMoveDirectionFront * 2.0f, float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
+		//float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, cameraPosition + cameraMoveDirectionFront * 2.0f, float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
+		float4x4 shadowLightTransform = CreateLookAtMatrix(shadowLightPosition, cameraPosition + cameraMoveDirectionFront * 1.0f, float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
 		float3 shadowLightPosition2(20, 20, 10);
 		float4x4 shadowLightTransform2 = CreateLookAtMatrix(shadowLightPosition2, float3(10, 10, 0), float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, 1, 1, 100);
 
@@ -196,14 +203,15 @@ public:
 		//painter->AddModel(greenMaterial, geometryZombi, CreateTranslationMatrix(10, 10, 0));
 
 		float intPart;
-		static float t = 0;
-		t += frameTime;
+		if(!theTimePaused)
+			theTime += frameTime;
 #ifdef ZZZ
-		//bafZombi->Setup(float3(10, 10, 0), quaternion(0, 0, 0, 1), modf(t * 0.1f, &intPart));
-		bafZombi->Setup(float3(10, 15, 0), quaternion(0, 0, 0, 1), modf(t * 0.1f, &intPart) * 5);
-		//bafZombi->Setup(float3(10, 15, 0), quaternion(float3(0, 0, 1), modf(t * 0.1f, &intPart)), 0);
+		//bafZombi->Setup(float3(10, 10, 0), quaternion(0, 0, 0, 1), modf(theTime * 0.1f, &intPart));
+		//bafZombi->Setup(float3(10, 15, 0), quaternion(0, 0, 0, 1), modf(theTime * 0.1f, &intPart) * 5);
+		bafZombi->Setup(float3(10, 15, 0), quaternion(0, 0, 0, 1), modf(theTime * 0.1f, &intPart) * 10);
+		//bafZombi->Setup(float3(10, 15, 0), quaternion(float3(0, 0, 1), modf(theTime * 0.1f, &intPart)), 0);
 #else
-		bafZombi->Setup(float3(10, 10, 1), quaternion(0, 0, 0, 1), modf(t / 4, &intPart) * 4);
+		bafZombi->Setup(float3(10, 10, 1), quaternion(0, 0, 0, 1), modf(theTime / 4, &intPart) * 4);
 #endif
 
 //		for(size_t i = 0; i < bafZombi->animationWorldPositions.size(); ++i)
@@ -282,22 +290,22 @@ public:
 
 		geometryCube = NEW(Geometry(
 			device->CreateVertexBuffer(fs->LoadFile("box.geo.vertices"), layout),
-			device->CreateIndexBuffer(fs->LoadFile("box.geo.indices"), layout)));
+			device->CreateIndexBuffer(fs->LoadFile("box.geo.indices"), sizeof(short))));
 		geometryKnot = NEW(Geometry(
 			device->CreateVertexBuffer(fs->LoadFile("knot.geo.vertices"), layout),
-			device->CreateIndexBuffer(fs->LoadFile("knot.geo.indices"), layout)));
+			device->CreateIndexBuffer(fs->LoadFile("knot.geo.indices"), sizeof(short))));
 
 #ifdef ZZZ
 		geometryZombi = NEW(Geometry(
 			device->CreateVertexBuffer(fs->LoadFile("zombi.geo.vertices"), skinLayout),
-			device->CreateIndexBuffer(fs->LoadFile("zombi.geo.indices"), skinLayout)));
+			device->CreateIndexBuffer(fs->LoadFile("zombi.geo.indices"), sizeof(short))));
 		skeletonZombi = Skeleton::Deserialize(fs->LoadFileAsStream("zombi.skeleton"));
 		baZombi = BoneAnimation::Deserialize(fs->LoadFileAsStream("zombi.ba"), skeletonZombi);
 		bafZombi = NEW(BoneAnimationFrame(baZombi));
 #else
 		geometryZombi = NEW(Geometry(
 			device->CreateVertexBuffer(fs->LoadFile("og.geo.vertices"), skinLayout),
-			device->CreateIndexBuffer(fs->LoadFile("og.geo.indices"), skinLayout)));
+			device->CreateIndexBuffer(fs->LoadFile("og.geo.indices"), sizeof(short))));
 		skeletonZombi = Skeleton::Deserialize(fs->LoadFileAsStream("og.skeleton"));
 		baZombi = BoneAnimation::Deserialize(fs->LoadFileAsStream("og.ba"), skeletonZombi);
 		bafZombi = NEW(BoneAnimationFrame(baZombi));
