@@ -10,6 +10,7 @@
 #include "../inanity2/inanity-bullet.hpp"
 #include "../inanity2/inanity-crypto.hpp"
 #include "../inanity2/inanity-lua.hpp"
+#include "../inanity2/scripting.hpp"
 #include "../inanity2/scripting_decl.hpp"
 #include "../inanity2/scripting_impl.hpp"
 

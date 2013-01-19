@@ -710,9 +710,9 @@ Expression Painter::BeginMaterialLighting(const PixelShaderKey& key, Value<float
 
 	e.Append((
 		tmpToCamera = normalize(uCameraPosition - iWorldPosition),
-		tmpDiffuse = key.materialKey.hasDiffuseTexture ? uDiffuseSampler.Sample(iTexcoord) : uDiffuse,
+		tmpDiffuse = key.materialKey.hasDiffuseTexture ? pow(uDiffuseSampler.Sample(iTexcoord), 2.2f) : uDiffuse,
 		tmpSpecular = key.materialKey.hasSpecularTexture ? uSpecularSampler.Sample(iTexcoord) : uSpecular,
-		tmpSpecularExponent = exp2(tmpSpecular.Swizzle<float>("w") * Value<float>(12)),
+		tmpSpecularExponent = exp2(tmpSpecular.Swizzle<float>("x") * Value<float>(4/*12*/)),
 		tmpColor = ambientColor * tmpDiffuse.Swizzle<float3>("xyz")
 	));
 
@@ -731,7 +731,7 @@ Expression Painter::ApplyMaterialLighting(Value<float3> lightPosition, Value<flo
 		tmpDiffusePart = tmpDiffuse.Swizzle<float3>("xyz")
 			* max(dot(tmpNormal, tmpToLight), 0),
 		// specular составляющая
-		tmpSpecularPart = tmpSpecular.Swizzle<float3>("xyz")
+		tmpSpecularPart = tmpDiffuse.Swizzle<float3>("xyz")
 			* pow(max(dot(tmpLightViewBissect, tmpNormal), 0), tmpSpecularExponent)
 			//* dot(tmpNormal, tmpToLight) // хз, может не нужно оно?
 			* (tmpSpecularExponent + Value<float>(1)) / (max(pow(dot(tmpToLight, tmpLightViewBissect), 3), 0.1f) * Value<float>(8)),
@@ -830,17 +830,17 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 		Temp<float2> shadowCoordsXY;
 		Temp<float> linearShadowZ;
 		Temp<float> lighted;
-		Temp<float> expCoef;
 		shader.Append((
 			shadowCoords = mul(tmpWorldPosition, shadowLight.uLightTransform),
-			lighted = shadowCoords.Swizzle<float>("w") > Value<float>(0),
+			lighted = shadowCoords.Swizzle<float>("z") > Value<float>(0),
 			linearShadowZ = shadowCoords.Swizzle<float>("z"),
+			//lighted = lighted * (linearShadowZ > Value<float>(0)),
 			shadowCoords = shadowCoords / shadowCoords.Swizzle<float>("w"),
+			lighted = lighted * (abs(shadowCoords.Swizzle<float>("x")) < Value<float>(1)) * (abs(shadowCoords.Swizzle<float>("y")) < Value<float>(1)),
 			shadowCoordsXY = newfloat2(
 				(shadowCoords.Swizzle<float>("x") + Value<float>(1.0f)) * Value<float>(0.5f),
 				(Value<float>(1.0f) - shadowCoords.Swizzle<float>("y")) * Value<float>(0.5f)),
-			expCoef = Value<float>(4),
-			shadowMultiplier = lighted * saturate(exp(expCoef * (shadowLight.uShadowSampler.Sample(shadowCoordsXY) - linearShadowZ))),
+			shadowMultiplier = lighted * saturate(exp(Value<float>(4) * (shadowLight.uShadowSampler.Sample(shadowCoordsXY) - linearShadowZ))),
 			
 			ApplyMaterialLighting(shadowLight.uLightPosition, shadowLight.uLightColor * shadowMultiplier)
 			));
@@ -1262,7 +1262,7 @@ void Painter::Draw()
 	uBloomLimit.SetValue(bloomLimit);
 	context->SetUniformBufferData(ubBloom, ugBloom->GetData(), ugBloom->GetSize());
 
-	const int bloomPassesCount = 9;
+	const int bloomPassesCount = 5;
 
 	bool enableBloom = true;
 
