@@ -2,6 +2,7 @@
 #define ___FARSH_PAINTER_HPP___
 
 #include "general.hpp"
+#include "Material.hpp"
 #include <unordered_map>
 
 class ShaderCache;
@@ -115,6 +116,8 @@ private:
 	Uniform<float4> uDiffuse;
 	/// Specular + glossiness.
 	Uniform<float4> uSpecular;
+	/// Преобразование текстурных координат для карты нормалей.
+	Uniform<float4> uNormalCoordTransform;
 	/// Семплер диффузной текстуры.
 	Sampler<float4, float2> uDiffuseSampler;
 	/// Семплер specular текстуры.
@@ -246,30 +249,6 @@ private:
 	/// Вспомогательная карта для размытия.
 	ptr<RenderBuffer> rbShadowBlur;
 
-public:
-	/// Структура ключа материала.
-	struct MaterialKey
-	{
-		bool hasDiffuseTexture;
-		bool hasSpecularTexture;
-		bool hasNormalTexture;
-
-		MaterialKey(bool hasDiffuseTexture, bool hasSpecularTexture, bool hasNormalTexture);
-		operator size_t() const;
-	};
-
-	/// Структура материала.
-	struct Material : public Object
-	{
-		ptr<Texture> diffuseTexture;
-		ptr<Texture> specularTexture;
-		ptr<Texture> normalTexture;
-		float4 diffuse;
-		float4 specular;
-
-		MaterialKey GetKey() const;
-	};
-
 private:
 	/// Временные переменные вершинного шейдера моделей.
 	Temp<float4> tmpVertexPosition;
@@ -326,7 +305,7 @@ private:
 
 	//*** Временные переменные пиксельного шейдера материала.
 	Temp<float4> tmpWorldPosition;
-	Temp<float3> tmpNormalizedNormal;
+	Temp<float3> tmpNormal;
 	Temp<float3> tmpToCamera;
 	Temp<float4> tmpDiffuse, tmpSpecular;
 	Temp<float> tmpSpecularExponent;

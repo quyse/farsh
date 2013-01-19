@@ -2,6 +2,9 @@
 #include "Skeleton.hpp"
 #include <iostream>
 
+SCRIPTABLE_MAP_BEGIN(BoneAnimation, Farsh.BoneAnimation);
+SCRIPTABLE_MAP_END();
+
 /*
 Формат файла костной анимации:
 

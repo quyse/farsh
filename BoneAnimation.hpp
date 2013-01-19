@@ -33,6 +33,8 @@ public:
 	BoneAnimation(ptr<Skeleton> skeleton, const std::vector<std::vector<Key> >& keys, const std::vector<float3>& rootBoneOffsets);
 
 	static ptr<BoneAnimation> Deserialize(ptr<InputStream> inputStream, ptr<Skeleton> skeleton);
+
+	SCRIPTABLE_CLASS(BoneAnimation);
 };
 
 /// Класс кадра анимации костей.

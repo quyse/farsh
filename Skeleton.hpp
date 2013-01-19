@@ -34,6 +34,8 @@ public:
 	const std::vector<int>& GetSortedBones() const;
 
 	static ptr<Skeleton> Deserialize(ptr<InputStream> inputStream);
+
+	SCRIPTABLE_CLASS(Skeleton);
 };
 
 #endif

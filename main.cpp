@@ -1,5 +1,6 @@
 #include "general.hpp"
 #include "Painter.hpp"
+#include "Material.hpp"
 #include "ShaderCache.hpp"
 #include "Skeleton.hpp"
 #include "BoneAnimation.hpp"
@@ -39,7 +40,7 @@ private:
 	float alpha;
 
 	ptr<Geometry> geometryCube, geometryKnot, geometryZombi;
-	ptr<Painter::Material> texturedMaterial, greenMaterial;
+	ptr<Material> texturedMaterial, zombieMaterial;
 	ptr<Skeleton> skeletonZombi;
 	ptr<BoneAnimation> baZombi;
 	ptr<BoneAnimationFrame> bafZombi;
@@ -70,7 +71,7 @@ private:
 
 public:
 	Game() : lastTick(0), cameraAlpha(0), cameraBeta(0),
-		bloomLimit(0.9f), toneLuminanceKey(0.8f), toneMaxLuminance(3.1f)
+		bloomLimit(1.0f), toneLuminanceKey(0.01f), toneMaxLuminance(3.1f)
 	{
 		tickCoef = 1.0f / Time::GetTicksPerSecond();
 	}
@@ -141,11 +142,11 @@ public:
 						printf("bloomLimit: %f\n", bloomLimit);
 						break;
 					case '3':
-						toneLuminanceKey -= 0.1f;
+						toneLuminanceKey -= 0.01f;
 						printf("toneLuminanceKey: %f\n", toneLuminanceKey);
 						break;
 					case '4':
-						toneLuminanceKey += 0.1f;
+						toneLuminanceKey += 0.01f;
 						printf("toneLuminanceKey: %f\n", toneLuminanceKey);
 						break;
 					case '5':
@@ -155,6 +156,27 @@ public:
 					case '6':
 						toneMaxLuminance += 0.1f;
 						printf("toneMaxLuminance: %f\n", toneMaxLuminance);
+						break;
+
+					case '7':
+						zombieMaterial->specular.x -= 0.01f;
+						zombieMaterial->specular.y = zombieMaterial->specular.x;
+						zombieMaterial->specular.z = zombieMaterial->specular.x;
+						printf("specular: %f\n", zombieMaterial->specular.x);
+						break;
+					case '8':
+						zombieMaterial->specular.x += 0.01f;
+						zombieMaterial->specular.y = zombieMaterial->specular.x;
+						zombieMaterial->specular.z = zombieMaterial->specular.x;
+						printf("specular: %f\n", zombieMaterial->specular.x);
+						break;
+					case '9':
+						zombieMaterial->specular.w -= 0.01f;
+						printf("glossiness: %f\n", zombieMaterial->specular.w);
+						break;
+					case '0':
+						zombieMaterial->specular.w += 0.01f;
+						printf("glossiness: %f\n", zombieMaterial->specular.w);
 						break;
 #endif
 					}
@@ -236,8 +258,8 @@ public:
 		//painter->SetAmbientColor(float3(0.2f, 0.2f, 0.2f));
 		for(size_t i = 0; i < cubes.size(); ++i)
 			painter->AddModel(texturedMaterial, geometryCube, CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform());
-		//painter->AddModel(greenMaterial, geometryKnot, CreateScalingMatrix(0.3f, 0.3f, 0.3f) * CreateTranslationMatrix(10, 10, 2));
-		//painter->AddModel(greenMaterial, geometryZombi, CreateTranslationMatrix(10, 10, 0));
+		//painter->AddModel(zombieMaterial, geometryKnot, CreateScalingMatrix(0.3f, 0.3f, 0.3f) * CreateTranslationMatrix(10, 10, 2));
+		//painter->AddModel(zombieMaterial, geometryZombi, CreateTranslationMatrix(10, 10, 0));
 
 		float intPart;
 		if(!theTimePaused)
@@ -260,8 +282,8 @@ public:
 		//bafZombi->Setup(float3(10, 10, 1), quaternion(float3(1, 0, 0), modf(t / 3, &intPart) * 3), 0);
 		//bafZombi->Setup(float3(10, 10, 1), quaternion(0, 0, 0, 1), 0);
 		//bafZombi->orientations[2] = quaternion(float3(1, 0, 0), modf(t / 3, &intPart)) * bafZombi->orientations[2];
-		painter->AddSkinnedModel(greenMaterial, geometryZombi, bafZombi);
-		painter->AddModel(greenMaterial, geometryAxe, (float4x4)bafAxe->animationWorldOrientations[0] * CreateTranslationMatrix(bafAxe->animationWorldPositions[0]));
+		painter->AddSkinnedModel(zombieMaterial, geometryZombi, bafZombi);
+		painter->AddModel(zombieMaterial, geometryAxe, (float4x4)bafAxe->animationWorldOrientations[0] * CreateTranslationMatrix(bafAxe->animationWorldPositions[0]));
 
 		painter->AddShadowLight(shadowLightPosition, float3(1.0f, 1.0f, 1.0f) * 0.4f, shadowLightTransform);
 		painter->AddShadowLight(shadowLightPosition2, float3(1.0f, 1.0f, 1.0f) * 0.2f, shadowLightTransform2);
@@ -364,9 +386,13 @@ public:
 			bafAxe = NEW(BoneAnimationFrame(BoneAnimation::Deserialize(fs->LoadFileAsStream("axe.ba"), NEW(Skeleton(bones)))));
 		}
 
-		texturedMaterial = NEW(Painter::Material());
-		greenMaterial = NEW(Painter::Material());
-		greenMaterial->diffuse = float4(0, 1, 0, 1);
+		texturedMaterial = NEW(Material());
+		texturedMaterial->specular = float4(0.2f, 0.2f, 0.2f, 0.2f);
+		texturedMaterial->normalCoordTransform = float4(4, 4, 0, 0);
+		zombieMaterial = NEW(Material());
+		zombieMaterial->diffuse = float4(0, 1, 0, 1);
+		zombieMaterial->specular = float4(0.11f, 0.11f, 0.11f, 0.38f);
+		zombieMaterial->normalCoordTransform = float4(4, 4, 0, 0);
 
 		LoadTextures();
 
@@ -383,16 +409,29 @@ public:
 			//const float modelScale = 0.002f;
 			const float modelScale = 1.0f;
 
+			ptr<Physics::Shape> wallShape = physicsWorld->CreateBoxShape(float3(cellHalfSize, cellHalfSize, cellHalfSize));
+
 			// пол
+#if 0
 			cubes.push_back(Cube(
 				physicsWorld->CreateRigidBody(
 					physicsWorld->CreateBoxShape(float3(float(m) * cellHalfSize, float(n) * cellHalfSize, cellHalfSize)),
 					0, CreateTranslationMatrix(float(m) * cellHalfSize, float(n) * cellHalfSize, -cellHalfSize)),
 					float3(float(m), float(n), 1) * cellHalfSize * modelScale
 				));
+#else
+			for(int i = 0; i < n; ++i)
+				for(int j = 0; j < m; ++j)
+					cubes.push_back(Cube(
+						physicsWorld->CreateRigidBody(wallShape, 0,
+							CreateTranslationMatrix(
+								float(j) * cellHalfSize * 2 + cellHalfSize,
+								float(i) * cellHalfSize * 2 + cellHalfSize,
+								-cellHalfSize
+							)), float3(cellHalfSize, cellHalfSize, cellHalfSize) * modelScale));
+#endif
 
 			// стенки
-			ptr<Physics::Shape> wallShape = physicsWorld->CreateBoxShape(float3(cellHalfSize, cellHalfSize, cellHalfSize));
 			std::string line;
 			for(int i = 0; i < n; ++i)
 			{
@@ -436,9 +475,11 @@ public:
 	{
 		ptr<Texture> a = device->CreateStaticTexture(fs->LoadFile("diffuse.jpg"));
 		ptr<Texture> b = device->CreateStaticTexture(fs->LoadFile("specular.png"));
-		texturedMaterial->diffuseTexture = a;
-		texturedMaterial->specularTexture = b;
-		greenMaterial->specularTexture = b;
+		ptr<Texture> n = device->CreateStaticTexture(fs->LoadFile("06.jpg"));
+		texturedMaterial->diffuseTexture = device->CreateStaticTexture(fs->LoadFile("06.jpg"));
+		texturedMaterial->normalTexture = n;
+		zombieMaterial->diffuseTexture = device->CreateStaticTexture(fs->LoadFile("zombie.png"));
+		//zombieMaterial->specularTexture = device->CreateStaticTexture(fs->LoadFile("zombie_s.png"));
 	}
 };
 

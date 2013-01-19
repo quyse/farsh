@@ -29,17 +29,6 @@ Painter::LightVariant::LightVariant() :
 	uAmbientColor(ugLight->AddUniform<float3>())
 {}
 
-//*** Painter::MaterialKey
-
-Painter::MaterialKey::MaterialKey(bool hasDiffuseTexture, bool hasSpecularTexture, bool hasNormalTexture)
-: hasDiffuseTexture(hasDiffuseTexture), hasSpecularTexture(hasSpecularTexture), hasNormalTexture(hasNormalTexture)
-{}
-
-Painter::MaterialKey::operator size_t() const
-{
-	return (size_t)hasDiffuseTexture | ((size_t)hasSpecularTexture << 1) | ((size_t)hasNormalTexture << 2);
-}
-
 //*** Painter::VertexShaderKey
 
 Painter::VertexShaderKey::VertexShaderKey(bool instanced, bool skinned)
@@ -59,13 +48,6 @@ basicLightsCount(basicLightsCount), shadowLightsCount(shadowLightsCount), materi
 Painter::PixelShaderKey::operator size_t() const
 {
 	return basicLightsCount | (shadowLightsCount << 3) | (((size_t)materialKey) << 6);
-}
-
-//*** Painter::Material
-
-Painter::MaterialKey Painter::Material::GetKey() const
-{
-	return MaterialKey(diffuseTexture, specularTexture, normalTexture);
 }
 
 //*** Painter::Model
@@ -110,6 +92,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	ugMaterial(NEW(UniformGroup(2))),
 	uDiffuse(ugMaterial->AddUniform<float4>()),
 	uSpecular(ugMaterial->AddUniform<float4>()),
+	uNormalCoordTransform(ugMaterial->AddUniform<float4>()),
 	uDiffuseSampler(0),
 	uSpecularSampler(1),
 	uNormalSampler(2),
@@ -691,14 +674,49 @@ Expression Painter::GetWorldPositionAndNormal(bool instanced, bool skinned)
 
 Expression Painter::BeginMaterialLighting(const PixelShaderKey& key, Value<float3> ambientColor)
 {
-	return
-		tmpWorldPosition = newfloat4(iWorldPosition, 1.0f),
-		tmpNormalizedNormal = normalize(iNormal),
+	Expression e =
+		tmpWorldPosition = newfloat4(iWorldPosition, 1.0f);
+
+	// получить нормаль
+	if(key.materialKey.hasNormalTexture)
+	{
+		Temp<float3> dxPosition, dyPosition;
+		Temp<float2> dxTexcoord, dyTexcoord;
+		Temp<float3> r0, r1, r2, T1, T2, T3;
+		Temp<float3> perturbedNormal;
+		e.Append((
+			dxPosition = ddx(iWorldPosition),
+			dyPosition = ddy(iWorldPosition),
+			dxTexcoord = ddx(iTexcoord),
+			dyTexcoord = ddy(iTexcoord),
+
+			r0 = cross(dxPosition, dyPosition),
+
+			r1 = cross(dyPosition, r0),
+			r2 = cross(r0, dxPosition),
+
+			T1 = normalize(r1 * dxTexcoord.Swizzle<float>("x") + r2 * dyTexcoord.Swizzle<float>("x")),
+			T2 = normalize(r1 * dxTexcoord.Swizzle<float>("y") + r2 * dyTexcoord.Swizzle<float>("y")),
+			T3 = normalize(iNormal),
+
+			perturbedNormal = (uNormalSampler.Sample(iTexcoord * uNormalCoordTransform.Swizzle<float2>("xy") + uNormalCoordTransform.Swizzle<float2>("zw")) * Value<float>(2) - Value<float>(1)),
+			tmpNormal = normalize(T1 * perturbedNormal.Swizzle<float>("x") + T2 * perturbedNormal.Swizzle<float>("y") + T3 * perturbedNormal.Swizzle<float>("z"))
+		));
+	}
+	else
+		e.Append((
+			tmpNormal = normalize(iNormal)
+		));
+
+	e.Append((
 		tmpToCamera = normalize(uCameraPosition - iWorldPosition),
 		tmpDiffuse = key.materialKey.hasDiffuseTexture ? uDiffuseSampler.Sample(iTexcoord) : uDiffuse,
 		tmpSpecular = key.materialKey.hasSpecularTexture ? uSpecularSampler.Sample(iTexcoord) : uSpecular,
 		tmpSpecularExponent = exp2(tmpSpecular.Swizzle<float>("w") * Value<float>(12)),
-		tmpColor = ambientColor * tmpDiffuse.Swizzle<float3>("xyz");
+		tmpColor = ambientColor * tmpDiffuse.Swizzle<float3>("xyz")
+	));
+
+	return e;
 }
 
 Expression Painter::ApplyMaterialLighting(Value<float3> lightPosition, Value<float3> lightColor)
@@ -711,12 +729,12 @@ Expression Painter::ApplyMaterialLighting(Value<float3> lightPosition, Value<flo
 		tmpLightViewBissect = normalize(tmpToLight + tmpToCamera),
 		// диффузная составляющая
 		tmpDiffusePart = tmpDiffuse.Swizzle<float3>("xyz")
-			* max(dot(tmpNormalizedNormal, tmpToLight), 0),
+			* max(dot(tmpNormal, tmpToLight), 0),
 		// specular составляющая
 		tmpSpecularPart = tmpSpecular.Swizzle<float3>("xyz")
-			* pow(max(dot(tmpLightViewBissect, tmpNormalizedNormal), 0), tmpSpecularExponent)
-			//* dot(tmpNormalizedNormal, tmpToLight) // хз, может не нужно оно?
-			* (tmpSpecularExponent + Value<float>(1)) / (pow(dot(tmpToLight, tmpLightViewBissect), 3) * Value<float>(8)),
+			* pow(max(dot(tmpLightViewBissect, tmpNormal), 0), tmpSpecularExponent)
+			//* dot(tmpNormal, tmpToLight) // хз, может не нужно оно?
+			* (tmpSpecularExponent + Value<float>(1)) / (max(pow(dot(tmpToLight, tmpLightViewBissect), 3), 0.1f) * Value<float>(8)),
 		// результирующая добавка к цвету
 		tmpColor = tmpColor + lightColor * (tmpDiffusePart + tmpSpecularPart);
 }
@@ -777,9 +795,6 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 	}
 
 	// создаём новый
-	// TEMP
-	if(key.materialKey.hasNormalTexture)
-		THROW_PRIMARY_EXCEPTION("normal map not implemented");
 
 	int basicLightsCount = key.basicLightsCount;
 	int shadowLightsCount = key.shadowLightsCount;
@@ -1117,6 +1132,7 @@ void Painter::Draw()
 		uNormalSampler.Apply(cs);
 		uDiffuse.SetValue(material->diffuse);
 		uSpecular.SetValue(material->specular);
+		uNormalCoordTransform.SetValue(material->normalCoordTransform);
 		context->SetUniformBufferData(ubMaterial, ugMaterial->GetData(), ugMaterial->GetSize());
 
 		// рисуем инстансингом обычные модели
@@ -1180,6 +1196,7 @@ void Painter::Draw()
 			uNormalSampler.Apply(cs);
 			uDiffuse.SetValue(material->diffuse);
 			uSpecular.SetValue(material->specular);
+			uNormalCoordTransform.SetValue(material->normalCoordTransform);
 			context->SetUniformBufferData(ubMaterial, ugMaterial->GetData(), ugMaterial->GetSize());
 
 			lastMaterial = material;

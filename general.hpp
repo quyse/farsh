@@ -9,6 +9,9 @@
 #include "../inanity2/inanity-physics.hpp"
 #include "../inanity2/inanity-bullet.hpp"
 #include "../inanity2/inanity-crypto.hpp"
+#include "../inanity2/inanity-lua.hpp"
+#include "../inanity2/scripting_decl.hpp"
+#include "../inanity2/scripting_impl.hpp"
 
 using namespace Inanity;
 using namespace Inanity::Graphics;
