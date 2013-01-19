@@ -75,8 +75,8 @@ Painter::Model::Model(ptr<Material> material, ptr<Geometry> geometry, const floa
 
 //*** Painter::SkinnedModel
 
-Painter::SkinnedModel::SkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimationFrame> animationFrame)
-: material(material), geometry(geometry), animationFrame(animationFrame) {}
+Painter::SkinnedModel::SkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<Geometry> shadowGeometry, ptr<BoneAnimationFrame> animationFrame)
+: material(material), geometry(geometry), shadowGeometry(shadowGeometry), animationFrame(animationFrame) {}
 
 //*** Painter::Light
 
@@ -873,7 +873,12 @@ void Painter::AddModel(ptr<Material> material, ptr<Geometry> geometry, const flo
 
 void Painter::AddSkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimationFrame> animationFrame)
 {
-	skinnedModels.push_back(SkinnedModel(material, geometry, animationFrame));
+	AddSkinnedModel(material, geometry, geometry, animationFrame);
+}
+
+void Painter::AddSkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<Geometry> shadowGeometry, ptr<BoneAnimationFrame> animationFrame)
+{
+	skinnedModels.push_back(SkinnedModel(material, geometry, shadowGeometry, animationFrame));
 }
 
 void Painter::SetAmbientColor(const float3& ambientColor)
@@ -931,7 +936,7 @@ void Painter::Draw()
 				}
 				bool operator()(const SkinnedModel& a, const SkinnedModel& b) const
 				{
-					return a.geometry < b.geometry;
+					return a.shadowGeometry < b.shadowGeometry;
 				}
 			};
 
@@ -987,11 +992,11 @@ void Painter::Draw()
 			{
 				const SkinnedModel& skinnedModel = skinnedModels[j];
 				// установить геометрию, если отличается
-				if(lastGeometry != skinnedModel.geometry)
+				if(lastGeometry != skinnedModel.shadowGeometry)
 				{
-					cs.vertexBuffer = skinnedModel.geometry->GetVertexBuffer();
-					cs.indexBuffer = skinnedModel.geometry->GetIndexBuffer();
-					lastGeometry = skinnedModel.geometry;
+					cs.vertexBuffer = skinnedModel.shadowGeometry->GetVertexBuffer();
+					cs.indexBuffer = skinnedModel.shadowGeometry->GetIndexBuffer();
+					lastGeometry = skinnedModel.shadowGeometry;
 				}
 				// установить uniform'ы костей
 				ptr<BoneAnimationFrame> animationFrame = skinnedModel.animationFrame;

@@ -355,10 +355,11 @@ private:
 	{
 		ptr<Material> material;
 		ptr<Geometry> geometry;
+		ptr<Geometry> shadowGeometry;
 		/// Настроенный кадр анимации.
 		ptr<BoneAnimationFrame> animationFrame;
 
-		SkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimationFrame> animationFrame);
+		SkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<Geometry> shadowGeometry, ptr<BoneAnimationFrame> animationFrame);
 	};
 	std::vector<SkinnedModel> skinnedModels;
 
@@ -395,6 +396,7 @@ public:
 	void AddModel(ptr<Material> material, ptr<Geometry> geometry, const float4x4& worldTransform);
 	/// Зарегистрировать skinned-модель.
 	void AddSkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimationFrame> animationFrame);
+	void AddSkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<Geometry> shadowGeometry, ptr<BoneAnimationFrame> animationFrame);
 	/// Установить рассеянный свет.
 	void SetAmbientColor(const float3& ambientColor);
 	/// Зарегистрировать простой источник света.

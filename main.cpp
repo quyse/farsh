@@ -41,6 +41,8 @@ private:
 	ptr<Skeleton> skeletonZombi;
 	ptr<BoneAnimation> baZombi;
 	ptr<BoneAnimationFrame> bafZombi;
+	ptr<Geometry> geometryAxe;
+	ptr<BoneAnimationFrame> bafAxe;
 
 	PresentMode mode;
 
@@ -206,9 +208,11 @@ public:
 		if(!theTimePaused)
 			theTime += frameTime;
 #ifdef ZZZ
+		float animationTime = modf(theTime / 11, &intPart) * 11;
 		//bafZombi->Setup(float3(10, 10, 0), quaternion(0, 0, 0, 1), modf(theTime * 0.1f, &intPart));
 		//bafZombi->Setup(float3(10, 15, 0), quaternion(0, 0, 0, 1), modf(theTime * 0.1f, &intPart) * 5);
-		bafZombi->Setup(float3(10, 15, 0), quaternion(0, 0, 0, 1), modf(theTime * 0.1f, &intPart) * 10);
+		bafZombi->Setup(float3(10, 15, 0), quaternion(0, 0, 0, 1), animationTime);
+		bafAxe->Setup(float3(10, 15, 0), quaternion(0, 0, 0, 1), animationTime);
 		//bafZombi->Setup(float3(10, 15, 0), quaternion(float3(0, 0, 1), modf(theTime * 0.1f, &intPart)), 0);
 #else
 		bafZombi->Setup(float3(10, 10, 1), quaternion(0, 0, 0, 1), modf(theTime / 4, &intPart) * 4);
@@ -222,6 +226,7 @@ public:
 		//bafZombi->Setup(float3(10, 10, 1), quaternion(0, 0, 0, 1), 0);
 		//bafZombi->orientations[2] = quaternion(float3(1, 0, 0), modf(t / 3, &intPart)) * bafZombi->orientations[2];
 		painter->AddSkinnedModel(greenMaterial, geometryZombi, bafZombi);
+		painter->AddModel(greenMaterial, geometryAxe, (float4x4)bafAxe->animationWorldOrientations[0] * CreateTranslationMatrix(bafAxe->animationWorldPositions[0]));
 
 		painter->AddShadowLight(shadowLightPosition, float3(1.0f, 1.0f, 1.0f) * 0.4f, shadowLightTransform);
 		painter->AddShadowLight(shadowLightPosition2, float3(1.0f, 1.0f, 1.0f) * 0.2f, shadowLightTransform2);
@@ -248,7 +253,7 @@ public:
 		inputManager = NEW(Input::RawManager(window->GetHWND()));
 		window->SetInputManager(inputManager);
 
-#ifdef _DEBUG
+#if defined(_DEBUG) && 0
 		mode.width = 800;
 		mode.height = 600;
 		mode.fullscreen = false;
@@ -310,6 +315,17 @@ public:
 		baZombi = BoneAnimation::Deserialize(fs->LoadFileAsStream("og.ba"), skeletonZombi);
 		bafZombi = NEW(BoneAnimationFrame(baZombi));
 #endif
+
+		{
+			geometryAxe = NEW(Geometry(
+				device->CreateVertexBuffer(fs->LoadFile("axe.geo.vertices"), layout),
+				device->CreateIndexBuffer(fs->LoadFile("axe.geo.indices"), sizeof(short))));
+			std::vector<Skeleton::Bone> bones(1);
+			bones[0].originalWorldPosition = float3(0, 0, 0);
+			bones[0].originalRelativePosition = bones[0].originalWorldPosition;
+			bones[0].parent = 0;
+			bafAxe = NEW(BoneAnimationFrame(BoneAnimation::Deserialize(fs->LoadFileAsStream("axe.ba"), NEW(Skeleton(bones)))));
+		}
 
 		texturedMaterial = NEW(Painter::Material());
 		texturedMaterial->diffuseTexture = device->CreateStaticTexture(fs->LoadFile("diffuse.jpg"));

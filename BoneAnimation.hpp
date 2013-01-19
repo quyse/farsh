@@ -39,7 +39,7 @@ public:
 /** Позволяет выставлять нужный кадр анимации и получать трансформации. */
 class BoneAnimationFrame : public Object
 {
-private:
+public:
 	ptr<BoneAnimation> animation;
 
 	/// Анимационные относительные ориентации.
