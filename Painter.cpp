@@ -453,8 +453,10 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 				luminance = dot(color, newfloat3(0.2126f, 0.7152f, 0.0722f)),
 				relativeLuminance = uToneLuminanceKey * luminance / exp(uToneAverageSampler.Sample(newfloat2(0.5f, 0.5f))),
 				intensity = relativeLuminance * (Value<float>(1) + relativeLuminance / uToneMaxLuminance) / (Value<float>(1) + relativeLuminance),
-				//fTarget = newfloat4(color, 1.0f)
-				fTarget = newfloat4(color * (intensity / luminance), 1.0f)
+				color = saturate(color * (intensity / luminance)),
+				// гамма-коррекция
+				color = pow(color, 0.45f),
+				fTarget = newfloat4(color, 1.0f)
 				);
 			psTone = GeneratePS(shader);
 		}
