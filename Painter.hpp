@@ -111,18 +111,14 @@ private:
 
 	///*** Uniform-группа материала.
 	ptr<UniformGroup> ugMaterial;
-	/// Диффузный цвет.
-	Uniform<float3> uDiffuse;
-	/// Specular.
-	Uniform<float3> uSpecular;
-	/// Specular power.
-	Uniform<float3> uSpecularPower;
+	/// Диффузный цвет с альфа-каналом.
+	Uniform<float4> uDiffuse;
+	/// Specular + glossiness.
+	Uniform<float4> uSpecular;
 	/// Семплер диффузной текстуры.
-	Sampler<float3, float2> uDiffuseSampler;
+	Sampler<float4, float2> uDiffuseSampler;
 	/// Семплер specular текстуры.
-	Sampler<float3, float2> uSpecularSampler;
-	/// Семплер specular power текстуры.
-	Sampler<float3, float2> uSpecularPowerSampler;
+	Sampler<float4, float2> uSpecularSampler;
 	/// Семплер карты нормалей.
 	Sampler<float3, float2> uNormalSampler;
 
@@ -256,10 +252,9 @@ public:
 	{
 		bool hasDiffuseTexture;
 		bool hasSpecularTexture;
-		bool hasSpecularPowerTexture;
 		bool hasNormalTexture;
 
-		MaterialKey(bool hasDiffuseTexture, bool hasSpecularTexture, bool hasSpecularPowerTexture, bool hasNormalTexture);
+		MaterialKey(bool hasDiffuseTexture, bool hasSpecularTexture, bool hasNormalTexture);
 		operator size_t() const;
 	};
 
@@ -268,16 +263,15 @@ public:
 	{
 		ptr<Texture> diffuseTexture;
 		ptr<Texture> specularTexture;
-		ptr<Texture> specularPowerTexture;
 		ptr<Texture> normalTexture;
-		float3 diffuse;
-		float3 specular;
-		float3 specularPower;
+		float4 diffuse;
+		float4 specular;
 
 		MaterialKey GetKey() const;
 	};
 
 private:
+	/// Временные переменные вершинного шейдера моделей.
 	Temp<float4> tmpVertexPosition;
 	Temp<float3> tmpVertexNormal;
 
@@ -330,6 +324,19 @@ private:
 	/// Получить пиксельный шейдер.
 	ptr<PixelShader> GetPixelShader(const PixelShaderKey& key);
 
+	//*** Временные переменные пиксельного шейдера материала.
+	Temp<float4> tmpWorldPosition;
+	Temp<float3> tmpNormalizedNormal;
+	Temp<float3> tmpToCamera;
+	Temp<float4> tmpDiffuse, tmpSpecular;
+	Temp<float> tmpSpecularExponent;
+	Temp<float3> tmpColor;
+
+	/// Получить временные переменные для освещения в пиксельном шейдере.
+	Expression BeginMaterialLighting(const PixelShaderKey& key, Value<float3> ambientColor);
+	/// Вычислить добавку к цвету и прибавить её к tmpColor.
+	Expression ApplyMaterialLighting(Value<float3> lightPosition, Value<float3> lightColor);
+
 	/// Текущее время кадра.
 	float frameTime;
 
@@ -379,6 +386,9 @@ private:
 	};
 	std::vector<Light> lights;
 
+	// Параметры постпроцессинга.
+	float bloomLimit, toneLuminanceKey, toneMaxLuminance;
+
 	/// Сгенерировать вершинный шейдер.
 	ptr<VertexShader> GenerateVS(Expression expression);
 	/// Сгенерировать пиксельный шейдер.
@@ -403,6 +413,9 @@ public:
 	void AddBasicLight(const float3& position, const float3& color);
 	/// Зарегистрировать источник света с тенью.
 	void AddShadowLight(const float3& position, const float3& color, const float4x4& transform);
+
+	/// Установить параметры постпроцессинга.
+	void SetupPostprocess(float bloomLimit, float toneLuminanceKey, float toneMaxLuminance);
 
 	/// Выполнить рисование.
 	void Draw();

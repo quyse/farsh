@@ -32,6 +32,8 @@ private:
 
 	ptr<Painter> painter;
 
+	ptr<FileSystem> fs;
+
 	ptr<Input::Manager> inputManager;
 
 	float alpha;
@@ -64,8 +66,11 @@ private:
 
 	ptr<Physics::Character> physicsCharacter;
 
+	float bloomLimit, toneLuminanceKey, toneMaxLuminance;
+
 public:
-	Game() : lastTick(0), cameraAlpha(0), cameraBeta(0)
+	Game() : lastTick(0), cameraAlpha(0), cameraBeta(0),
+		bloomLimit(0.9f), toneLuminanceKey(0.8f), toneMaxLuminance(3.1f)
 	{
 		tickCoef = 1.0f / Time::GetTicksPerSecond();
 	}
@@ -112,16 +117,46 @@ public:
 					case 32:
 						physicsCharacter.FastCast<Physics::BtCharacter>()->GetInternalController()->jump();
 						break;
-					case 90:
+#ifndef PRODUCTION
+					case 'Z':
 						{
 							ptr<Physics::RigidBody> rigidBody = physicsWorld->CreateRigidBody(cubePhysicsShape, 100, physicsCharacter->GetTransform());
 							rigidBody->ApplyImpulse(float3(cos(cameraAlpha) * cos(cameraBeta), sin(cameraAlpha) * cos(cameraBeta), sin(cameraBeta)) * 1000);
 							cubes.push_back(rigidBody);
 						}
 						break;
-					case 88://X
+					case 'X':
 						theTimePaused = !theTimePaused;
 						break;
+					case 'R':
+						LoadTextures();
+						break;
+
+					case '1':
+						bloomLimit -= 0.1f;
+						printf("bloomLimit: %f\n", bloomLimit);
+						break;
+					case '2':
+						bloomLimit += 0.1f;
+						printf("bloomLimit: %f\n", bloomLimit);
+						break;
+					case '3':
+						toneLuminanceKey -= 0.1f;
+						printf("toneLuminanceKey: %f\n", toneLuminanceKey);
+						break;
+					case '4':
+						toneLuminanceKey += 0.1f;
+						printf("toneLuminanceKey: %f\n", toneLuminanceKey);
+						break;
+					case '5':
+						toneMaxLuminance -= 0.1f;
+						printf("toneMaxLuminance: %f\n", toneMaxLuminance);
+						break;
+					case '6':
+						toneMaxLuminance += 0.1f;
+						printf("toneMaxLuminance: %f\n", toneMaxLuminance);
+						break;
+#endif
 					}
 				}
 				break;
@@ -231,6 +266,8 @@ public:
 		painter->AddShadowLight(shadowLightPosition, float3(1.0f, 1.0f, 1.0f) * 0.4f, shadowLightTransform);
 		painter->AddShadowLight(shadowLightPosition2, float3(1.0f, 1.0f, 1.0f) * 0.2f, shadowLightTransform2);
 
+		painter->SetupPostprocess(bloomLimit, toneLuminanceKey, toneMaxLuminance);
+
 		painter->Draw();
 
 		presenter->Present();
@@ -253,7 +290,7 @@ public:
 		inputManager = NEW(Input::RawManager(window->GetHWND()));
 		window->SetInputManager(inputManager);
 
-#if defined(_DEBUG) && 0
+#if defined(_DEBUG) && 1
 		mode.width = 800;
 		mode.height = 600;
 		mode.fullscreen = false;
@@ -291,7 +328,7 @@ public:
 
 		alpha = 0;
 
-		ptr<FileSystem> fs = FolderFileSystem::GetNativeFileSystem();
+		fs = FolderFileSystem::GetNativeFileSystem();
 
 		geometryCube = NEW(Geometry(
 			device->CreateVertexBuffer(fs->LoadFile("box.geo.vertices"), layout),
@@ -328,13 +365,10 @@ public:
 		}
 
 		texturedMaterial = NEW(Painter::Material());
-		texturedMaterial->diffuseTexture = device->CreateStaticTexture(fs->LoadFile("diffuse.jpg"));
-		texturedMaterial->specularTexture = device->CreateStaticTexture(fs->LoadFile("specular.jpg"));
-		texturedMaterial->specularPower = float3(4, 4, 4);
 		greenMaterial = NEW(Painter::Material());
-		greenMaterial->diffuse = float3(0, 1, 0);
-		greenMaterial->specularTexture = texturedMaterial->specularTexture;
-		greenMaterial->specularPower = float3(10, 10, 10);
+		greenMaterial->diffuse = float4(0, 1, 0, 1);
+
+		LoadTextures();
 
 		physicsWorld = NEW(Physics::BtWorld());
 
@@ -396,6 +430,15 @@ public:
 		}
 
 		window->Run(Win32Window::ActiveHandler::CreateDelegate(MakePointer(this), &Game::onTick));
+	}
+
+	void LoadTextures()
+	{
+		ptr<Texture> a = device->CreateStaticTexture(fs->LoadFile("diffuse.jpg"));
+		ptr<Texture> b = device->CreateStaticTexture(fs->LoadFile("specular.png"));
+		texturedMaterial->diffuseTexture = a;
+		texturedMaterial->specularTexture = b;
+		greenMaterial->specularTexture = b;
 	}
 };
 

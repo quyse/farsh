@@ -14,4 +14,8 @@ using namespace Inanity;
 using namespace Inanity::Graphics;
 using namespace Inanity::Graphics::Shaders;
 
+#ifndef _DEBUG
+//#define PRODUCTION
+#endif
+
 #endif
