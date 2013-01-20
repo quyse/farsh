@@ -26,7 +26,7 @@ var staticDepsLibraries = [
 	{ dir: 'bullet', lib: 'libbullet-dynamics' }
 	];
 var dynamicLibraries =
-	'user32.lib gdi32.lib dxgi.lib d3d11.lib d3dx11.lib'.split(' ');
+	'user32.lib gdi32.lib dxgi.lib d3d11.lib d3dx11.lib d3dx10.lib'.split(' ');
 
 exports.configureLinker = function(executableFile, linker) {
 	var a = /^(([^\/]+)\/)([^\/]+)$/.exec(executableFile);

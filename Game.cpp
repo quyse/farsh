@@ -7,6 +7,9 @@
 #include "../inanity2/inanity-sqlitefs.hpp"
 #include <iostream>
 
+// говно
+#include "../inanity2/graphics/d3dx.hpp"
+
 SCRIPTABLE_MAP_BEGIN(Game, Farsh.Game);
 	SCRIPTABLE_METHOD(Game, Get);
 	SCRIPTABLE_METHOD(Game, LoadTexture);
@@ -19,6 +22,11 @@ SCRIPTABLE_MAP_BEGIN(Game, Farsh.Game);
 	SCRIPTABLE_METHOD(Game, AddStaticModel);
 	SCRIPTABLE_METHOD(Game, AddRigidModel);
 	SCRIPTABLE_METHOD(Game, AddStaticLight);
+	SCRIPTABLE_METHOD(Game, SetDecalMaterial);
+	SCRIPTABLE_METHOD(Game, SetZombieParams);
+	SCRIPTABLE_METHOD(Game, SetHeroParams);
+	SCRIPTABLE_METHOD(Game, SetAxeParams);
+	SCRIPTABLE_METHOD(Game, SetCircularParams);
 SCRIPTABLE_MAP_END();
 
 Game* Game::singleGame = 0;
@@ -243,7 +251,7 @@ void Game::Tick(int)
 	37 38 39 40
 	65 87 68 83 81 69
 	*/
-	float cameraStep = 2;
+	float cameraStep = 5;
 	float3 cameraMove(0, 0, 0);
 	float3 cameraMoveDirectionFront(cos(cameraAlpha), sin(cameraAlpha), 0);
 	float3 cameraMoveDirectionUp(0, 0, 1);
@@ -297,6 +305,21 @@ void Game::Tick(int)
 			painter->AddShadowLight(light->position, light->color, light->transform);
 		else
 			painter->AddBasicLight(light->position, light->color);
+	}
+
+	// тестовая декаль
+	{
+		float4x4 transform = CreateLookAtMatrix(float3(9, 10, 1), float3(10, 10, 0), float3(0, 0, 1))
+			* CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 2, 1.0f, 0.1f, 10.0f);
+		// полный отстой, но инвертирования матрицы пока нет
+		D3DXMATRIX mxA((const float*)transform.t), mxB;
+		D3DXMatrixInverse(&mxB, NULL, &mxA);
+		float4x4 c;
+		c.t[0][0] = mxB._11; c.t[0][1] = mxB._12; c.t[0][2] = mxB._13; c.t[0][3] = mxB._14;
+		c.t[1][0] = mxB._21; c.t[1][1] = mxB._22; c.t[1][2] = mxB._23; c.t[1][3] = mxB._24;
+		c.t[2][0] = mxB._31; c.t[2][1] = mxB._32; c.t[2][2] = mxB._33; c.t[2][3] = mxB._34;
+		c.t[3][0] = mxB._41; c.t[3][1] = mxB._42; c.t[3][2] = mxB._43; c.t[3][3] = mxB._44;
+		painter->AddDecal(decalMaterial, transform, c);
 	}
 
 #if 0
@@ -368,6 +391,14 @@ ptr<Skeleton> Game::LoadSkeleton(const String& fileName)
 
 ptr<BoneAnimation> Game::LoadBoneAnimation(const String& fileName, ptr<Skeleton> skeleton)
 {
+	if(!skeleton)
+	{
+		std::vector<Skeleton::Bone> bones(1);
+		bones[0].originalWorldPosition = float3(0, 0, 0);
+		bones[0].originalRelativePosition = float3(0, 0, 0);
+		bones[0].parent = 0;
+		skeleton = NEW(Skeleton(bones));
+	}
 	return BoneAnimation::Deserialize(fileSystem->LoadFileAsStream(fileName), skeleton);
 }
 
@@ -404,6 +435,41 @@ ptr<StaticLight> Game::AddStaticLight()
 	ptr<StaticLight> light = NEW(StaticLight());
 	staticLights.push_back(light);
 	return light;
+}
+
+void Game::SetDecalMaterial(ptr<Material> decalMaterial)
+{
+	this->decalMaterial = decalMaterial;
+}
+
+void Game::SetZombieParams(ptr<Material> material, ptr<Geometry> geometry, ptr<Skeleton> skeleton, ptr<BoneAnimation> animation)
+{
+	this->zombieMaterial = material;
+	this->zombieGeometry = geometry;
+	this->zombieSkeleton = skeleton;
+	this->zombieAnimation = animation;
+}
+
+void Game::SetHeroParams(ptr<Material> material, ptr<Geometry> geometry, ptr<Skeleton> skeleton, ptr<BoneAnimation> animation)
+{
+	this->heroMaterial = material;
+	this->heroGeometry = geometry;
+	this->heroSkeleton = skeleton;
+	this->heroAnimation = animation;
+}
+
+void Game::SetAxeParams(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimation> animation)
+{
+	this->axeMaterial = material;
+	this->axeGeometry = geometry;
+	this->axeAnimation = animation;
+}
+
+void Game::SetCircularParams(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimation> animation)
+{
+	this->circularMaterial = material;
+	this->circularGeometry = geometry;
+	this->circularAnimation = animation;
 }
 
 //******* Game::StaticLight

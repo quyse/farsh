@@ -3,6 +3,12 @@ local game = Farsh.Game.Get()
 Farsh.t = {}
 local t = Farsh.t
 
+-- материал кровищи
+local matBlood = Farsh.Material()
+matBlood:SetDiffuseTexture(game:LoadTexture("blood.png"))
+matBlood:SetSpecular(0.2, 0, 0, 0)
+game:SetDecalMaterial(matBlood)
+
 -- материал кубика
 local matCube = Farsh.Material()
 t.matCube = matCube
@@ -35,11 +41,13 @@ for i = 1, 10 do
 		game:AddStaticModel(geoCube, matCube, i * 2, j * 2, -1)
 	end
 end
+--[[
 for i = 1, 10 do
 	game:AddRigidModel(geoCube, matCube, game:CreatePhysicsRigidBody(shapeCube, 100, i * 2, i * 2, 10))
 	game:AddRigidModel(geoCube, matCube, game:CreatePhysicsRigidBody(shapeCube, 100, i * 2, i * 2 + 1, 13))
 	game:AddRigidModel(geoCube, matCube, game:CreatePhysicsRigidBody(shapeCube, 100, i * 2, i * 2 - 1, 13))
 end
+--]]
 local light1 = game:AddStaticLight()
 light1:SetPosition(10, 10, 5)
 light1:SetTarget(9, 9, 1)
@@ -50,6 +58,28 @@ light2:SetTarget(11, 11, 0)
 light2:SetProjection(45, 0.1, 100)
 light2:SetShadow(true)
 
---local geoZombie = game:LoadGeometry("zombie.geo")
+-- установка параметров
 
---game:SetupZombie(geoZombie, matZombie)
+local zhDiffuse = game:LoadTexture("zombie_d.png")
+local zhSpecular = game:LoadTexture("zombie_s.png")
+
+local zombieMaterial = Farsh.Material()
+zombieMaterial:SetDiffuseTexture(zhDiffuse)
+zombieMaterial:SetSpecularTexture(zhSpecular)
+local zombieGeometry = game:LoadGeometry("zombie.geo")
+local zombieSkeleton = game:LoadSkeleton("zombie.skeleton")
+game:SetZombieParams(zombieMaterial, game:LoadGeometry("zombie.geo"), zombieSkeleton, game:LoadBoneAnimation("zombie.ba", zombieSkeleton))
+
+game:SetHeroParams(zombieMaterial, zombieGeometry, zombieSkeleton, game:LoadBoneAnimation("hero.ba", zombieSkeleton))
+
+local axeMaterial = Farsh.Material()
+axeMaterial:SetDiffuseTexture(game:LoadTexture("axe_d.png"))
+--axeMaterial:SetSpecularTexture(game:LoadTexture("axe_s.png"))
+axeMaterial:SetSpecular(0.5, 0, 0, 0)
+game:SetAxeParams(axeMaterial, game:LoadGeometry("axe.geo"), game:LoadBoneAnimation("axe.ba", nil))
+
+local circularMaterial = Farsh.Material()
+circularMaterial:SetDiffuseTexture(game:LoadTexture("circular_d.png"))
+circularMaterial:SetSpecularTexture(game:LoadTexture("circular_s.png"))
+game:SetCircularParams(circularMaterial, game:LoadGeometry("circular.geo"), game:LoadBoneAnimation("circular.ba", nil))
+

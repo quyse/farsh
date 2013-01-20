@@ -26,6 +26,12 @@ private:
 	/// Случайная текстура.
 	ptr<Texture> randomTexture;
 
+	/// Геометрия декалей.
+	ptr<Geometry> geometryDecal;
+
+	/// Состояние смешивания для декалей.
+	ptr<BlendState> bsDecal;
+
 	/// Максимальное количество источников света без теней.
 	static const int maxBasicLightsCount = 4;
 	/// Максимальное количество источников света с тенями.
@@ -34,6 +40,8 @@ private:
 	static const int maxInstancesCount = 64;
 	/// Количество костей для skinning.
 	static const int maxBonesCount = 64;
+	/// Количество декалей.
+	static const int maxDecalsCount = 64;
 
 	//*** Атрибуты.
 	Attribute<float4> aPosition;
@@ -46,6 +54,8 @@ private:
 	ptr<UniformGroup> ugCamera;
 	/// Матрица вид-проекция.
 	Uniform<float4x4> uViewProj;
+	/// Обратная матрица вид-проекция.
+	Uniform<float4x4> uInvViewProj;
 	/// Положение камеры.
 	Uniform<float3> uCameraPosition;
 
@@ -142,6 +152,17 @@ private:
 	/// Смещения костей.
 	UniformArray<float4> uBoneOffsets;
 
+	///*** Uniform-группа декалей.
+	ptr<UniformGroup> ugDecal;
+	/// Матрицы декалей.
+	UniformArray<float4x4> uDecalTransforms;
+	/// Обратные матрицы декалей.
+	UniformArray<float4x4> uDecalInvTransforms;
+	/// Семплер нормалей.
+	Sampler<float3, float2> uScreenNormalSampler;
+	/// Семплер глубины.
+	Sampler<float, float2> uScreenDepthSampler;
+
 	///*** Uniform-группа размытия тени.
 	ptr<UniformGroup> ugShadowBlur;
 	/// Вектор направления размытия.
@@ -187,6 +208,7 @@ private:
 	ptr<UniformBuffer> ubModel;
 	ptr<UniformBuffer> ubInstancedModel;
 	ptr<UniformBuffer> ubSkinnedModel;
+	ptr<UniformBuffer> ubDecal;
 	ptr<UniformBuffer> ubShadowBlur;
 	ptr<UniformBuffer> ubDownsample;
 	ptr<UniformBuffer> ubBloom;
@@ -198,9 +220,12 @@ private:
 	Interpolant<float2> iTexcoord;
 	Interpolant<float3> iWorldPosition;
 	Interpolant<float> iDepth;
+	Interpolant<float4> iScreen;
+	Interpolant<uint> iInstance;
 
 	//*** Выходные переменные.
 	Fragment<float4> fTarget;
+	Fragment<float4> fNormal;
 
 	//** Состояния конвейера.
 	/// Состояние для shadow pass.
@@ -234,6 +259,8 @@ private:
 	//** Рендербуферы.
 	/// HDR-текстура для изначального рисования.
 	ptr<RenderBuffer> rbScreen;
+	/// Экранная карта нормалей.
+	ptr<RenderBuffer> rbScreenNormal;
 	/// HDR-буферы для downsampling.
 	ptr<RenderBuffer> rbDownsamples[downsamplingPassesCount];
 	/// HDR-буферы для Bloom.
@@ -250,17 +277,6 @@ private:
 	ptr<RenderBuffer> rbShadowBlur;
 
 private:
-	/// Временные переменные вершинного шейдера моделей.
-	Temp<float4> tmpVertexPosition;
-	Temp<float3> tmpVertexNormal;
-
-	/// Повернуть вектор кватернионом.
-	static Value<float3> ApplyQuaternion(Value<float4> q, Value<float3> v);
-	/// Получить положение вершины и нормаль в мире.
-	/** Возвращает выражение, которое записывает положение и нормаль во
-	временные переменные tmpVertexPosition и tmpVertexNormal. */
-	Expression GetWorldPositionAndNormal(bool instanced, bool skinned);
-
 	/// Ключ вершинного шейдера в кэше.
 	struct VertexShaderKey
 	{
@@ -269,8 +285,11 @@ private:
 		/// Скиннинг?
 		/** Только при instanced=false. */
 		bool skinned;
+		/// Декаль?
+		/** Только при instanced = true, skinned = false. */
+		bool decal;
 
-		VertexShaderKey(bool instanced, bool skinned);
+		VertexShaderKey(bool instanced, bool skinned, bool decal);
 
 		operator size_t() const;
 	};
@@ -283,6 +302,17 @@ private:
 	/// Получить вершинный шейдер для теневого прохода.
 	ptr<VertexShader> GetVertexShadowShader(const VertexShaderKey& key);
 
+	/// Временные переменные вершинного шейдера моделей.
+	Temp<float4> tmpVertexPosition;
+	Temp<float3> tmpVertexNormal;
+
+	/// Повернуть вектор кватернионом.
+	static Value<float3> ApplyQuaternion(Value<float4> q, Value<float3> v);
+	/// Получить положение вершины и нормаль в мире.
+	/** Возвращает выражение, которое записывает положение и нормаль во
+	временные переменные tmpVertexPosition и tmpVertexNormal. */
+	Expression GetWorldPositionAndNormal(const VertexShaderKey& key);
+
 	/// Ключ пиксельного шейдера в кэше.
 	struct PixelShaderKey
 	{
@@ -290,10 +320,12 @@ private:
 		int basicLightsCount;
 		/// Количество источников света с тенями.
 		int shadowLightsCount;
+		/// Декаль?
+		bool decal;
 		/// Ключ материала.
 		MaterialKey materialKey;
 
-		PixelShaderKey(int basicLightsCount, int shadowLightsCount, const MaterialKey& materialKey);
+		PixelShaderKey(int basicLightsCount, int shadowLightsCount, bool decal, const MaterialKey& materialKey);
 
 		/// Получить хеш.
 		operator size_t() const;
@@ -305,6 +337,7 @@ private:
 
 	//*** Временные переменные пиксельного шейдера материала.
 	Temp<float4> tmpWorldPosition;
+	Temp<float2> tmpTexcoord;
 	Temp<float3> tmpNormal;
 	Temp<float3> tmpToCamera;
 	Temp<float4> tmpDiffuse, tmpSpecular;
@@ -323,6 +356,7 @@ private:
 
 	// Текущая камера для opaque pass.
 	float4x4 cameraViewProj;
+	float4x4 cameraInvViewProj;
 	float3 cameraPosition;
 
 	/// Модель для рисования.
@@ -348,6 +382,17 @@ private:
 		SkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<Geometry> shadowGeometry, ptr<BoneAnimationFrame> animationFrame);
 	};
 	std::vector<SkinnedModel> skinnedModels;
+
+	/// Декаль для рисования.
+	struct Decal
+	{
+		ptr<Material> material;
+		float4x4 transform;
+		float4x4 invTransform;
+
+		Decal(ptr<Material> material, const float4x4& transform, const float4x4& invTransform);
+	};
+	std::vector<Decal> decals;
 
 	// Источники света.
 	/// Рассеянный свет.
@@ -386,6 +431,8 @@ public:
 	/// Зарегистрировать skinned-модель.
 	void AddSkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimationFrame> animationFrame);
 	void AddSkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<Geometry> shadowGeometry, ptr<BoneAnimationFrame> animationFrame);
+	/// Добавить декаль.
+	void AddDecal(ptr<Material> material, const float4x4& transform, const float4x4& invTransform);
 	/// Установить рассеянный свет.
 	void SetAmbientColor(const float3& ambientColor);
 	/// Зарегистрировать простой источник света.

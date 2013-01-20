@@ -52,6 +52,26 @@ private:
 
 	ptr<Layout> layout, skinnedLayout;
 
+	ptr<Material> decalMaterial;
+
+	ptr<Material> zombieMaterial;
+	ptr<Geometry> zombieGeometry;
+	ptr<Skeleton> zombieSkeleton;
+	ptr<BoneAnimation> zombieAnimation;
+
+	ptr<Material> heroMaterial;
+	ptr<Geometry> heroGeometry;
+	ptr<Skeleton> heroSkeleton;
+	ptr<BoneAnimation> heroAnimation;
+
+	ptr<Material> axeMaterial;
+	ptr<Geometry> axeGeometry;
+	ptr<BoneAnimation> axeAnimation;
+
+	ptr<Material> circularMaterial;
+	ptr<Geometry> circularGeometry;
+	ptr<BoneAnimation> circularAnimation;
+
 	struct StaticModel
 	{
 		ptr<Geometry> geometry;
@@ -72,10 +92,7 @@ private:
 
 	ptr<Geometry> geometryHero;
 	ptr<Geometry> geometryZombi;
-	ptr<Material> texturedMaterial, zombieMaterial;
-	ptr<Skeleton> skeletonZombi;
-	ptr<BoneAnimation> baZombi;
-	ptr<BoneAnimationFrame> bafZombi;
+	ptr<Material> texturedMaterial;
 	ptr<Geometry> geometryAxe;
 	ptr<BoneAnimationFrame> bafAxe;
 
@@ -124,6 +141,12 @@ public:
 	void AddStaticModel(ptr<Geometry> geometry, ptr<Material> material, float x, float y, float z);
 	void AddRigidModel(ptr<Geometry> geometry, ptr<Material> material, ptr<Physics::RigidBody> physicsRigidBody);
 	ptr<StaticLight> AddStaticLight();
+	void SetDecalMaterial(ptr<Material> decalMaterial);
+
+	void SetZombieParams(ptr<Material> material, ptr<Geometry> geometry, ptr<Skeleton> skeleton, ptr<BoneAnimation> animation);
+	void SetHeroParams(ptr<Material> material, ptr<Geometry> geometry, ptr<Skeleton> skeleton, ptr<BoneAnimation> animation);
+	void SetAxeParams(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimation> animation);
+	void SetCircularParams(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimation> animation);
 
 	SCRIPTABLE_CLASS(Game);
 };

@@ -2,6 +2,9 @@
 #include "ShaderCache.hpp"
 #include "BoneAnimation.hpp"
 
+// говно FIXME HACK
+#include "../inanity2/graphics/d3dx.hpp"
+
 const int Painter::shadowMapSize = 512;
 const int Painter::randomMapSize = 64;
 const int Painter::downsamplingStepForBloom = 1;
@@ -31,23 +34,23 @@ Painter::LightVariant::LightVariant() :
 
 //*** Painter::VertexShaderKey
 
-Painter::VertexShaderKey::VertexShaderKey(bool instanced, bool skinned)
-: instanced(instanced), skinned(skinned) {}
+Painter::VertexShaderKey::VertexShaderKey(bool instanced, bool skinned, bool decal)
+: instanced(instanced), skinned(skinned), decal(decal) {}
 
 Painter::VertexShaderKey::operator size_t() const
 {
-	return (size_t)instanced | ((size_t)skinned << 1);
+	return (size_t)instanced | ((size_t)skinned << 1) | ((size_t)decal << 2);
 }
 
 //*** Painter::PixelShaderKey
 
-Painter::PixelShaderKey::PixelShaderKey(int basicLightsCount, int shadowLightsCount, const MaterialKey& materialKey) :
-basicLightsCount(basicLightsCount), shadowLightsCount(shadowLightsCount), materialKey(materialKey)
+Painter::PixelShaderKey::PixelShaderKey(int basicLightsCount, int shadowLightsCount, bool decal, const MaterialKey& materialKey) :
+basicLightsCount(basicLightsCount), shadowLightsCount(shadowLightsCount), decal(decal), materialKey(materialKey)
 {}
 
 Painter::PixelShaderKey::operator size_t() const
 {
-	return basicLightsCount | (shadowLightsCount << 3) | (((size_t)materialKey) << 6);
+	return basicLightsCount | (shadowLightsCount << 3) | ((size_t)decal << 6) | (((size_t)materialKey) << 7);
 }
 
 //*** Painter::Model
@@ -59,6 +62,11 @@ Painter::Model::Model(ptr<Material> material, ptr<Geometry> geometry, const floa
 
 Painter::SkinnedModel::SkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<Geometry> shadowGeometry, ptr<BoneAnimationFrame> animationFrame)
 : material(material), geometry(geometry), shadowGeometry(shadowGeometry), animationFrame(animationFrame) {}
+
+//*** Painter::Decal
+
+Painter::Decal::Decal(ptr<Material> material, const float4x4& transform, const float4x4& invTransform)
+: material(material), transform(transform), invTransform(invTransform) {}
 
 //*** Painter::Light
 
@@ -87,6 +95,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 
 	ugCamera(NEW(UniformGroup(0))),
 	uViewProj(ugCamera->AddUniform<float4x4>()),
+	uInvViewProj(ugCamera->AddUniform<float4x4>()),
 	uCameraPosition(ugCamera->AddUniform<float3>()),
 
 	ugMaterial(NEW(UniformGroup(2))),
@@ -106,6 +115,12 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	ugSkinnedModel(NEW(UniformGroup(3))),
 	uBoneOrientations(ugSkinnedModel->AddUniformArray<float4>(maxBonesCount)),
 	uBoneOffsets(ugSkinnedModel->AddUniformArray<float4>(maxBonesCount)),
+
+	ugDecal(NEW(UniformGroup(3))),
+	uDecalTransforms(ugDecal->AddUniformArray<float4x4>(maxDecalsCount)),
+	uDecalInvTransforms(ugDecal->AddUniformArray<float4x4>(maxDecalsCount)),
+	uScreenNormalSampler(3),
+	uScreenDepthSampler(4),
 
 	ugShadowBlur(NEW(UniformGroup(0))),
 	uShadowBlurDirection(ugShadowBlur->AddUniform<float2>()),
@@ -133,6 +148,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	ubModel(device->CreateUniformBuffer(ugModel->GetSize())),
 	ubInstancedModel(device->CreateUniformBuffer(ugInstancedModel->GetSize())),
 	ubSkinnedModel(device->CreateUniformBuffer(ugSkinnedModel->GetSize())),
+	ubDecal(device->CreateUniformBuffer(ugDecal->GetSize())),
 	ubShadowBlur(device->CreateUniformBuffer(ugShadowBlur->GetSize())),
 	ubDownsample(device->CreateUniformBuffer(ugDownsample->GetSize())),
 	ubBloom(device->CreateUniformBuffer(ugBloom->GetSize())),
@@ -143,8 +159,11 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	iTexcoord(Semantics::CustomTexcoord0),
 	iWorldPosition(Semantic(Semantics::CustomTexcoord0 + 1)),
 	iDepth(Semantics::CustomTexcoord0),
+	iScreen(Semantic(Semantics::CustomTexcoord0 + 2)),
+	iInstance(Semantic(Semantics::CustomTexcoord0 + 3)),
 
-	fTarget(Semantics::TargetColor0)
+	fTarget(Semantics::TargetColor0),
+	fNormal(Semantic(Semantics::TargetColor0 + 1))
 
 {
 	// финализировать uniform группы
@@ -153,6 +172,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	ugModel->Finalize();
 	ugInstancedModel->Finalize();
 	ugSkinnedModel->Finalize();
+	ugDecal->Finalize();
 	ugShadowBlur->Finalize();
 	ugDownsample->Finalize();
 	ugBloom->Finalize();
@@ -165,7 +185,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 
 	//** создать ресурсы
 	rbBack = presenter->GetBackBuffer();
-	dsbDepth = device->CreateDepthStencilBuffer(screenWidth, screenHeight);
+	dsbDepth = device->CreateDepthStencilBuffer(screenWidth, screenHeight, true);
 	dsbShadow = device->CreateDepthStencilBuffer(shadowMapSize, shadowMapSize);
 	for(int i = 0; i < maxShadowLightsCount; ++i)
 		rbShadows[i] = device->CreateRenderBuffer(shadowMapSize, shadowMapSize, PixelFormats::floatR16);
@@ -173,6 +193,8 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 
 	// экранный буфер
 	rbScreen = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatR11G11B10);
+	// экранный буфер нормалей
+	rbScreenNormal = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatR11G11B10);
 	// буферы для downsample
 	for(int i = 0; i < downsamplingPassesCount; ++i)
 		rbDownsamples[i] = device->CreateRenderBuffer(1 << (downsamplingPassesCount - 1 - i), 1 << (downsamplingPassesCount - 1 - i),
@@ -188,6 +210,11 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		float borderColor[] = { 0, 0, 0, 0 };
 		shadowSamplerState->SetBorderColor(borderColor);
 	}
+
+	uScreenNormalSampler.SetTexture(rbScreenNormal->GetTexture());
+	uScreenNormalSampler.SetSamplerState(shadowSamplerState);
+	uScreenDepthSampler.SetTexture(dsbDepth->GetTexture());
+	uScreenDepthSampler.SetSamplerState(shadowSamplerState);
 
 	// создать случайную текстуру
 	if(0)
@@ -218,6 +245,50 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		ss->SetWrap(SamplerState::wrapRepeat, SamplerState::wrapRepeat, SamplerState::wrapRepeat);
 		//uRandomSampler.SetSamplerState(ss);
 	}
+
+	// создать геометрию декалей
+	{
+		struct Vertex
+		{
+			float4 position;
+			float3 normal;
+			float2 texcoord;
+		};
+		Vertex vertices[] =
+		{
+			{ float4(0, 0, 0, 1), float3(0, 0, 1), float2(0, 0) },
+			{ float4(1, 0, 0, 1), float3(0, 0, 1), float2(1, 0) },
+			{ float4(1, 1, 0, 1), float3(0, 0, 1), float2(1, 1) },
+			{ float4(0, 1, 0, 1), float3(0, 0, 1), float2(0, 1) },
+			{ float4(0, 0, 1, 1), float3(0, 0, 1), float2(0, 0) },
+			{ float4(1, 0, 1, 1), float3(0, 0, 1), float2(1, 0) },
+			{ float4(1, 1, 1, 1), float3(0, 0, 1), float2(1, 1) },
+			{ float4(0, 1, 1, 1), float3(0, 0, 1), float2(0, 1) }
+		};
+		unsigned short indices[] =
+		{
+			0, 2, 1, 0, 3, 2,
+			0, 1, 5, 0, 5, 4,
+			1, 2, 6, 1, 6, 5,
+			2, 3, 7, 2, 7, 6,
+			3, 0, 4, 3, 4, 7
+		};
+
+		std::vector<Layout::Element> layoutElements;
+		layoutElements.push_back(Layout::Element(DataTypes::Float4, 0, 0));
+		layoutElements.push_back(Layout::Element(DataTypes::Float3, 16, 1));
+		layoutElements.push_back(Layout::Element(DataTypes::Float2, 28, 2));
+		ptr<Layout> layout = NEW(Layout(layoutElements, sizeof(Vertex)));
+
+		geometryDecal = NEW(Geometry(
+			device->CreateVertexBuffer(MemoryFile::CreateViaCopy(vertices, sizeof(vertices)), layout),
+			device->CreateIndexBuffer(MemoryFile::CreateViaCopy(indices, sizeof(indices)), sizeof(unsigned short))
+		));
+	}
+
+	// состояние смешивания для декалей
+	bsDecal = device->CreateBlendState();
+	bsDecal->SetColor(BlendState::colorSourceSrcAlpha, BlendState::colorSourceInvSrcAlpha, BlendState::operationAdd);
 
 	// геометрия полноэкранного прохода
 	ptr<VertexBuffer> quadVertexBuffer;
@@ -582,8 +653,8 @@ Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)
 	for(int i = 0; i < basicLightsCount; ++i)
 		lightVariant.basicLights.push_back(BasicLight(lightVariant.ugLight));
 	for(int i = 0; i < shadowLightsCount; ++i)
-		// первые 4 семплера - для материала
-		lightVariant.shadowLights.push_back(ShadowLight(lightVariant.ugLight, i + 4));
+		// первые 5 семплеров пропустить
+		lightVariant.shadowLights.push_back(ShadowLight(lightVariant.ugLight, i + 5));
 
 	lightVariant.ugLight->Finalize();
 
@@ -595,6 +666,7 @@ Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)
 	cs.viewportWidth = screenWidth;
 	cs.viewportHeight = screenHeight;
 	cs.renderBuffers[0] = rbScreen;
+	cs.renderBuffers[1] = rbScreenNormal;
 	cs.depthStencilBuffer = dsbDepth;
 	cs.uniformBuffers[ugCamera->GetSlot()] = ubCamera;
 	cs.uniformBuffers[lightVariant.ugLight->GetSlot()] = lightVariant.ubLight;
@@ -621,9 +693,9 @@ Value<float3> Painter::ApplyQuaternion(Value<float4> q, Value<float3> v)
 	return v + cross(q.Swizzle<float3>("xyz"), cross(q.Swizzle<float3>("xyz"), v) + v * q.Swizzle<float>("w")) * Value<float>(2);
 }
 
-Expression Painter::GetWorldPositionAndNormal(bool instanced, bool skinned)
+Expression Painter::GetWorldPositionAndNormal(const VertexShaderKey& key)
 {
-	if(skinned)
+	if(key.skinned)
 	{
 		Value<float3> position = aPosition.Swizzle<float3>("xyz");
 		Value<uint> boneNumbers[] =
@@ -662,12 +734,37 @@ Expression Painter::GetWorldPositionAndNormal(bool instanced, bool skinned)
 	else
 	{
 		Temp<float4x4> tmpWorld;
+		Temp<float4> tmpPosition;
+		Temp<uint> tmpInstance;
+		Expression e((
+			key.instanced ?
+			(
+				tmpInstance = Value<uint>(NEW(SpecialNode(DataTypes::UInt, Semantics::Instance))),
+				iInstance = tmpInstance,
+				(
+					key.decal ?
+					(
+						tmpWorld = uDecalInvTransforms[tmpInstance],
+						tmpPosition = mul(aPosition, tmpWorld),
+						tmpPosition = tmpPosition / tmpPosition.Swizzle<float>("w")
+					)
+					:
+					(
+						tmpWorld = uWorlds[tmpInstance],
+						tmpPosition = mul(aPosition, tmpWorld)
+					)
+				)
+			)
+			:
+			(
+				tmpWorld = uWorld,
+				tmpPosition = mul(aPosition, tmpWorld)
+			)
+		));
+
 		return
-			tmpWorld = (instanced ?
-				uWorlds[Value<unsigned int>(NEW(SpecialNode(DataTypes::UInt, Semantics::Instance)))]
-				:
-				uWorld),
-			tmpVertexPosition = mul(aPosition, tmpWorld),
+			e,
+			tmpVertexPosition = Value<float4>(tmpPosition),
 			tmpVertexNormal = mul(aNormal, tmpWorld.Cast<float3x3>());
 	}
 }
@@ -677,41 +774,77 @@ Expression Painter::BeginMaterialLighting(const PixelShaderKey& key, Value<float
 	Expression e =
 		tmpWorldPosition = newfloat4(iWorldPosition, 1.0f);
 
-	// получить нормаль
-	if(key.materialKey.hasNormalTexture)
+	// получить текстурные координаты
+	if(key.decal)
 	{
-		Temp<float3> dxPosition, dyPosition;
-		Temp<float2> dxTexcoord, dyTexcoord;
-		Temp<float3> r0, r1, r2, T1, T2, T3;
-		Temp<float3> perturbedNormal;
+		Temp<float4> tmpScreen, tmpProjectedPosition;
+		Temp<float2> tmpScreenCoords;
+		Temp<float> tmpScreenDepth;
 		e.Append((
-			dxPosition = ddx(iWorldPosition),
-			dyPosition = ddy(iWorldPosition),
-			dxTexcoord = ddx(iTexcoord),
-			dyTexcoord = ddy(iTexcoord),
+			// получить спроецированную позицию
+			tmpScreen = iScreen / iScreen.Swizzle<float>("w"),
+			tmpScreenCoords = newfloat2(
+				tmpScreen.Swizzle<float>("x") + Value<float>(1),
+				- tmpScreen.Swizzle<float>("y") + Value<float>(1)) * Value<float>(0.5f),
+			tmpScreenDepth = uScreenDepthSampler.Sample(tmpScreenCoords),
+			tmpProjectedPosition = mul(newfloat4(tmpScreen.Swizzle<float2>("xy"), tmpScreenDepth, 1), uInvViewProj),
+			tmpProjectedPosition = tmpProjectedPosition / tmpProjectedPosition.Swizzle<float>("w"),
+			// преобразовать эту позицию в пространство декали
+			tmpProjectedPosition = mul(tmpProjectedPosition, uDecalTransforms[iInstance]),
+			tmpProjectedPosition = tmpProjectedPosition / tmpProjectedPosition.Swizzle<float>("w"),
+			//clip(tmpProjectedPosition.Swizzle<float>("z")),
+			//clip(Value<float>(1) - tmpProjectedPosition.Swizzle<float>("z")),
+			// получить текстурные координаты
+			tmpTexcoord = newfloat2(
+				tmpProjectedPosition.Swizzle<float>("x") + Value<float>(1),
+				-tmpProjectedPosition.Swizzle<float>("y") + Value<float>(1)) * Value<float>(0.5f),
 
-			r0 = cross(dxPosition, dyPosition),
-
-			r1 = cross(dyPosition, r0),
-			r2 = cross(r0, dxPosition),
-
-			T1 = normalize(r1 * dxTexcoord.Swizzle<float>("x") + r2 * dyTexcoord.Swizzle<float>("x")),
-			T2 = normalize(r1 * dxTexcoord.Swizzle<float>("y") + r2 * dyTexcoord.Swizzle<float>("y")),
-			T3 = normalize(iNormal),
-
-			perturbedNormal = (uNormalSampler.Sample(iTexcoord * uNormalCoordTransform.Swizzle<float2>("xy") + uNormalCoordTransform.Swizzle<float2>("zw")) * Value<float>(2) - Value<float>(1)),
-			tmpNormal = normalize(T1 * perturbedNormal.Swizzle<float>("x") + T2 * perturbedNormal.Swizzle<float>("y") + T3 * perturbedNormal.Swizzle<float>("z"))
+			// получить нормаль из буфера нормалей
+			tmpNormal = normalize((uScreenNormalSampler.Sample(tmpScreenCoords) * Value<float>(2)) - Value<float>(1))
 		));
 	}
 	else
+	{
 		e.Append((
-			tmpNormal = normalize(iNormal)
+			tmpTexcoord = iTexcoord
 		));
+
+		// получить нормаль
+		if(key.materialKey.hasNormalTexture)
+		{
+			Temp<float3> dxPosition, dyPosition;
+			Temp<float2> dxTexcoord, dyTexcoord;
+			Temp<float3> r0, r1, r2, T1, T2, T3;
+			Temp<float3> perturbedNormal;
+			e.Append((
+				dxPosition = ddx(iWorldPosition),
+				dyPosition = ddy(iWorldPosition),
+				dxTexcoord = ddx(tmpTexcoord),
+				dyTexcoord = ddy(tmpTexcoord),
+
+				r0 = cross(dxPosition, dyPosition),
+
+				r1 = cross(dyPosition, r0),
+				r2 = cross(r0, dxPosition),
+
+				T1 = normalize(r1 * dxTexcoord.Swizzle<float>("x") + r2 * dyTexcoord.Swizzle<float>("x")),
+				T2 = normalize(r1 * dxTexcoord.Swizzle<float>("y") + r2 * dyTexcoord.Swizzle<float>("y")),
+				T3 = normalize(iNormal),
+
+				perturbedNormal = (uNormalSampler.Sample(tmpTexcoord * uNormalCoordTransform.Swizzle<float2>("xy") + uNormalCoordTransform.Swizzle<float2>("zw")) * Value<float>(2) - Value<float>(1)),
+				tmpNormal = normalize(T1 * perturbedNormal.Swizzle<float>("x") + T2 * perturbedNormal.Swizzle<float>("y") + T3 * perturbedNormal.Swizzle<float>("z"))
+			));
+		}
+		else
+			e.Append((
+				tmpNormal = normalize(iNormal)
+			));
+	}
 
 	e.Append((
 		tmpToCamera = normalize(uCameraPosition - iWorldPosition),
-		tmpDiffuse = key.materialKey.hasDiffuseTexture ? pow(uDiffuseSampler.Sample(iTexcoord), 2.2f) : uDiffuse,
-		tmpSpecular = key.materialKey.hasSpecularTexture ? uSpecularSampler.Sample(iTexcoord) : uSpecular,
+		tmpDiffuse = key.materialKey.hasDiffuseTexture ? uDiffuseSampler.Sample(tmpTexcoord) : uDiffuse,
+		tmpSpecular = key.materialKey.hasSpecularTexture ? uSpecularSampler.Sample(tmpTexcoord) : uSpecular,
 		tmpSpecularExponent = exp2(tmpSpecular.Swizzle<float>("x") * Value<float>(4/*12*/)),
 		tmpColor = ambientColor * tmpDiffuse.Swizzle<float3>("xyz")
 	));
@@ -750,13 +883,24 @@ ptr<VertexShader> Painter::GetVertexShader(const VertexShaderKey& key)
 
 	// делаем новый
 
-	ptr<VertexShader> vertexShader = GenerateVS(Expression((
-		GetWorldPositionAndNormal(key.instanced, key.skinned),
-		iPosition = mul(tmpVertexPosition, uViewProj),
+	Temp<float4> p;
+
+	Expression e((
+		GetWorldPositionAndNormal(key),
+		p = mul(tmpVertexPosition, uViewProj),
+		iPosition = p,
 		iNormal = tmpVertexNormal,
 		iTexcoord = aTexcoord,
 		iWorldPosition = tmpVertexPosition.Swizzle<float3>("xyz")
-		)));
+	));
+
+	// если декали, то ещё одна штука
+	if(key.decal)
+		e.Append((
+			iScreen = p
+		));
+
+	ptr<VertexShader> vertexShader = GenerateVS(e);
 
 	// добавить и вернуть
 	vertexShaderCache.insert(std::make_pair(key, vertexShader));
@@ -775,7 +919,7 @@ ptr<VertexShader> Painter::GetVertexShadowShader(const VertexShaderKey& key)
 	// делаем новый
 
 	ptr<VertexShader> vertexShader = GenerateVS(Expression((
-		GetWorldPositionAndNormal(key.instanced, key.skinned),
+		GetWorldPositionAndNormal(key),
 		iPosition = mul(tmpVertexPosition, uViewProj),
 		iDepth = iPosition.Swizzle<float>("z")
 		)));
@@ -849,6 +993,11 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 	// вернуть цвет
 	shader.Append((
 		fTarget = newfloat4(tmpColor, tmpDiffuse.Swizzle<float>("w"))
+	));
+	// если не декали, вернуть нормаль
+	if(!key.decal)
+		shader.Append((
+			fNormal = newfloat4((tmpNormal + Value<float>(1)) * Value<float>(0.5f), 1)
 		));
 
 	ptr<PixelShader> pixelShader = GeneratePS(shader);
@@ -864,12 +1013,21 @@ void Painter::BeginFrame(float frameTime)
 
 	models.clear();
 	skinnedModels.clear();
+	decals.clear();
 	lights.clear();
 }
 
 void Painter::SetCamera(const float4x4& cameraViewProj, const float3& cameraPosition)
 {
 	this->cameraViewProj = cameraViewProj;
+	// полный отстой, но инвертирования матрицы пока нет
+	D3DXMATRIX mxA((const float*)cameraViewProj.t), mxB;
+	D3DXMatrixInverse(&mxB, NULL, &mxA);
+	matrix<4, 4>& c = this->cameraInvViewProj;
+	c.t[0][0] = mxB._11; c.t[0][1] = mxB._12; c.t[0][2] = mxB._13; c.t[0][3] = mxB._14;
+	c.t[1][0] = mxB._21; c.t[1][1] = mxB._22; c.t[1][2] = mxB._23; c.t[1][3] = mxB._24;
+	c.t[2][0] = mxB._31; c.t[2][1] = mxB._32; c.t[2][2] = mxB._33; c.t[2][3] = mxB._34;
+	c.t[3][0] = mxB._41; c.t[3][1] = mxB._42; c.t[3][2] = mxB._43; c.t[3][3] = mxB._44;
 	this->cameraPosition = cameraPosition;
 }
 
@@ -886,6 +1044,11 @@ void Painter::AddSkinnedModel(ptr<Material> material, ptr<Geometry> geometry, pt
 void Painter::AddSkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<Geometry> shadowGeometry, ptr<BoneAnimationFrame> animationFrame)
 {
 	skinnedModels.push_back(SkinnedModel(material, geometry, shadowGeometry, animationFrame));
+}
+
+void Painter::AddDecal(ptr<Material> material, const float4x4& transform, const float4x4& invTransform)
+{
+	decals.push_back(Decal(material, transform, invTransform));
 }
 
 void Painter::SetAmbientColor(const float3& ambientColor)
@@ -960,7 +1123,7 @@ void Painter::Draw()
 			std::sort(models.begin(), models.end(), GeometrySorter());
 
 			// установить вершинный шейдер
-			cs.vertexShader = GetVertexShadowShader(VertexShaderKey(true, false));
+			cs.vertexShader = GetVertexShadowShader(VertexShaderKey(true, false, false));
 			// установить константный буфер
 			cs.uniformBuffers[ugInstancedModel->GetSlot()] = ubInstancedModel;
 
@@ -996,7 +1159,7 @@ void Painter::Draw()
 			std::sort(skinnedModels.begin(), skinnedModels.end(), GeometrySorter());
 
 			// установить вершинный шейдер
-			cs.vertexShader = GetVertexShadowShader(VertexShaderKey(false, true));
+			cs.vertexShader = GetVertexShadowShader(VertexShaderKey(false, true, false));
 			// установить константный буфер
 			cs.uniformBuffers[ugSkinnedModel->GetSlot()] = ubSkinnedModel;
 
@@ -1057,14 +1220,17 @@ void Painter::Draw()
 		}
 
 	// очистить рендербуферы
-	float color[4] = { 1, 0, 0, 0 };
+	float color[4] = { 0, 0, 0, 0 };
+	float colorDepth[4] = { 1, 1, 1, 1 };
 	context->ClearRenderBuffer(rbScreen, color);
+	context->ClearRenderBuffer(rbScreenNormal, color);
 	context->ClearDepthStencilBuffer(dsbDepth, 1.0f);
 
 	ContextState& cs = context->GetTargetState();
 
 	// установить uniform'ы камеры
 	uViewProj.SetValue(cameraViewProj);
+	uInvViewProj.SetValue(cameraInvViewProj);
 	uCameraPosition.SetValue(cameraPosition);
 	context->SetUniformBufferData(ubCamera, ugCamera->GetData(), ugCamera->GetSize());
 
@@ -1101,6 +1267,11 @@ void Painter::Draw()
 		{
 			return a.material < b.material || a.material == b.material && a.geometry < b.geometry;
 		}
+		// для декалей - только по материалу
+		bool operator()(const Decal& a, const Decal& b) const
+		{
+			return a.material < b.material;
+		}
 	};
 
 	//** нарисовать простые модели
@@ -1108,7 +1279,7 @@ void Painter::Draw()
 	std::sort(models.begin(), models.end(), Sorter());
 
 	// установить вершинный шейдер
-	cs.vertexShader = GetVertexShader(VertexShaderKey(true, false));
+	cs.vertexShader = GetVertexShader(VertexShaderKey(true, false, false));
 	// установить константный буфер
 	cs.uniformBuffers[ugInstancedModel->GetSlot()] = ubInstancedModel;
 
@@ -1137,7 +1308,7 @@ void Painter::Draw()
 
 		// рисуем инстансингом обычные модели
 		// установить пиксельный шейдер
-		cs.pixelShader = GetPixelShader(PixelShaderKey(basicLightsCount, shadowLightsCount, material->GetKey()));
+		cs.pixelShader = GetPixelShader(PixelShaderKey(basicLightsCount, shadowLightsCount, false, material->GetKey()));
 		// цикл по батчам по геометрии
 		for(int j = 0; j < materialBatchCount; )
 		{
@@ -1173,7 +1344,7 @@ void Painter::Draw()
 	std::sort(skinnedModels.begin(), skinnedModels.end(), Sorter());
 
 	// установить вершинный шейдер
-	cs.vertexShader = GetVertexShader(VertexShaderKey(false, true));
+	cs.vertexShader = GetVertexShader(VertexShaderKey(false, true, false));
 	// установить константный буфер
 	cs.uniformBuffers[ugSkinnedModel->GetSlot()] = ubSkinnedModel;
 
@@ -1203,7 +1374,7 @@ void Painter::Draw()
 		}
 
 		// установить пиксельный шейдер
-		cs.pixelShader = GetPixelShader(PixelShaderKey(basicLightsCount, shadowLightsCount, material->GetKey()));
+		cs.pixelShader = GetPixelShader(PixelShaderKey(basicLightsCount, shadowLightsCount, false, material->GetKey()));
 
 		// установить геометрию, если изменилась
 		ptr<Geometry> geometry = skinnedModel.geometry;
@@ -1232,6 +1403,68 @@ void Painter::Draw()
 
 		// нарисовать
 		context->Draw();
+	}
+
+	//** нарисовать декали
+
+	std::stable_sort(decals.begin(), decals.end(), Sorter());
+
+	// установить вершинный шейдер
+	cs.vertexShader = GetVertexShader(VertexShaderKey(true, false, true));
+	// установить константный буфер
+	cs.uniformBuffers[ugDecal->GetSlot()] = ubDecal;
+	// установить геометрию
+	cs.vertexBuffer = geometryDecal->GetVertexBuffer();
+	cs.indexBuffer = geometryDecal->GetIndexBuffer();
+	// состояние смешивания
+	cs.blendState = bsDecal;
+	// убрать карту нормалей и буфер глубины
+	cs.renderBuffers[1] = 0;
+	cs.depthStencilBuffer = 0;
+	// семплеры
+	uScreenNormalSampler.Apply(cs);
+	uScreenDepthSampler.Apply(cs);
+
+	// нарисовать
+	for(size_t i = 0; i < decals.size(); )
+	{
+		// выяснить размер батча по материалу
+		ptr<Material> material = decals[i].material;
+		int materialBatchCount;
+		for(materialBatchCount = 1;
+			materialBatchCount < maxDecalsCount &&
+			i + materialBatchCount < decals.size() &&
+			material == decals[i + materialBatchCount].material;
+			++materialBatchCount);
+
+		// установить параметры материала
+		uDiffuseSampler.SetTexture(material->diffuseTexture);
+		uDiffuseSampler.Apply(cs);
+		uSpecularSampler.SetTexture(material->specularTexture);
+		uSpecularSampler.Apply(cs);
+		uNormalSampler.SetTexture(material->normalTexture);
+		uNormalSampler.Apply(cs);
+		uDiffuse.SetValue(material->diffuse);
+		uSpecular.SetValue(material->specular);
+		uNormalCoordTransform.SetValue(material->normalCoordTransform);
+		context->SetUniformBufferData(ubMaterial, ugMaterial->GetData(), ugMaterial->GetSize());
+
+		// рисуем инстансингом декали
+		// установить пиксельный шейдер
+		cs.pixelShader = GetPixelShader(PixelShaderKey(basicLightsCount, shadowLightsCount, true, material->GetKey()));
+
+		// установить uniform'ы
+		for(int j = 0; j < materialBatchCount; ++j)
+		{
+			uDecalTransforms.SetValue(j, decals[i + j].transform);
+			uDecalInvTransforms.SetValue(j, decals[i + j].invTransform);
+		}
+		context->SetUniformBufferData(ubDecal, ugDecal->GetData(), ugDecal->GetSize());
+
+		// нарисовать
+		context->DrawInstanced(materialBatchCount);
+
+		i += materialBatchCount;
 	}
 
 	// всё, теперь постпроцессинг
