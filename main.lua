@@ -48,10 +48,12 @@ for i = 1, 10 do
 	game:AddRigidModel(geoCube, matCube, game:CreatePhysicsRigidBody(shapeCube, 100, i * 2, i * 2 - 1, 13))
 end
 --]]
+--[[
 local light1 = game:AddStaticLight()
 light1:SetPosition(10, 10, 5)
 light1:SetTarget(9, 9, 1)
 light1:SetShadow(true)
+--]]
 local light2 = game:AddStaticLight()
 light2:SetPosition(30, -10, 20)
 light2:SetTarget(11, 11, 0)
@@ -66,9 +68,9 @@ local zhSpecular = game:LoadTexture("zombie_s.png")
 local zombieMaterial = Farsh.Material()
 zombieMaterial:SetDiffuseTexture(zhDiffuse)
 zombieMaterial:SetSpecularTexture(zhSpecular)
-local zombieGeometry = game:LoadGeometry("zombie.geo")
+local zombieGeometry = game:LoadSkinnedGeometry("zombie.geo")
 local zombieSkeleton = game:LoadSkeleton("zombie.skeleton")
-game:SetZombieParams(zombieMaterial, game:LoadGeometry("zombie.geo"), zombieSkeleton, game:LoadBoneAnimation("zombie.ba", zombieSkeleton))
+game:SetZombieParams(zombieMaterial, zombieGeometry, zombieSkeleton, game:LoadBoneAnimation("zombie.ba", zombieSkeleton))
 
 game:SetHeroParams(zombieMaterial, zombieGeometry, zombieSkeleton, game:LoadBoneAnimation("hero.ba", zombieSkeleton))
 
@@ -83,3 +85,4 @@ circularMaterial:SetDiffuseTexture(game:LoadTexture("circular_d.png"))
 circularMaterial:SetSpecularTexture(game:LoadTexture("circular_s.png"))
 game:SetCircularParams(circularMaterial, game:LoadGeometry("circular.geo"), game:LoadBoneAnimation("circular.ba", nil))
 
+game:PlaceHero(10, 10, 10)

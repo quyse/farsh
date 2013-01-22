@@ -21,7 +21,7 @@ public:
 		int parent;
 	};
 
-private:
+public:
 	/// Кости.
 	std::vector<Bone> bones;
 	/// Порядок топологической сортировки для костей.

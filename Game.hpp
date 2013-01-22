@@ -58,11 +58,27 @@ private:
 	ptr<Geometry> zombieGeometry;
 	ptr<Skeleton> zombieSkeleton;
 	ptr<BoneAnimation> zombieAnimation;
+	struct Zombie
+	{
+		ptr<Physics::Character> character;
+		ptr<BoneAnimationFrame> animationFrame;
+	};
+	std::vector<Zombie> zombies;
 
 	ptr<Material> heroMaterial;
 	ptr<Geometry> heroGeometry;
 	ptr<Skeleton> heroSkeleton;
 	ptr<BoneAnimation> heroAnimation;
+	// экземпляр героя
+	ptr<Physics::Character> heroCharacter;
+	ptr<BoneAnimationFrame> heroAnimationFrame;
+	ptr<BoneAnimationFrame> circularAnimationFrame;
+	float heroAnimationTime;
+	// тестовый экземпляр зомби
+	ptr<BoneAnimationFrame> zombieAnimationFrame;
+	ptr<BoneAnimationFrame> axeAnimationFrame;
+
+	static const float hzAFRun1, hzAFRun2, hzAFBattle1, hzAFBattle2;
 
 	ptr<Material> axeMaterial;
 	ptr<Geometry> axeGeometry;
@@ -89,12 +105,6 @@ private:
 	std::vector<RigidModel> rigidModels;
 
 	std::vector<ptr<StaticLight> > staticLights;
-
-	ptr<Geometry> geometryHero;
-	ptr<Geometry> geometryZombi;
-	ptr<Material> texturedMaterial;
-	ptr<Geometry> geometryAxe;
-	ptr<BoneAnimationFrame> bafAxe;
 
 	PresentMode mode;
 
@@ -147,6 +157,8 @@ public:
 	void SetHeroParams(ptr<Material> material, ptr<Geometry> geometry, ptr<Skeleton> skeleton, ptr<BoneAnimation> animation);
 	void SetAxeParams(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimation> animation);
 	void SetCircularParams(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimation> animation);
+
+	void PlaceHero(float x, float y, float z);
 
 	SCRIPTABLE_CLASS(Game);
 };

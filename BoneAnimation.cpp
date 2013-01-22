@@ -184,7 +184,10 @@ void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& ori
 	// вычислить анимационные мировые ориентации и позиции
 	const std::vector<Skeleton::Bone>& bones = animation->skeleton->GetBones();
 	const std::vector<int>& sortedBones = animation->skeleton->GetSortedBones();
-	std::vector<bool> f(bonesCount);
+#ifdef _DEBUG
+	static std::vector<bool> f(bonesCount);
+	f.assign(bonesCount, false);
+#endif
 	for(int i = 0; i < bonesCount; ++i)
 	{
 		int boneNumber = sortedBones[i];
@@ -192,8 +195,10 @@ void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& ori
 		if(boneNumber)
 		{
 			int parent = bone.parent;
+#ifdef _DEBUG
 			if(!f[parent])
 				THROW_PRIMARY_EXCEPTION("Parent is not calculated");
+#endif
 			animationWorldOrientations[boneNumber] = animationRelativeOrientations[boneNumber] * animationWorldOrientations[parent];
 			animationWorldPositions[boneNumber] = animationWorldPositions[parent] + bone.originalRelativePosition * animationWorldOrientations[parent];
 		}
@@ -202,7 +207,9 @@ void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& ori
 			animationWorldOrientations[boneNumber] = animationRelativeOrientations[boneNumber] * originOrientation;
 			animationWorldPositions[boneNumber] = originOffset + rootBoneOffset * originOrientation;
 		}
+#ifdef _DEBUG
 		f[boneNumber] = true;
+#endif
 		//std::cout << "Bone " << boneNumber << ", AWO=" << animationWorldOrientations[boneNumber] << ", AWP=" << animationWorldPositions[boneNumber] << '\n';
 	}
 

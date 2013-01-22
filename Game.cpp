@@ -27,13 +27,20 @@ SCRIPTABLE_MAP_BEGIN(Game, Farsh.Game);
 	SCRIPTABLE_METHOD(Game, SetHeroParams);
 	SCRIPTABLE_METHOD(Game, SetAxeParams);
 	SCRIPTABLE_METHOD(Game, SetCircularParams);
+	SCRIPTABLE_METHOD(Game, PlaceHero);
 SCRIPTABLE_MAP_END();
 
 Game* Game::singleGame = 0;
 
+const float Game::hzAFRun1 = 50.0f / 30;
+const float Game::hzAFRun2 = 66.0f / 30;
+const float Game::hzAFBattle1 = 400.0f / 30;
+const float Game::hzAFBattle2 = 450.0f / 30;
+
 Game::Game() :
 	lastTick(0), cameraAlpha(0), cameraBeta(0),
-	bloomLimit(10.0f), toneLuminanceKey(0.12f), toneMaxLuminance(3.1f)
+	bloomLimit(10.0f), toneLuminanceKey(0.12f), toneMaxLuminance(3.1f),
+	heroAnimationTime(hzAFBattle1)
 {
 	singleGame = this;
 
@@ -103,7 +110,13 @@ void Game::Run()
 	scriptState->RegisterClass<Game>();
 	scriptState->RegisterClass<Material>();
 
-	ptr<Script> mainScript = scriptState->LoadScript(fileSystem->LoadFile("main.lua"));
+	ptr<Script> mainScript = scriptState->LoadScript(fileSystem->LoadFile(
+#ifdef PRODUCTION
+		"main.luab"
+#else
+		"main.lua"
+#endif
+	));
 	mainScript->Run<void>();
 
 	window->Run(Win32Window::ActiveHandler::CreateDelegate(MakePointer(this), &Game::Tick));
@@ -269,8 +282,19 @@ void Game::Tick(int)
 	if(inputState.keyboard[69])
 		cameraMove += cameraMoveDirectionUp * cameraStep;
 
-	static float3 cameraPosition = float3(-10, 0, 0);
+	//heroCharacter->Walk(cameraMove);
+
+	physicsWorld->Simulate(frameTime);
+
+	float4x4 heroTransform = heroCharacter->GetTransform();
+	float3 heroPosition(heroTransform.t[3][0], heroTransform.t[3][1], heroTransform.t[3][2]);
+	quaternion heroOrientation(float3(0, 0, 1), cameraAlpha);
+
+	static float3 cameraPosition(0, 0, 0);
+	//float3 cameraPosition = heroPosition - cameraMoveDirectionFront * 2.0f + cameraMoveDirectionUp * 2.0f;
 	cameraPosition += cameraMove * frameTime;
+
+	//std::cout << "cameraPosition = " << cameraPosition << '\n';
 
 	context->Reset();
 
@@ -278,8 +302,6 @@ void Game::Tick(int)
 
 	float4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, float3(0, 0, 1));
 	float4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 0.1f, 100.0f);
-
-	physicsWorld->Simulate(frameTime);
 
 	// зарегистрировать все объекты
 	painter->BeginFrame(frameTime);
@@ -307,7 +329,27 @@ void Game::Tick(int)
 			painter->AddBasicLight(light->position, light->color);
 	}
 
+	if(!theTimePaused)
+		heroAnimationTime += frameTime;
+	while(heroAnimationTime >= hzAFBattle2)
+		heroAnimationTime += hzAFBattle1 - hzAFBattle2;
+	heroOrientation = quaternion();
+	heroAnimationFrame->Setup(heroPosition, heroOrientation, heroAnimationTime);
+	//float3 shouldBeHeroPosition = heroPosition - (heroAnimationFrame->animationWorldPositions[0] - heroPosition) * float3(1, 1, 0);
+	//heroAnimationFrame->Setup(shouldBeHeroPosition, heroOrientation, heroAnimationTime);
+	painter->AddSkinnedModel(heroMaterial, heroGeometry, heroAnimationFrame);
+	zombieAnimationFrame->Setup(heroPosition, heroOrientation, heroAnimationTime);
+	painter->AddSkinnedModel(zombieMaterial, zombieGeometry, zombieAnimationFrame);
+	if(0)
+	for(size_t i = 0; i < heroAnimationFrame->animationWorldPositions.size(); ++i)
+		painter->AddModel(staticModels[0].material, staticModels[0].geometry, CreateScalingMatrix(0.1f, 0.1f, 0.1f) * (float4x4)heroAnimationFrame->animationWorldOrientations[i] * CreateTranslationMatrix(heroAnimationFrame->animationWorldPositions[i]));
+	circularAnimationFrame->Setup(heroPosition, heroOrientation, heroAnimationTime);
+	painter->AddModel(circularMaterial, circularGeometry, (float4x4)circularAnimationFrame->animationWorldOrientations[0] * CreateTranslationMatrix(circularAnimationFrame->animationWorldPositions[0]));
+	axeAnimationFrame->Setup(heroPosition, heroOrientation, heroAnimationTime);
+	painter->AddModel(axeMaterial, axeGeometry, (float4x4)axeAnimationFrame->animationWorldOrientations[0] * CreateTranslationMatrix(axeAnimationFrame->animationWorldPositions[0]));
+
 	// тестовая декаль
+	if(0)
 	{
 		float4x4 transform = CreateLookAtMatrix(float3(9, 10, 1), float3(10, 10, 0), float3(0, 0, 1))
 			* CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 2, 1.0f, 0.1f, 10.0f);
@@ -321,35 +363,6 @@ void Game::Tick(int)
 		c.t[3][0] = mxB._41; c.t[3][1] = mxB._42; c.t[3][2] = mxB._43; c.t[3][3] = mxB._44;
 		painter->AddDecal(decalMaterial, transform, c);
 	}
-
-#if 0
-	//painter->SetAmbientColor(float3(0.2f, 0.2f, 0.2f));
-	for(size_t i = 0; i < cubes.size(); ++i)
-		painter->AddModel(texturedMaterial, geometryCube, CreateScalingMatrix(cubes[i].scale) * cubes[i].rigidBody->GetTransform());
-	//painter->AddModel(zombieMaterial, geometryKnot, CreateScalingMatrix(0.3f, 0.3f, 0.3f) * CreateTranslationMatrix(10, 10, 2));
-	//painter->AddModel(zombieMaterial, geometryZombi, CreateTranslationMatrix(10, 10, 0));
-
-	float intPart;
-	if(!theTimePaused)
-		theTime += frameTime;
-
-	float animationTime = modf(theTime / 11, &intPart) * 11;
-	//bafZombi->Setup(float3(10, 10, 0), quaternion(0, 0, 0, 1), modf(theTime * 0.1f, &intPart));
-	//bafZombi->Setup(float3(10, 15, 0), quaternion(0, 0, 0, 1), modf(theTime * 0.1f, &intPart) * 5);
-	bafZombi->Setup(float3(10, 15, 0), quaternion(0, 0, 0, 1), animationTime);
-	bafAxe->Setup(float3(10, 15, 0), quaternion(0, 0, 0, 1), animationTime);
-	//bafZombi->Setup(float3(10, 15, 0), quaternion(float3(0, 0, 1), modf(theTime * 0.1f, &intPart)), 0);
-
-//		for(size_t i = 0; i < bafZombi->animationWorldPositions.size(); ++i)
-//			painter->AddModel(texturedMaterial, geometryCube, (float4x4)bafZombi->orientations[i] * CreateScalingMatrix(0.1f, 0.1f, 0.1f) * CreateTranslationMatrix(bafZombi->animationWorldPositions[i]));
-
-	//bafZombi->Setup(float3(10, 10, 1), quaternion(0, 0, 0, 1), modf(t * 0.1f, &intPart));
-	//bafZombi->Setup(float3(10, 10, 1), quaternion(float3(1, 0, 0), modf(t / 3, &intPart) * 3), 0);
-	//bafZombi->Setup(float3(10, 10, 1), quaternion(0, 0, 0, 1), 0);
-	//bafZombi->orientations[2] = quaternion(float3(1, 0, 0), modf(t / 3, &intPart)) * bafZombi->orientations[2];
-	painter->AddSkinnedModel(zombieMaterial, geometryZombi, bafZombi);
-	painter->AddModel(zombieMaterial, geometryAxe, (float4x4)bafAxe->animationWorldOrientations[0] * CreateTranslationMatrix(bafAxe->animationWorldPositions[0]));
-#endif
 
 	painter->SetupPostprocess(bloomLimit, toneLuminanceKey, toneMaxLuminance);
 
@@ -470,6 +483,15 @@ void Game::SetCircularParams(ptr<Material> material, ptr<Geometry> geometry, ptr
 	this->circularMaterial = material;
 	this->circularGeometry = geometry;
 	this->circularAnimation = animation;
+}
+
+void Game::PlaceHero(float x, float y, float z)
+{
+	heroCharacter = physicsWorld->CreateCharacter(physicsWorld->CreateCapsuleShape(0.2f, 1.4f), CreateTranslationMatrix(x, y, z));
+	heroAnimationFrame = NEW(BoneAnimationFrame(heroAnimation));
+	circularAnimationFrame = NEW(BoneAnimationFrame(circularAnimation));
+	zombieAnimationFrame = NEW(BoneAnimationFrame(zombieAnimation));
+	axeAnimationFrame = NEW(BoneAnimationFrame(axeAnimation));
 }
 
 //******* Game::StaticLight
