@@ -1,7 +1,6 @@
 #include "Game.hpp"
 #include "Painter.hpp"
 #include "Material.hpp"
-#include "ShaderCache.hpp"
 #include "Skeleton.hpp"
 #include "BoneAnimation.hpp"
 #include "../inanity2/inanity-sqlitefs.hpp"
@@ -92,7 +91,7 @@ void Game::Run()
 		"shaders"
 #endif
 		;
-	ptr<ShaderCache> shaderCache = NEW(ShaderCache(NEW(SQLiteFileSystem(shadersCacheFileName)), device, NEW(DxShaderCompiler())));
+	ptr<ShaderCache> shaderCache = NEW(ShaderCache(NEW(SQLiteFileSystem(shadersCacheFileName)), device, NEW(DxShaderCompiler()), NEW(Crypto::WhirlpoolStream())));
 	painter = NEW(Painter(device, context, presenter, mode.width, mode.height, shaderCache));
 
 	fileSystem =

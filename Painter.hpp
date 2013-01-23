@@ -5,7 +5,6 @@
 #include "Material.hpp"
 #include <unordered_map>
 
-class ShaderCache;
 class BoneAnimationFrame;
 
 /// Класс, занимающийся рисованием моделей.

@@ -1,5 +1,4 @@
 #include "Painter.hpp"
-#include "ShaderCache.hpp"
 #include "BoneAnimation.hpp"
 
 // говно FIXME HACK
