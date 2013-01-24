@@ -19,9 +19,6 @@ private:
 	/// Кэш бинарных шейдеров.
 	ptr<ShaderCache> shaderCache;
 
-	/// Генератор шейдеров.
-	ptr<ShaderGenerator> shaderGenerator;
-
 	/// Случайная текстура.
 	ptr<Texture> randomTexture;
 

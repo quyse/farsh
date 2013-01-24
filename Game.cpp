@@ -91,16 +91,21 @@ void Game::Run()
 		"shaders"
 #endif
 		;
-	ptr<ShaderCache> shaderCache = NEW(ShaderCache(NEW(SQLiteFileSystem(shadersCacheFileName)), device, NEW(DxShaderCompiler()), NEW(Crypto::WhirlpoolStream())));
+	ptr<ShaderCache> shaderCache = NEW(ShaderCache(NEW(SQLiteFileSystem(shadersCacheFileName)), device, NEW(DxShaderCompiler()), NEW(HlslGenerator()), NEW(Crypto::WhirlpoolStream())));
 	painter = NEW(Painter(device, context, presenter, mode.width, mode.height, shaderCache));
 
 	fileSystem =
 #ifdef PRODUCTION
 		NEW(BlobFileSystem(FolderFileSystem::GetNativeFileSystem()->LoadFile("data")))
 #else
-		FolderFileSystem::GetNativeFileSystem()
+		NEW(BufferedFileSystem(FolderFileSystem::GetNativeFileSystem()))
 #endif
 	;
+
+	textureManager = NEW(TextureManager(fileSystem, device));
+	fontManager = NEW(FontManager(fileSystem, textureManager));
+	textDrawer = TextDrawer::Create(device, shaderCache);
+	font = fontManager->Get("mnogobukov.font");
 
 	physicsWorld = NEW(Physics::BtWorld());
 
@@ -126,17 +131,6 @@ void Game::Tick(int)
 	long long tick = Time::GetTicks();
 	float frameTime = lastTick ? (tick - lastTick) * tickCoef : 0;
 	lastTick = tick;
-
-	static int fpsTickCount = 0;
-	static float fpsTimeSum = 0;
-	static const int fpsTickSpan = 100;
-	fpsTimeSum += frameTime;
-	if(++fpsTickCount >= fpsTickSpan)
-	{
-		printf("FPS: %.6f\n", fpsTickSpan / fpsTimeSum);
-		fpsTickCount = 0;
-		fpsTimeSum = 0;
-	}
 
 	static float theTime = 0;
 	static bool theTimePaused = false;
@@ -367,6 +361,30 @@ void Game::Tick(int)
 
 	painter->Draw();
 
+	textDrawer->Prepare(context);
+	textDrawer->SetFont(font);
+
+	// fps
+	{
+		static int tickCount = 0;
+		static const int needTickCount = 100;
+		static float allTicksTime = 0;
+		allTicksTime += frameTime;
+		static float lastAllTicksTime = 0;
+		if(++tickCount >= needTickCount)
+		{
+			lastAllTicksTime = allTicksTime;
+			allTicksTime = 0;
+			tickCount = 0;
+		}
+		char fpsString[64];
+		sprintf(fpsString, "frameTime: %.6f sec, FPS: %.6f\n", lastAllTicksTime / needTickCount, needTickCount / lastAllTicksTime);
+		textDrawer->DrawTextLine(fpsString, -0.95f - 2.0f / context->GetTargetState().viewportWidth, -0.95f - 2.0f / context->GetTargetState().viewportHeight, float4(1, 1, 1, 1), FontAlignments::Left | FontAlignments::Bottom);
+		textDrawer->DrawTextLine(fpsString, -0.95f, -0.95f, float4(1, 0, 0, 1), FontAlignments::Left | FontAlignments::Bottom);
+	}
+
+	textDrawer->Flush();
+
 	presenter->Present();
 }
 
@@ -377,7 +395,7 @@ ptr<Game> Game::Get()
 
 ptr<Texture> Game::LoadTexture(const String& fileName)
 {
-	return device->CreateStaticTexture(fileSystem->LoadFile(fileName));
+	return textureManager->Get(fileName);
 }
 
 ptr<Geometry> Game::LoadGeometry(const String& fileName)
@@ -398,7 +416,7 @@ ptr<Geometry> Game::LoadSkinnedGeometry(const String& fileName)
 
 ptr<Skeleton> Game::LoadSkeleton(const String& fileName)
 {
-	return Skeleton::Deserialize(fileSystem->LoadFileAsStream(fileName));
+	return Skeleton::Deserialize(fileSystem->LoadStream(fileName));
 }
 
 ptr<BoneAnimation> Game::LoadBoneAnimation(const String& fileName, ptr<Skeleton> skeleton)
@@ -411,7 +429,7 @@ ptr<BoneAnimation> Game::LoadBoneAnimation(const String& fileName, ptr<Skeleton>
 		bones[0].parent = 0;
 		skeleton = NEW(Skeleton(bones));
 	}
-	return BoneAnimation::Deserialize(fileSystem->LoadFileAsStream(fileName), skeleton);
+	return BoneAnimation::Deserialize(fileSystem->LoadStream(fileName), skeleton);
 }
 
 ptr<Physics::Shape> Game::CreatePhysicsBoxShape(float halfSizeX, float halfSizeY, float halfSizeZ)

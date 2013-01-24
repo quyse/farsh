@@ -48,6 +48,11 @@ private:
 
 	ptr<Input::Manager> inputManager;
 
+	ptr<TextureManager> textureManager;
+	ptr<FontManager> fontManager;
+	ptr<TextDrawer> textDrawer;
+	ptr<Font> font;
+
 	float alpha;
 
 	ptr<Layout> layout, skinnedLayout;
