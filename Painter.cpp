@@ -386,10 +386,10 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 				iPosition,
 				iTexcoord,
 				fTarget = newfloat4((
-					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("xz")) +
-					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("xw")) +
-					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("yz")) +
-					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("yw"))
+					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xz"]) +
+					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xw"]) +
+					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["yz"]) +
+					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["yw"])
 					) * Value<float>(0.25f), 1.0f)
 				);
 			psDownsample = shaderCache->GetPixelShader(shader);
@@ -403,10 +403,10 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 				iTexcoord,
 				luminanceCoef = newfloat3(0.2126f, 0.7152f, 0.0722f),
 				fTarget = newfloat4((
-					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("xz")), luminanceCoef) + Value<float>(0.0001f)) +
-					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("xw")), luminanceCoef) + Value<float>(0.0001f)) +
-					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("yz")), luminanceCoef) + Value<float>(0.0001f)) +
-					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("yw")), luminanceCoef) + Value<float>(0.0001f))
+					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xz"]), luminanceCoef) + Value<float>(0.0001f)) +
+					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xw"]), luminanceCoef) + Value<float>(0.0001f)) +
+					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["yz"]), luminanceCoef) + Value<float>(0.0001f)) +
+					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["yw"]), luminanceCoef) + Value<float>(0.0001f))
 					) * Value<float>(0.25f), 0.0f, 0.0f, 1.0f)
 				);
 			psDownsampleLuminanceFirst = shaderCache->GetPixelShader(shader);
@@ -418,10 +418,10 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 				iPosition,
 				iTexcoord,
 				fTarget = newfloat4((
-					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("xz")) +
-					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("xw")) +
-					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("yz")) +
-					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets.Swizzle<float2>("yw"))
+					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xz"]) +
+					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xw"]) +
+					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets["yz"]) +
+					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets["yw"])
 					) * Value<float>(0.25f), 0.0f, 0.0f, uDownsampleBlend)
 				);
 			psDownsampleLuminance = shaderCache->GetPixelShader(shader);
@@ -678,35 +678,35 @@ Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)
 
 Value<float3> Painter::ApplyQuaternion(Value<float4> q, Value<float3> v)
 {
-	return v + cross(q.Swizzle<float3>("xyz"), cross(q.Swizzle<float3>("xyz"), v) + v * q.Swizzle<float>("w")) * Value<float>(2);
+	return v + cross(q["xyz"], cross(q["xyz"], v) + v * q["w"]) * Value<float>(2);
 }
 
 Expression Painter::GetWorldPositionAndNormal(const VertexShaderKey& key)
 {
 	if(key.skinned)
 	{
-		Value<float3> position = aPosition.Swizzle<float3>("xyz");
+		Value<float3> position = aPosition["xyz"];
 		Value<uint> boneNumbers[] =
 		{
-			aBoneNumbers.Swizzle<uint>("x"),
-			aBoneNumbers.Swizzle<uint>("y"),
-			aBoneNumbers.Swizzle<uint>("z"),
-			aBoneNumbers.Swizzle<uint>("w")
+			aBoneNumbers["x"],
+			aBoneNumbers["y"],
+			aBoneNumbers["z"],
+			aBoneNumbers["w"]
 		};
 		Value<float> boneWeights[] =
 		{
-			aBoneWeights.Swizzle<float>("x"),
-			aBoneWeights.Swizzle<float>("y"),
-			aBoneWeights.Swizzle<float>("z"),
-			aBoneWeights.Swizzle<float>("w")
+			aBoneWeights["x"],
+			aBoneWeights["y"],
+			aBoneWeights["z"],
+			aBoneWeights["w"]
 		};
 		Temp<float3> tmpBoneOffsets[4];
 
 		return
-			tmpBoneOffsets[0] = uBoneOffsets[boneNumbers[0]].Swizzle<float3>("xyz"),
-			tmpBoneOffsets[1] = uBoneOffsets[boneNumbers[1]].Swizzle<float3>("xyz"),
-			tmpBoneOffsets[2] = uBoneOffsets[boneNumbers[2]].Swizzle<float3>("xyz"),
-			tmpBoneOffsets[3] = uBoneOffsets[boneNumbers[3]].Swizzle<float3>("xyz"),
+			tmpBoneOffsets[0] = uBoneOffsets[boneNumbers[0]]["xyz"],
+			tmpBoneOffsets[1] = uBoneOffsets[boneNumbers[1]]["xyz"],
+			tmpBoneOffsets[2] = uBoneOffsets[boneNumbers[2]]["xyz"],
+			tmpBoneOffsets[3] = uBoneOffsets[boneNumbers[3]]["xyz"],
 			tmpVertexPosition = newfloat4(
 				(ApplyQuaternion(uBoneOrientations[boneNumbers[0]], position) + tmpBoneOffsets[0]) * boneWeights[0] +
 				(ApplyQuaternion(uBoneOrientations[boneNumbers[1]], position) + tmpBoneOffsets[1]) * boneWeights[1] +
@@ -734,7 +734,7 @@ Expression Painter::GetWorldPositionAndNormal(const VertexShaderKey& key)
 					(
 						tmpWorld = uDecalInvTransforms[tmpInstance],
 						tmpPosition = mul(aPosition, tmpWorld),
-						tmpPosition = tmpPosition / tmpPosition.Swizzle<float>("w")
+						tmpPosition = tmpPosition / tmpPosition["w"]
 					)
 					:
 					(
@@ -770,22 +770,22 @@ Expression Painter::BeginMaterialLighting(const PixelShaderKey& key, Value<float
 		Temp<float> tmpScreenDepth;
 		e.Append((
 			// получить спроецированную позицию
-			tmpScreen = iScreen / iScreen.Swizzle<float>("w"),
+			tmpScreen = iScreen / iScreen["w"],
 			tmpScreenCoords = newfloat2(
-				tmpScreen.Swizzle<float>("x") + Value<float>(1),
-				- tmpScreen.Swizzle<float>("y") + Value<float>(1)) * Value<float>(0.5f),
+				tmpScreen["x"] + Value<float>(1),
+				- tmpScreen["y"] + Value<float>(1)) * Value<float>(0.5f),
 			tmpScreenDepth = uScreenDepthSampler.Sample(tmpScreenCoords),
-			tmpProjectedPosition = mul(newfloat4(tmpScreen.Swizzle<float2>("xy"), tmpScreenDepth, 1), uInvViewProj),
-			tmpProjectedPosition = tmpProjectedPosition / tmpProjectedPosition.Swizzle<float>("w"),
+			tmpProjectedPosition = mul(newfloat4(tmpScreen["xy"], tmpScreenDepth, 1), uInvViewProj),
+			tmpProjectedPosition = tmpProjectedPosition / tmpProjectedPosition["w"],
 			// преобразовать эту позицию в пространство декали
 			tmpProjectedPosition = mul(tmpProjectedPosition, uDecalTransforms[iInstance]),
-			tmpProjectedPosition = tmpProjectedPosition / tmpProjectedPosition.Swizzle<float>("w"),
-			//clip(tmpProjectedPosition.Swizzle<float>("z")),
-			//clip(Value<float>(1) - tmpProjectedPosition.Swizzle<float>("z")),
+			tmpProjectedPosition = tmpProjectedPosition / tmpProjectedPosition["w"],
+			//clip(tmpProjectedPosition["z"]),
+			//clip(Value<float>(1) - tmpProjectedPosition["z"]),
 			// получить текстурные координаты
 			tmpTexcoord = newfloat2(
-				tmpProjectedPosition.Swizzle<float>("x") + Value<float>(1),
-				-tmpProjectedPosition.Swizzle<float>("y") + Value<float>(1)) * Value<float>(0.5f),
+				tmpProjectedPosition["x"] + Value<float>(1),
+				-tmpProjectedPosition["y"] + Value<float>(1)) * Value<float>(0.5f),
 
 			// получить нормаль из буфера нормалей
 			tmpNormal = normalize((uScreenNormalSampler.Sample(tmpScreenCoords) * Value<float>(2)) - Value<float>(1))
@@ -815,12 +815,12 @@ Expression Painter::BeginMaterialLighting(const PixelShaderKey& key, Value<float
 				r1 = cross(dyPosition, r0),
 				r2 = cross(r0, dxPosition),
 
-				T1 = normalize(r1 * dxTexcoord.Swizzle<float>("x") + r2 * dyTexcoord.Swizzle<float>("x")),
-				T2 = normalize(r1 * dxTexcoord.Swizzle<float>("y") + r2 * dyTexcoord.Swizzle<float>("y")),
+				T1 = normalize(r1 * dxTexcoord["x"] + r2 * dyTexcoord["x"]),
+				T2 = normalize(r1 * dxTexcoord["y"] + r2 * dyTexcoord["y"]),
 				T3 = normalize(iNormal),
 
-				perturbedNormal = (uNormalSampler.Sample(tmpTexcoord * uNormalCoordTransform.Swizzle<float2>("xy") + uNormalCoordTransform.Swizzle<float2>("zw")) * Value<float>(2) - Value<float>(1)),
-				tmpNormal = normalize(T1 * perturbedNormal.Swizzle<float>("x") + T2 * perturbedNormal.Swizzle<float>("y") + T3 * perturbedNormal.Swizzle<float>("z"))
+				perturbedNormal = (uNormalSampler.Sample(tmpTexcoord * uNormalCoordTransform["xy"] + uNormalCoordTransform["zw"]) * Value<float>(2) - Value<float>(1)),
+				tmpNormal = normalize(T1 * perturbedNormal["x"] + T2 * perturbedNormal["y"] + T3 * perturbedNormal["z"])
 			));
 		}
 		else
@@ -833,8 +833,8 @@ Expression Painter::BeginMaterialLighting(const PixelShaderKey& key, Value<float
 		tmpToCamera = normalize(uCameraPosition - iWorldPosition),
 		tmpDiffuse = key.materialKey.hasDiffuseTexture ? uDiffuseSampler.Sample(tmpTexcoord) : uDiffuse,
 		tmpSpecular = key.materialKey.hasSpecularTexture ? uSpecularSampler.Sample(tmpTexcoord) : uSpecular,
-		tmpSpecularExponent = exp2(tmpSpecular.Swizzle<float>("x") * Value<float>(4/*12*/)),
-		tmpColor = ambientColor * tmpDiffuse.Swizzle<float3>("xyz")
+		tmpSpecularExponent = exp2(tmpSpecular["x"] * Value<float>(4/*12*/)),
+		tmpColor = ambientColor * tmpDiffuse["xyz"]
 	));
 
 	return e;
@@ -849,10 +849,10 @@ Expression Painter::ApplyMaterialLighting(Value<float3> lightPosition, Value<flo
 		// биссектриса между направлениями на свет и камеру
 		tmpLightViewBissect = normalize(tmpToLight + tmpToCamera),
 		// диффузная составляющая
-		tmpDiffusePart = tmpDiffuse.Swizzle<float3>("xyz")
+		tmpDiffusePart = tmpDiffuse["xyz"]
 			* max(dot(tmpNormal, tmpToLight), 0),
 		// specular составляющая
-		tmpSpecularPart = tmpDiffuse.Swizzle<float3>("xyz")
+		tmpSpecularPart = tmpDiffuse["xyz"]
 			* pow(max(dot(tmpLightViewBissect, tmpNormal), 0), tmpSpecularExponent)
 			//* dot(tmpNormal, tmpToLight) // хз, может не нужно оно?
 			* (tmpSpecularExponent + Value<float>(1)) / (max(pow(dot(tmpToLight, tmpLightViewBissect), 3), 0.1f) * Value<float>(8)),
@@ -879,7 +879,7 @@ ptr<VertexShader> Painter::GetVertexShader(const VertexShaderKey& key)
 		iPosition = p,
 		iNormal = tmpVertexNormal,
 		iTexcoord = aTexcoord,
-		iWorldPosition = tmpVertexPosition.Swizzle<float3>("xyz")
+		iWorldPosition = tmpVertexPosition["xyz"]
 	));
 
 	// если декали, то ещё одна штука
@@ -909,7 +909,7 @@ ptr<VertexShader> Painter::GetVertexShadowShader(const VertexShaderKey& key)
 	ptr<VertexShader> vertexShader = shaderCache->GetVertexShader(Expression((
 		GetWorldPositionAndNormal(key),
 		iPosition = mul(tmpVertexPosition, uViewProj),
-		iDepth = iPosition.Swizzle<float>("z")
+		iDepth = iPosition["z"]
 		)));
 
 	// добавить и вернуть
@@ -964,14 +964,14 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 		Temp<float> lighted;
 		shader.Append((
 			shadowCoords = mul(tmpWorldPosition, shadowLight.uLightTransform),
-			lighted = shadowCoords.Swizzle<float>("z") > Value<float>(0),
-			linearShadowZ = shadowCoords.Swizzle<float>("z"),
+			lighted = shadowCoords["z"] > Value<float>(0),
+			linearShadowZ = shadowCoords["z"],
 			//lighted = lighted * (linearShadowZ > Value<float>(0)),
-			shadowCoords = shadowCoords / shadowCoords.Swizzle<float>("w"),
-			lighted = lighted * (abs(shadowCoords.Swizzle<float>("x")) < Value<float>(1)) * (abs(shadowCoords.Swizzle<float>("y")) < Value<float>(1)),
+			shadowCoords = shadowCoords / shadowCoords["w"],
+			lighted = lighted * (abs(shadowCoords["x"]) < Value<float>(1)) * (abs(shadowCoords["y"]) < Value<float>(1)),
 			shadowCoordsXY = newfloat2(
-				(shadowCoords.Swizzle<float>("x") + Value<float>(1.0f)) * Value<float>(0.5f),
-				(Value<float>(1.0f) - shadowCoords.Swizzle<float>("y")) * Value<float>(0.5f)),
+				(shadowCoords["x"] + Value<float>(1.0f)) * Value<float>(0.5f),
+				(Value<float>(1.0f) - shadowCoords["y"]) * Value<float>(0.5f)),
 			shadowMultiplier = lighted * saturate(exp(Value<float>(4) * (shadowLight.uShadowSampler.Sample(shadowCoordsXY) - linearShadowZ))),
 			
 			ApplyMaterialLighting(shadowLight.uLightPosition, shadowLight.uLightColor * shadowMultiplier)
@@ -980,7 +980,7 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 
 	// вернуть цвет
 	shader.Append((
-		fTarget = newfloat4(tmpColor, tmpDiffuse.Swizzle<float>("w"))
+		fTarget = newfloat4(tmpColor, tmpDiffuse["w"])
 	));
 	// если не декали, вернуть нормаль
 	if(!key.decal)
