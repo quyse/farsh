@@ -60,7 +60,12 @@ Game::Game() :
 
 void Game::Run()
 {
+#ifdef FARSH_USE_DIRECTX
 	ptr<Graphics::System> system = NEW(DxSystem());
+#endif
+#ifdef FARSH_USE_OPENGL
+	ptr<Graphics::System> system = NEW(GlSystem());
+#endif
 
 	device = system->CreatePrimaryDevice();
 	ptr<Win32Window> window = system->CreateDefaultWindow().FastCast<Win32Window>();
@@ -91,7 +96,8 @@ void Game::Run()
 		"shaders"
 #endif
 		;
-	ptr<ShaderCache> shaderCache = NEW(ShaderCache(NEW(SQLiteFileSystem(shadersCacheFileName)), device, NEW(DxShaderCompiler()), NEW(HlslGenerator()), NEW(Crypto::WhirlpoolStream())));
+	ptr<ShaderCache> shaderCache = NEW(ShaderCache(NEW(SQLiteFileSystem(shadersCacheFileName)), device,
+		system->CreateShaderCompiler(), system->CreateShaderGenerator(), NEW(Crypto::WhirlpoolStream())));
 	painter = NEW(Painter(device, context, presenter, mode.width, mode.height, shaderCache));
 
 	fileSystem =
@@ -289,7 +295,7 @@ void Game::Tick(int)
 
 	//std::cout << "cameraPosition = " << cameraPosition << '\n';
 
-	context->Reset();
+	//context->Reset();
 
 	alpha += frameTime;
 

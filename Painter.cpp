@@ -4,7 +4,7 @@
 // говно FIXME HACK
 #include "../inanity2/graphics/d3dx.hpp"
 
-const int Painter::shadowMapSize = 512;
+const int Painter::shadowMapSize = 1024;
 const int Painter::randomMapSize = 64;
 const int Painter::downsamplingStepForBloom = 1;
 const int Painter::bloomMapSize = 1 << (Painter::downsamplingPassesCount - 1 - Painter::downsamplingStepForBloom);
@@ -184,7 +184,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	//** создать ресурсы
 	rbBack = presenter->GetBackBuffer();
 	dsbDepth = device->CreateDepthStencilBuffer(screenWidth, screenHeight, true);
-	dsbShadow = device->CreateDepthStencilBuffer(shadowMapSize, shadowMapSize);
+	dsbShadow = device->CreateDepthStencilBuffer(shadowMapSize, shadowMapSize, false);
 	for(int i = 0; i < maxShadowLightsCount; ++i)
 		rbShadows[i] = device->CreateRenderBuffer(shadowMapSize, shadowMapSize, PixelFormats::floatR16);
 	rbShadowBlur = device->CreateRenderBuffer(shadowMapSize, shadowMapSize, PixelFormats::floatR16);
