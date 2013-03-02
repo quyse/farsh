@@ -92,7 +92,7 @@ private:
 		/// Состояние контекста для opaque pass.
 		ContextState csOpaque;
 
-		LightVariant(ptr<Device> device);
+		LightVariant();
 	};
 	/// Структура ключа варианта света.
 	struct LightVariantKey

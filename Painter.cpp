@@ -26,8 +26,8 @@ Painter::ShadowLight::ShadowLight(ptr<UniformGroup> ug, int samplerNumber) :
 
 // Painter::LightVariant
 
-Painter::LightVariant::LightVariant(ptr<Device> device) :
-	ugLight(NEW(UniformGroup(device, 1))),
+Painter::LightVariant::LightVariant() :
+	ugLight(NEW(UniformGroup(1))),
 	uAmbientColor(ugLight->AddUniform<float3>())
 {}
 
@@ -91,12 +91,12 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	aBoneNumbers(3),
 	aBoneWeights(4),
 
-	ugCamera(NEW(UniformGroup(device, 0))),
+	ugCamera(NEW(UniformGroup(0))),
 	uViewProj(ugCamera->AddUniform<float4x4>()),
 	uInvViewProj(ugCamera->AddUniform<float4x4>()),
 	uCameraPosition(ugCamera->AddUniform<float3>()),
 
-	ugMaterial(NEW(UniformGroup(device, 2))),
+	ugMaterial(NEW(UniformGroup(2))),
 	uDiffuse(ugMaterial->AddUniform<float4>()),
 	uSpecular(ugMaterial->AddUniform<float4>()),
 	uNormalCoordTransform(ugMaterial->AddUniform<float4>()),
@@ -104,37 +104,37 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	uSpecularSampler(1),
 	uNormalSampler(2),
 
-	ugModel(NEW(UniformGroup(device, 3))),
+	ugModel(NEW(UniformGroup(3))),
 	uWorld(ugModel->AddUniform<float4x4>()),
 
-	ugInstancedModel(NEW(UniformGroup(device, 3))),
+	ugInstancedModel(NEW(UniformGroup(3))),
 	uWorlds(ugInstancedModel->AddUniformArray<float4x4>(maxInstancesCount)),
 
-	ugSkinnedModel(NEW(UniformGroup(device, 3))),
+	ugSkinnedModel(NEW(UniformGroup(3))),
 	uBoneOrientations(ugSkinnedModel->AddUniformArray<float4>(maxBonesCount)),
 	uBoneOffsets(ugSkinnedModel->AddUniformArray<float4>(maxBonesCount)),
 
-	ugDecal(NEW(UniformGroup(device, 3))),
+	ugDecal(NEW(UniformGroup(3))),
 	uDecalTransforms(ugDecal->AddUniformArray<float4x4>(maxDecalsCount)),
 	uDecalInvTransforms(ugDecal->AddUniformArray<float4x4>(maxDecalsCount)),
 	uScreenNormalSampler(3),
 	uScreenDepthSampler(4),
 
-	ugShadowBlur(NEW(UniformGroup(device, 0))),
+	ugShadowBlur(NEW(UniformGroup(0))),
 	uShadowBlurDirection(ugShadowBlur->AddUniform<float2>()),
 	uShadowBlurSourceSampler(0),
 
-	ugDownsample(NEW(UniformGroup(device, 0))),
+	ugDownsample(NEW(UniformGroup(0))),
 	uDownsampleOffsets(ugDownsample->AddUniform<float4>()),
 	uDownsampleBlend(ugDownsample->AddUniform<float>()),
 	uDownsampleSourceSampler(0),
 	uDownsampleLuminanceSourceSampler(0),
 
-	ugBloom(NEW(UniformGroup(device, 0))),
+	ugBloom(NEW(UniformGroup(0))),
 	uBloomLimit(ugBloom->AddUniform<float>()),
 	uBloomSourceSampler(0),
 
-	ugTone(NEW(UniformGroup(device, 0))),
+	ugTone(NEW(UniformGroup(0))),
 	uToneLuminanceKey(ugTone->AddUniform<float>()),
 	uToneMaxLuminance(ugTone->AddUniform<float>()),
 	uToneBloomSampler(0),
@@ -153,16 +153,16 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 
 {
 	// финализировать uniform группы
-	ugCamera->Finalize();
-	ugMaterial->Finalize();
-	ugModel->Finalize();
-	ugInstancedModel->Finalize();
-	ugSkinnedModel->Finalize();
-	ugDecal->Finalize();
-	ugShadowBlur->Finalize();
-	ugDownsample->Finalize();
-	ugBloom->Finalize();
-	ugTone->Finalize();
+	ugCamera->Finalize(device);
+	ugMaterial->Finalize(device);
+	ugModel->Finalize(device);
+	ugInstancedModel->Finalize(device);
+	ugSkinnedModel->Finalize(device);
+	ugDecal->Finalize(device);
+	ugShadowBlur->Finalize(device);
+	ugDownsample->Finalize(device);
+	ugBloom->Finalize(device);
+	ugTone->Finalize(device);
 
 	// создать ресурсы
 	// запомнить размеры
@@ -613,7 +613,7 @@ Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)
 	int basicLightsCount = key.basicLightsCount;
 	int shadowLightsCount = key.shadowLightsCount;
 
-	LightVariant lightVariant(device);
+	LightVariant lightVariant;
 
 	// инициализировать uniform'ы
 	for(int i = 0; i < basicLightsCount; ++i)
@@ -622,7 +622,7 @@ Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)
 		// первые 5 семплеров пропустить
 		lightVariant.shadowLights.push_back(ShadowLight(lightVariant.ugLight, i + 5));
 
-	lightVariant.ugLight->Finalize();
+	lightVariant.ugLight->Finalize(device);
 
 	// инициализировать состояние контекста
 	ContextState& cs = lightVariant.csOpaque;
