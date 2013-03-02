@@ -83,8 +83,6 @@ private:
 	{
 		/// Uniform-группа параметров.
 		ptr<UniformGroup> ugLight;
-		/// Uniform-буфер для параметров.
-		ptr<UniformBuffer> ubLight;
 		/// Рассеянный свет.
 		Uniform<float3> uAmbientColor;
 		/// Простые источники света.
@@ -94,7 +92,7 @@ private:
 		/// Состояние контекста для opaque pass.
 		ContextState csOpaque;
 
-		LightVariant();
+		LightVariant(ptr<Device> device);
 	};
 	/// Структура ключа варианта света.
 	struct LightVariantKey
@@ -198,20 +196,7 @@ private:
 	/// Семплер результата downsample для средней освещённости.
 	Sampler<float, float2> uToneAverageSampler;
 
-	//*** Uniform-буферы.
-	ptr<UniformBuffer> ubCamera;
-	ptr<UniformBuffer> ubMaterial;
-	ptr<UniformBuffer> ubModel;
-	ptr<UniformBuffer> ubInstancedModel;
-	ptr<UniformBuffer> ubSkinnedModel;
-	ptr<UniformBuffer> ubDecal;
-	ptr<UniformBuffer> ubShadowBlur;
-	ptr<UniformBuffer> ubDownsample;
-	ptr<UniformBuffer> ubBloom;
-	ptr<UniformBuffer> ubTone;
-
 	//*** Промежуточные переменные.
-	Interpolant<float4> iPosition;
 	Interpolant<float3> iNormal;
 	Interpolant<float2> iTexcoord;
 	Interpolant<float3> iWorldPosition;

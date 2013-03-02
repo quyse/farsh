@@ -60,76 +60,91 @@ Game::Game() :
 
 void Game::Run()
 {
+	try
+	{
 #ifdef FARSH_USE_DIRECTX
-	ptr<Graphics::System> system = NEW(DxSystem());
+		ptr<Graphics::System> system = NEW(DxSystem());
 #endif
 #ifdef FARSH_USE_OPENGL
-	ptr<Graphics::System> system = NEW(GlSystem());
+		ptr<Graphics::System> system = NEW(GlSystem());
 #endif
 
-	device = system->CreatePrimaryDevice();
-	ptr<Win32Window> window = system->CreateDefaultWindow().FastCast<Win32Window>();
-	this->window = window;
-	window->SetTitle("F.A.R.S.H.");
+		device = system->CreatePrimaryDevice();
+		ptr<Win32Window> window = system->CreateDefaultWindow().FastCast<Win32Window>();
+		this->window = window;
+		window->SetTitle("F.A.R.S.H.");
 
-	inputManager = NEW(Input::RawManager(window->GetHWND()));
-	window->SetInputManager(inputManager);
+		inputManager = NEW(Input::RawManager(window->GetHWND()));
+		window->SetInputManager(inputManager);
 
 #if defined(_DEBUG) && 1
-	mode.width = 800;
-	mode.height = 600;
-	mode.fullscreen = false;
+		mode.width = 800;
+		mode.height = 600;
+		mode.fullscreen = false;
 #else
-	mode.width = GetSystemMetrics(SM_CXSCREEN);
-	mode.height = GetSystemMetrics(SM_CYSCREEN);
-	mode.fullscreen = true;
+		mode.width = GetSystemMetrics(SM_CXSCREEN);
+		mode.height = GetSystemMetrics(SM_CYSCREEN);
+		mode.fullscreen = true;
 #endif
-	mode.pixelFormat = PixelFormats::intR8G8B8A8;
-	presenter = device->CreatePresenter(window->CreateOutput(), mode);
+		mode.pixelFormat = PixelFormats::intR8G8B8A8;
+		presenter = device->CreatePresenter(window->CreateOutput(), mode);
 
-	context = device->GetContext();
+		context = device->GetContext();
 
-	const char* shadersCacheFileName =
+		const char* shadersCacheFileName =
 #ifdef _DEBUG
-		"shaders_debug"
+			"shaders_debug"
 #else
-		"shaders"
+			"shaders"
+#endif
+			;
+		ptr<ShaderCache> shaderCache = NEW(ShaderCache(NEW(SQLiteFileSystem(shadersCacheFileName)), device,
+			system->CreateShaderCompiler(), system->CreateShaderGenerator(), NEW(Crypto::WhirlpoolStream())));
+
+		fileSystem =
+#ifdef PRODUCTION
+			NEW(BlobFileSystem(FolderFileSystem::GetNativeFileSystem()->LoadFile("data")))
+#else
+			NEW(BufferedFileSystem(FolderFileSystem::GetNativeFileSystem()))
 #endif
 		;
-	ptr<ShaderCache> shaderCache = NEW(ShaderCache(NEW(SQLiteFileSystem(shadersCacheFileName)), device,
-		system->CreateShaderCompiler(), system->CreateShaderGenerator(), NEW(Crypto::WhirlpoolStream())));
-	painter = NEW(Painter(device, context, presenter, mode.width, mode.height, shaderCache));
 
-	fileSystem =
+		painter = NEW(Painter(device, context, presenter, mode.width, mode.height, shaderCache));
+
+		textureManager = NEW(TextureManager(fileSystem, device));
+		fontManager = NEW(FontManager(fileSystem, textureManager));
+		textDrawer = TextDrawer::Create(device, shaderCache);
+		font = fontManager->Get("mnogobukov.font");
+
+		physicsWorld = NEW(Physics::BtWorld());
+
+		// запустить стартовый скрипт
+		scriptState = NEW(Lua::State());
+		scriptState->RegisterClass<Game>();
+		scriptState->RegisterClass<Material>();
+
+		ptr<Script> mainScript = scriptState->LoadScript(fileSystem->LoadFile(
 #ifdef PRODUCTION
-		NEW(BlobFileSystem(FolderFileSystem::GetNativeFileSystem()->LoadFile("data")))
+			"main.luab"
 #else
-		NEW(BufferedFileSystem(FolderFileSystem::GetNativeFileSystem()))
+			"main.lua"
 #endif
-	;
+		));
+		mainScript->Run<void>();
 
-	textureManager = NEW(TextureManager(fileSystem, device));
-	fontManager = NEW(FontManager(fileSystem, textureManager));
-	textDrawer = TextDrawer::Create(device, shaderCache);
-	font = fontManager->Get("mnogobukov.font");
-
-	physicsWorld = NEW(Physics::BtWorld());
-
-	// запустить стартовый скрипт
-	scriptState = NEW(Lua::State());
-	scriptState->RegisterClass<Game>();
-	scriptState->RegisterClass<Material>();
-
-	ptr<Script> mainScript = scriptState->LoadScript(fileSystem->LoadFile(
-#ifdef PRODUCTION
-		"main.luab"
-#else
-		"main.lua"
-#endif
-	));
-	mainScript->Run<void>();
-
-	window->Run(Win32Window::ActiveHandler::CreateDelegate(MakePointer(this), &Game::Tick));
+		try
+		{
+			window->Run(Win32Window::ActiveHandler::CreateDelegate(MakePointer(this), &Game::Tick));
+		}
+		catch(Exception* exception)
+		{
+			THROW_SECONDARY_EXCEPTION("Error while running game", exception);
+		}
+	}
+	catch(Exception* exception)
+	{
+		THROW_SECONDARY_EXCEPTION("Can't initialize game", exception);
+	}
 }
 
 void Game::Tick(int)

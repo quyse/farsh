@@ -26,8 +26,8 @@ Painter::ShadowLight::ShadowLight(ptr<UniformGroup> ug, int samplerNumber) :
 
 // Painter::LightVariant
 
-Painter::LightVariant::LightVariant() :
-	ugLight(NEW(UniformGroup(1))),
+Painter::LightVariant::LightVariant(ptr<Device> device) :
+	ugLight(NEW(UniformGroup(device, 1))),
 	uAmbientColor(ugLight->AddUniform<float3>())
 {}
 
@@ -91,12 +91,12 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	aBoneNumbers(3),
 	aBoneWeights(4),
 
-	ugCamera(NEW(UniformGroup(0))),
+	ugCamera(NEW(UniformGroup(device, 0))),
 	uViewProj(ugCamera->AddUniform<float4x4>()),
 	uInvViewProj(ugCamera->AddUniform<float4x4>()),
 	uCameraPosition(ugCamera->AddUniform<float3>()),
 
-	ugMaterial(NEW(UniformGroup(2))),
+	ugMaterial(NEW(UniformGroup(device, 2))),
 	uDiffuse(ugMaterial->AddUniform<float4>()),
 	uSpecular(ugMaterial->AddUniform<float4>()),
 	uNormalCoordTransform(ugMaterial->AddUniform<float4>()),
@@ -104,64 +104,52 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	uSpecularSampler(1),
 	uNormalSampler(2),
 
-	ugModel(NEW(UniformGroup(3))),
+	ugModel(NEW(UniformGroup(device, 3))),
 	uWorld(ugModel->AddUniform<float4x4>()),
 
-	ugInstancedModel(NEW(UniformGroup(3))),
+	ugInstancedModel(NEW(UniformGroup(device, 3))),
 	uWorlds(ugInstancedModel->AddUniformArray<float4x4>(maxInstancesCount)),
 
-	ugSkinnedModel(NEW(UniformGroup(3))),
+	ugSkinnedModel(NEW(UniformGroup(device, 3))),
 	uBoneOrientations(ugSkinnedModel->AddUniformArray<float4>(maxBonesCount)),
 	uBoneOffsets(ugSkinnedModel->AddUniformArray<float4>(maxBonesCount)),
 
-	ugDecal(NEW(UniformGroup(3))),
+	ugDecal(NEW(UniformGroup(device, 3))),
 	uDecalTransforms(ugDecal->AddUniformArray<float4x4>(maxDecalsCount)),
 	uDecalInvTransforms(ugDecal->AddUniformArray<float4x4>(maxDecalsCount)),
 	uScreenNormalSampler(3),
 	uScreenDepthSampler(4),
 
-	ugShadowBlur(NEW(UniformGroup(0))),
+	ugShadowBlur(NEW(UniformGroup(device, 0))),
 	uShadowBlurDirection(ugShadowBlur->AddUniform<float2>()),
 	uShadowBlurSourceSampler(0),
 
-	ugDownsample(NEW(UniformGroup(0))),
+	ugDownsample(NEW(UniformGroup(device, 0))),
 	uDownsampleOffsets(ugDownsample->AddUniform<float4>()),
 	uDownsampleBlend(ugDownsample->AddUniform<float>()),
 	uDownsampleSourceSampler(0),
 	uDownsampleLuminanceSourceSampler(0),
 
-	ugBloom(NEW(UniformGroup(0))),
+	ugBloom(NEW(UniformGroup(device, 0))),
 	uBloomLimit(ugBloom->AddUniform<float>()),
 	uBloomSourceSampler(0),
 
-	ugTone(NEW(UniformGroup(0))),
+	ugTone(NEW(UniformGroup(device, 0))),
 	uToneLuminanceKey(ugTone->AddUniform<float>()),
 	uToneMaxLuminance(ugTone->AddUniform<float>()),
 	uToneBloomSampler(0),
 	uToneScreenSampler(1),
 	uToneAverageSampler(2),
 
-	ubCamera(device->CreateUniformBuffer(ugCamera->GetSize())),
-	ubMaterial(device->CreateUniformBuffer(ugMaterial->GetSize())),
-	ubModel(device->CreateUniformBuffer(ugModel->GetSize())),
-	ubInstancedModel(device->CreateUniformBuffer(ugInstancedModel->GetSize())),
-	ubSkinnedModel(device->CreateUniformBuffer(ugSkinnedModel->GetSize())),
-	ubDecal(device->CreateUniformBuffer(ugDecal->GetSize())),
-	ubShadowBlur(device->CreateUniformBuffer(ugShadowBlur->GetSize())),
-	ubDownsample(device->CreateUniformBuffer(ugDownsample->GetSize())),
-	ubBloom(device->CreateUniformBuffer(ugBloom->GetSize())),
-	ubTone(device->CreateUniformBuffer(ugTone->GetSize())),
+	iNormal(0),
+	iTexcoord(1),
+	iWorldPosition(2),
+	iDepth(3),
+	iScreen(4),
+	iInstance(5),
 
-	iPosition(Semantics::VertexPosition),
-	iNormal(Semantics::Custom(0)),
-	iTexcoord(Semantics::Custom(1)),
-	iWorldPosition(Semantics::Custom(2)),
-	iDepth(Semantics::Custom(3)),
-	iScreen(Semantics::Custom(4)),
-	iInstance(Semantics::Custom(5)),
-
-	fTarget(Semantics::TargetColor0),
-	fNormal(Semantic(Semantics::TargetColor0 + 1))
+	fTarget(0),
+	fNormal(1)
 
 {
 	// финализировать uniform группы
@@ -325,11 +313,10 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	csShadow.viewportWidth = shadowMapSize;
 	csShadow.viewportHeight = shadowMapSize;
 	csShadow.depthStencilBuffer = dsbShadow;
-	csShadow.uniformBuffers[ugCamera->GetSlot()] = ubCamera;
+	ugCamera->Apply(csShadow);
 
 	// пиксельный шейдер для теней
 	csShadow.pixelShader = shaderCache->GetPixelShader(Expression((
-		iPosition,
 		iDepth,
 		fTarget = newfloat4(iDepth, 0, 0, 0)
 		)));
@@ -346,14 +333,13 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		Attribute<float4> aPosition(0);
 		Attribute<float2> aTexcoord(1);
 		// промежуточные
-		Interpolant<float4> iPosition(Semantics::VertexPosition);
-		Interpolant<float2> iTexcoord(Semantics::Custom(0));
+		Interpolant<float2> iTexcoord(0);
 		// результат
-		Fragment<float4> fTarget(Semantics::TargetColor0);
+		Fragment<float4> fTarget(0);
 
 		// вершинный шейдер - общий для всех постпроцессингов
 		ptr<VertexShader> vertexShader = shaderCache->GetVertexShader((
-			iPosition = aPosition,
+			setPosition(aPosition),
 			iTexcoord = aTexcoord
 			));
 
@@ -364,7 +350,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		{
 			Temp<float> sum;
 			Expression shader = (
-				iPosition,
 				iTexcoord,
 				sum = 0
 				);
@@ -383,7 +368,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		ptr<PixelShader> psDownsample;
 		{
 			Expression shader = (
-				iPosition,
 				iTexcoord,
 				fTarget = newfloat4((
 					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xz"]) +
@@ -399,7 +383,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		{
 			Temp<float3> luminanceCoef;
 			Expression shader = (
-				iPosition,
 				iTexcoord,
 				luminanceCoef = newfloat3(0.2126f, 0.7152f, 0.0722f),
 				fTarget = newfloat4((
@@ -415,7 +398,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		ptr<PixelShader> psDownsampleLuminance;
 		{
 			Expression shader = (
-				iPosition,
 				iTexcoord,
 				fTarget = newfloat4((
 					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xz"]) +
@@ -436,7 +418,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		{
 			Temp<float3> sum;
 			Expression shader = (
-				iPosition,
 				iTexcoord,
 				sum = newfloat3(0, 0, 0)
 				);
@@ -456,7 +437,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		{
 			Temp<float3> sum;
 			Expression shader = (
-				iPosition,
 				iTexcoord,
 				sum = newfloat3(0, 0, 0)
 				);
@@ -476,7 +456,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		{
 			Temp<float3> sum;
 			Expression shader = (
-				iPosition,
 				iTexcoord,
 				sum = newfloat3(0, 0, 0)
 				);
@@ -497,7 +476,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			Temp<float3> color;
 			Temp<float> luminance, relativeLuminance, intensity;
 			Expression shader = (
-				iPosition,
 				iTexcoord,
 				color = uToneScreenSampler.Sample(iTexcoord) + uToneBloomSampler.Sample(iTexcoord),
 				luminance = dot(color, newfloat3(0.2126f, 0.7152f, 0.0722f)),
@@ -505,9 +483,9 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 				intensity = relativeLuminance * (Value<float>(1) + relativeLuminance / uToneMaxLuminance) / (Value<float>(1) + relativeLuminance),
 				color = saturate(color * (intensity / luminance)),
 				// гамма-коррекция
-				color = pow(color, 0.45f),
+				color = pow(color, newfloat3(0.45f, 0.45f, 0.45f)),
 				fTarget = newfloat4(color, 1.0f)
-				);
+			);
 			psTone = shaderCache->GetPixelShader(shader);
 		}
 
@@ -537,7 +515,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		csShadowBlur.viewportHeight = shadowMapSize;
 		uShadowBlurSourceSampler.SetSamplerState(pointBorderSampler);
 		uShadowBlurSourceSampler.Apply(csShadowBlur);
-		csShadowBlur.uniformBuffers[ugShadowBlur->GetSlot()] = ubShadowBlur;
+		ugShadowBlur->Apply(csShadowBlur);
 		csShadowBlur.pixelShader = psShadowBlur;
 
 		// проходы даунсемплинга
@@ -549,7 +527,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			cs.renderBuffers[0] = rbDownsamples[i];
 			cs.viewportWidth = 1 << (downsamplingPassesCount - 1 - i);
 			cs.viewportHeight = 1 << (downsamplingPassesCount - 1 - i);
-			cs.uniformBuffers[ugDownsample->GetSlot()] = ubDownsample;
+			ugDownsample->Apply(cs);
 			if(i <= downsamplingStepForBloom + 1)
 			{
 				uDownsampleSourceSampler.SetTexture(i == 0 ? rbScreen->GetTexture() : rbDownsamples[i - 1]->GetTexture());
@@ -584,7 +562,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		uBloomSourceSampler.SetTexture(rbDownsamples[downsamplingStepForBloom]->GetTexture());
 		uBloomSourceSampler.SetSamplerState(linearSampler);
 		uBloomSourceSampler.Apply(csBloomLimit);
-		csBloomLimit.uniformBuffers[ugBloom->GetSlot()] = ubBloom;
+		ugBloom->Apply(csBloomLimit);
 		csBloomLimit.pixelShader = psBloomLimit;
 		// первый проход bloom (из rbBloom1 в rbBloom2)
 		csBloom1.viewportWidth = bloomMapSize;
@@ -593,7 +571,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		uBloomSourceSampler.SetTexture(rbBloom1->GetTexture());
 		uBloomSourceSampler.SetSamplerState(linearSampler);
 		uBloomSourceSampler.Apply(csBloom1);
-		csBloom1.uniformBuffers[ugBloom->GetSlot()] = ubBloom;
+		ugBloom->Apply(csBloom1);
 		csBloom1.pixelShader = psBloom1;
 		// второй проход bloom (из rbBloom2 в rbBloom1)
 		csBloom2.viewportWidth = bloomMapSize;
@@ -602,7 +580,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		uBloomSourceSampler.SetTexture(rbBloom2->GetTexture());
 		uBloomSourceSampler.SetSamplerState(linearSampler);
 		uBloomSourceSampler.Apply(csBloom2);
-		csBloom2.uniformBuffers[ugBloom->GetSlot()] = ubBloom;
+		ugBloom->Apply(csBloom2);
 		csBloom2.pixelShader = psBloom2;
 		// tone mapping
 		csTone.viewportWidth = screenWidth;
@@ -617,7 +595,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		uToneAverageSampler.SetTexture(rbDownsamples[downsamplingPassesCount - 1]->GetTexture());
 		uToneAverageSampler.SetSamplerState(pointSampler);
 		uToneAverageSampler.Apply(csTone);
-		csTone.uniformBuffers[ugTone->GetSlot()] = ubTone;
+		ugTone->Apply(csTone);
 		csTone.pixelShader = psTone;
 	}
 }
@@ -635,7 +613,7 @@ Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)
 	int basicLightsCount = key.basicLightsCount;
 	int shadowLightsCount = key.shadowLightsCount;
 
-	LightVariant lightVariant;
+	LightVariant lightVariant(device);
 
 	// инициализировать uniform'ы
 	for(int i = 0; i < basicLightsCount; ++i)
@@ -646,9 +624,6 @@ Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)
 
 	lightVariant.ugLight->Finalize();
 
-	// создать uniform-буфер для параметров
-	lightVariant.ubLight = device->CreateUniformBuffer(lightVariant.ugLight->GetSize());
-
 	// инициализировать состояние контекста
 	ContextState& cs = lightVariant.csOpaque;
 	cs.viewportWidth = screenWidth;
@@ -656,9 +631,9 @@ Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)
 	cs.renderBuffers[0] = rbScreen;
 	cs.renderBuffers[1] = rbScreenNormal;
 	cs.depthStencilBuffer = dsbDepth;
-	cs.uniformBuffers[ugCamera->GetSlot()] = ubCamera;
-	cs.uniformBuffers[lightVariant.ugLight->GetSlot()] = lightVariant.ubLight;
-	cs.uniformBuffers[ugMaterial->GetSlot()] = ubMaterial;
+	ugCamera->Apply(cs);
+	lightVariant.ugLight->Apply(cs);
+	ugMaterial->Apply(cs);
 
 	// применить семплеры карт теней
 	for(int i = 0; i < shadowLightsCount; ++i)
@@ -727,7 +702,7 @@ Expression Painter::GetWorldPositionAndNormal(const VertexShaderKey& key)
 		Expression e((
 			key.instanced ?
 			(
-				tmpInstance = Value<uint>(NEW(SpecialNode(DataTypes::UInt, Semantics::Instance))),
+				tmpInstance = getInstanceID(),
 				iInstance = tmpInstance,
 				(
 					key.decal ?
@@ -855,7 +830,7 @@ Expression Painter::ApplyMaterialLighting(Value<float3> lightPosition, Value<flo
 		tmpSpecularPart = tmpDiffuse["xyz"]
 			* pow(max(dot(tmpLightViewBissect, tmpNormal), 0), tmpSpecularExponent)
 			//* dot(tmpNormal, tmpToLight) // хз, может не нужно оно?
-			* (tmpSpecularExponent + Value<float>(1)) / (max(pow(dot(tmpToLight, tmpLightViewBissect), 3), 0.1f) * Value<float>(8)),
+			* (tmpSpecularExponent + Value<float>(1)) / (max(pow(dot(tmpToLight, tmpLightViewBissect), 3.0f), 0.1f) * Value<float>(8)),
 		// результирующая добавка к цвету
 		tmpColor = tmpColor + lightColor * (tmpDiffusePart + tmpSpecularPart);
 }
@@ -876,7 +851,7 @@ ptr<VertexShader> Painter::GetVertexShader(const VertexShaderKey& key)
 	Expression e((
 		GetWorldPositionAndNormal(key),
 		p = mul(tmpVertexPosition, uViewProj),
-		iPosition = p,
+		setPosition(p),
 		iNormal = tmpVertexNormal,
 		iTexcoord = aTexcoord,
 		iWorldPosition = tmpVertexPosition["xyz"]
@@ -906,10 +881,12 @@ ptr<VertexShader> Painter::GetVertexShadowShader(const VertexShaderKey& key)
 
 	// делаем новый
 
+	Temp<float4> tmpPosition;
 	ptr<VertexShader> vertexShader = shaderCache->GetVertexShader(Expression((
 		GetWorldPositionAndNormal(key),
-		iPosition = mul(tmpVertexPosition, uViewProj),
-		iDepth = iPosition["z"]
+		tmpPosition = mul(tmpVertexPosition, uViewProj),
+		setPosition(tmpPosition),
+		iDepth = tmpPosition["z"]
 		)));
 
 	// добавить и вернуть
@@ -936,7 +913,6 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 
 	// пиксельный шейдер
 	Expression shader = (
-		iPosition,
 		iNormal,
 		iTexcoord,
 		iWorldPosition,
@@ -1086,7 +1062,7 @@ void Painter::Draw()
 
 			// указать трансформацию
 			uViewProj.SetValue(lights[i].transform);
-			context->SetUniformBufferData(ubCamera, ugCamera->GetData(), ugCamera->GetSize());
+			ugCamera->Upload(context);
 
 			// очистить карту теней
 			context->ClearDepthStencilBuffer(dsbShadow, 1.0f);
@@ -1113,7 +1089,7 @@ void Painter::Draw()
 			// установить вершинный шейдер
 			cs.vertexShader = GetVertexShadowShader(VertexShaderKey(true, false, false));
 			// установить константный буфер
-			cs.uniformBuffers[ugInstancedModel->GetSlot()] = ubInstancedModel;
+			ugInstancedModel->Apply(cs);
 
 			// нарисовать инстансингом с группировкой по геометрии
 			for(size_t j = 0; j < models.size(); )
@@ -1133,7 +1109,7 @@ void Painter::Draw()
 				for(int k = 0; k < batchCount; ++k)
 					uWorlds.SetValue(k, models[j + k].worldTransform);
 				// и залить в GPU
-				context->SetUniformBufferData(ubInstancedModel, ugInstancedModel->GetData(), ugInstancedModel->GetSize());
+				ugInstancedModel->Upload(context);
 
 				// нарисовать
 				context->DrawInstanced(batchCount);
@@ -1149,7 +1125,7 @@ void Painter::Draw()
 			// установить вершинный шейдер
 			cs.vertexShader = GetVertexShadowShader(VertexShaderKey(false, true, false));
 			// установить константный буфер
-			cs.uniformBuffers[ugSkinnedModel->GetSlot()] = ubSkinnedModel;
+			ugSkinnedModel->Apply(cs);
 
 			// нарисовать с группировкой по геометрии
 			ptr<Geometry> lastGeometry;
@@ -1178,7 +1154,7 @@ void Painter::Draw()
 					uBoneOffsets.SetValue(k, float4(offsets[k].x, offsets[k].y, offsets[k].z, 0));
 				}
 				// и залить в GPU
-				context->SetUniformBufferData(ubSkinnedModel, ugSkinnedModel->GetData(), ugSkinnedModel->GetSize());
+				ugSkinnedModel->Upload(context);
 
 				// нарисовать
 				context->Draw();
@@ -1191,7 +1167,7 @@ void Painter::Draw()
 			uShadowBlurSourceSampler.SetTexture(rb->GetTexture());
 			uShadowBlurSourceSampler.Apply(cs);
 			uShadowBlurDirection.SetValue(float2(1.0f / shadowMapSize, 0));
-			context->SetUniformBufferData(ubShadowBlur, ugShadowBlur->GetData(), ugShadowBlur->GetSize());
+			ugShadowBlur->Upload(context);
 			context->ClearRenderBuffer(rbShadowBlur, zeroColor);
 			context->Draw();
 			// второй проход
@@ -1200,7 +1176,7 @@ void Painter::Draw()
 			uShadowBlurSourceSampler.SetTexture(rbShadowBlur->GetTexture());
 			uShadowBlurSourceSampler.Apply(cs);
 			uShadowBlurDirection.SetValue(float2(0, 1.0f / shadowMapSize));
-			context->SetUniformBufferData(ubShadowBlur, ugShadowBlur->GetData(), ugShadowBlur->GetSize());
+			ugShadowBlur->Upload(context);
 			context->ClearRenderBuffer(rb, zeroColor);
 			context->Draw();
 
@@ -1220,7 +1196,7 @@ void Painter::Draw()
 	uViewProj.SetValue(cameraViewProj);
 	uInvViewProj.SetValue(cameraInvViewProj);
 	uCameraPosition.SetValue(cameraPosition);
-	context->SetUniformBufferData(ubCamera, ugCamera->GetData(), ugCamera->GetSize());
+	ugCamera->Upload(context);
 
 	// установить параметры источников света
 	LightVariant& lightVariant = GetLightVariant(LightVariantKey(basicLightsCount, shadowLightsCount));
@@ -1242,7 +1218,7 @@ void Painter::Draw()
 			basicLight.uLightPosition.SetValue(lights[i].position);
 			basicLight.uLightColor.SetValue(lights[i].color);
 		}
-	context->SetUniformBufferData(lightVariant.ubLight, lightVariant.ugLight->GetData(), lightVariant.ugLight->GetSize());
+	lightVariant.ugLight->Upload(context);
 
 	// сортировщик моделей по материалу, а затем по геометрии
 	struct Sorter
@@ -1269,7 +1245,7 @@ void Painter::Draw()
 	// установить вершинный шейдер
 	cs.vertexShader = GetVertexShader(VertexShaderKey(true, false, false));
 	// установить константный буфер
-	cs.uniformBuffers[ugInstancedModel->GetSlot()] = ubInstancedModel;
+	ugInstancedModel->Apply(cs);
 
 	// нарисовать
 	for(size_t i = 0; i < models.size(); )
@@ -1292,7 +1268,7 @@ void Painter::Draw()
 		uDiffuse.SetValue(material->diffuse);
 		uSpecular.SetValue(material->specular);
 		uNormalCoordTransform.SetValue(material->normalCoordTransform);
-		context->SetUniformBufferData(ubMaterial, ugMaterial->GetData(), ugMaterial->GetSize());
+		ugMaterial->Upload(context);
 
 		// рисуем инстансингом обычные модели
 		// установить пиксельный шейдер
@@ -1316,7 +1292,7 @@ void Painter::Draw()
 			// установить uniform'ы
 			for(int k = 0; k < geometryBatchCount; ++k)
 				uWorlds.SetValue(k, models[i + j + k].worldTransform);
-			context->SetUniformBufferData(ubInstancedModel, ugInstancedModel->GetData(), ugInstancedModel->GetSize());
+			ugInstancedModel->Upload(context);
 
 			// нарисовать
 			context->DrawInstanced(geometryBatchCount);
@@ -1334,7 +1310,7 @@ void Painter::Draw()
 	// установить вершинный шейдер
 	cs.vertexShader = GetVertexShader(VertexShaderKey(false, true, false));
 	// установить константный буфер
-	cs.uniformBuffers[ugSkinnedModel->GetSlot()] = ubSkinnedModel;
+	ugSkinnedModel->Apply(cs);
 
 	// нарисовать
 	ptr<Material> lastMaterial;
@@ -1356,7 +1332,7 @@ void Painter::Draw()
 			uDiffuse.SetValue(material->diffuse);
 			uSpecular.SetValue(material->specular);
 			uNormalCoordTransform.SetValue(material->normalCoordTransform);
-			context->SetUniformBufferData(ubMaterial, ugMaterial->GetData(), ugMaterial->GetSize());
+			ugMaterial->Upload(context);
 
 			lastMaterial = material;
 		}
@@ -1387,7 +1363,7 @@ void Painter::Draw()
 			uBoneOrientations.SetValue(k, orientations[k]);
 			uBoneOffsets.SetValue(k, float4(offsets[k].x, offsets[k].y, offsets[k].z, 0));
 		}
-		context->SetUniformBufferData(ubSkinnedModel, ugSkinnedModel->GetData(), ugSkinnedModel->GetSize());
+		ugSkinnedModel->Upload(context);
 
 		// нарисовать
 		context->Draw();
@@ -1400,7 +1376,7 @@ void Painter::Draw()
 	// установить вершинный шейдер
 	cs.vertexShader = GetVertexShader(VertexShaderKey(true, false, true));
 	// установить константный буфер
-	cs.uniformBuffers[ugDecal->GetSlot()] = ubDecal;
+	ugDecal->Apply(cs);
 	// установить геометрию
 	cs.vertexBuffer = geometryDecal->GetVertexBuffer();
 	cs.indexBuffer = geometryDecal->GetIndexBuffer();
@@ -1435,7 +1411,7 @@ void Painter::Draw()
 		uDiffuse.SetValue(material->diffuse);
 		uSpecular.SetValue(material->specular);
 		uNormalCoordTransform.SetValue(material->normalCoordTransform);
-		context->SetUniformBufferData(ubMaterial, ugMaterial->GetData(), ugMaterial->GetSize());
+		ugMaterial->Upload(context);
 
 		// рисуем инстансингом декали
 		// установить пиксельный шейдер
@@ -1447,7 +1423,7 @@ void Painter::Draw()
 			uDecalTransforms.SetValue(j, decals[i + j].transform);
 			uDecalInvTransforms.SetValue(j, decals[i + j].invTransform);
 		}
-		context->SetUniformBufferData(ubDecal, ugDecal->GetData(), ugDecal->GetSize());
+		ugDecal->Upload(context);
 
 		// нарисовать
 		context->DrawInstanced(materialBatchCount);
@@ -1471,7 +1447,7 @@ void Painter::Draw()
 		float halfSourcePixelWidth = 0.5f / (i == 0 ? screenWidth : (1 << (downsamplingPassesCount - i)));
 		float halfSourcePixelHeight = 0.5f / (i == 0 ? screenHeight : (1 << (downsamplingPassesCount - i)));
 		uDownsampleOffsets.SetValue(float4(-halfSourcePixelWidth, halfSourcePixelWidth, -halfSourcePixelHeight, halfSourcePixelHeight));
-		context->SetUniformBufferData(ubDownsample, ugDownsample->GetData(), ugDownsample->GetSize());
+		ugDownsample->Upload(context);
 		cs = csDownsamples[i];
 		if(veryFirstDownsampling || i < downsamplingPassesCount - 1)
 			context->ClearRenderBuffer(rbDownsamples[i], clearColor);
@@ -1481,7 +1457,7 @@ void Painter::Draw()
 
 	// bloom
 	uBloomLimit.SetValue(bloomLimit);
-	context->SetUniformBufferData(ubBloom, ugBloom->GetData(), ugBloom->GetSize());
+	ugBloom->Upload(context);
 
 	const int bloomPassesCount = 5;
 
@@ -1513,7 +1489,7 @@ void Painter::Draw()
 	// tone mapping
 	uToneLuminanceKey.SetValue(toneLuminanceKey);
 	uToneMaxLuminance.SetValue(toneMaxLuminance);
-	context->SetUniformBufferData(ubTone, ugTone->GetData(), ugTone->GetSize());
+	ugTone->Upload(context);
 	cs = csTone;
 	context->ClearRenderBuffer(rbBack, clearColor);
 	context->Draw();
