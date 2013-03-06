@@ -199,12 +199,12 @@ void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& ori
 			if(!f[parent])
 				THROW_PRIMARY_EXCEPTION("Parent is not calculated");
 #endif
-			animationWorldOrientations[boneNumber] = animationRelativeOrientations[boneNumber] * animationWorldOrientations[parent];
+			animationWorldOrientations[boneNumber] = animationWorldOrientations[parent] * animationRelativeOrientations[boneNumber];
 			animationWorldPositions[boneNumber] = animationWorldPositions[parent] + bone.originalRelativePosition * animationWorldOrientations[parent];
 		}
 		else
 		{
-			animationWorldOrientations[boneNumber] = animationRelativeOrientations[boneNumber] * originOrientation;
+			animationWorldOrientations[boneNumber] = originOrientation * animationRelativeOrientations[boneNumber];
 			animationWorldPositions[boneNumber] = originOffset + rootBoneOffset * originOrientation;
 		}
 #ifdef _DEBUG

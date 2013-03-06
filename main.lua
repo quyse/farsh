@@ -12,7 +12,7 @@ game:SetDecalMaterial(matBlood)
 -- материал кубика
 local matCube = Farsh.Material()
 t.matCube = matCube
-matCube:SetDiffuseTexture(game:LoadTexture("diffuse.jpg"))
+matCube:SetDiffuseTexture(game:LoadTexture("blood.png"))
 --matCube:SetSpecularTexture(game:LoadTexture("specular.jpg"))
 matCube:SetSpecular(0.2, 0, 0, 0)
 

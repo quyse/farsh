@@ -347,7 +347,17 @@ void Game::Tick(int)
 		heroAnimationTime += frameTime;
 	while(heroAnimationTime >= hzAFBattle2)
 		heroAnimationTime += hzAFBattle1 - hzAFBattle2;
-	heroOrientation = quaternion();
+
+	// TEST: set time to zero
+	//heroAnimationTime = 0;
+
+	// TEST: rotate hero constantly
+#if 1
+	static float heroTime = 0;
+	heroTime += frameTime;
+	heroOrientation = quaternion(float3(0, 0, 1), heroTime);
+#endif
+
 	heroAnimationFrame->Setup(heroPosition, heroOrientation, heroAnimationTime);
 	//float3 shouldBeHeroPosition = heroPosition - (heroAnimationFrame->animationWorldPositions[0] - heroPosition) * float3(1, 1, 0);
 	//heroAnimationFrame->Setup(shouldBeHeroPosition, heroOrientation, heroAnimationTime);
