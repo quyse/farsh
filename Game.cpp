@@ -135,6 +135,8 @@ void Game::Run()
 		try
 		{
 			window->Run(Win32Window::ActiveHandler::CreateDelegate(MakePointer(this), &Game::Tick));
+
+			scriptState = 0;
 		}
 		catch(Exception* exception)
 		{
@@ -315,6 +317,9 @@ void Game::Tick(int)
 	alpha += frameTime;
 
 	float4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, float3(0, 0, 1));
+#ifdef FARSH_USE_OPENGL
+	viewMatrix = viewMatrix * CreateScalingMatrix(1, -1, 1);
+#endif
 	float4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 0.1f, 100.0f);
 
 	// зарегистрировать все объекты
@@ -431,18 +436,18 @@ ptr<Texture> Game::LoadTexture(const String& fileName)
 
 ptr<Geometry> Game::LoadGeometry(const String& fileName)
 {
-	return NEW(Geometry(
+	return device->CreateGeometry(
 		device->CreateVertexBuffer(fileSystem->LoadFile(fileName + ".vertices"), layout),
 		device->CreateIndexBuffer(fileSystem->LoadFile(fileName + ".indices"), sizeof(short))
-	));
+	);
 }
 
 ptr<Geometry> Game::LoadSkinnedGeometry(const String& fileName)
 {
-	return NEW(Geometry(
+	return device->CreateGeometry(
 		device->CreateVertexBuffer(fileSystem->LoadFile(fileName + ".vertices"), skinnedLayout),
 		device->CreateIndexBuffer(fileSystem->LoadFile(fileName + ".indices"), sizeof(short))
-	));
+	);
 }
 
 ptr<Skeleton> Game::LoadSkeleton(const String& fileName)

@@ -266,10 +266,10 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		layoutElements.push_back(Layout::Element(DataTypes::Float2, 28, 2));
 		ptr<Layout> layout = NEW(Layout(layoutElements, sizeof(Vertex)));
 
-		geometryDecal = NEW(Geometry(
+		geometryDecal = device->CreateGeometry(
 			device->CreateVertexBuffer(MemoryFile::CreateViaCopy(vertices, sizeof(vertices)), layout),
 			device->CreateIndexBuffer(MemoryFile::CreateViaCopy(indices, sizeof(indices)), sizeof(unsigned short))
-		));
+		);
 	}
 
 	// состояние смешивания для декалей
@@ -277,8 +277,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	bsDecal->SetColor(BlendState::colorSourceSrcAlpha, BlendState::colorSourceInvSrcAlpha, BlendState::operationAdd);
 
 	// геометрия полноэкранного прохода
-	ptr<VertexBuffer> quadVertexBuffer;
-	ptr<IndexBuffer> quadIndexBuffer;
+	ptr<Geometry> quadGeometry;
 	{
 		// вершина для фильтра
 		struct Vertex
@@ -303,8 +302,10 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		layoutElements.push_back(Layout::Element(DataTypes::Float2, 16, 1));
 		ptr<Layout> layout = NEW(Layout(layoutElements, sizeof(Vertex)));
 
-		quadVertexBuffer = device->CreateVertexBuffer(MemoryFile::CreateViaCopy(vertices, sizeof(vertices)), layout);
-		quadIndexBuffer = device->CreateIndexBuffer(MemoryFile::CreateViaCopy(indices, sizeof(indices)), sizeof(unsigned short));
+		quadGeometry = device->CreateGeometry(
+			device->CreateVertexBuffer(MemoryFile::CreateViaCopy(vertices, sizeof(vertices)), layout),
+			device->CreateIndexBuffer(MemoryFile::CreateViaCopy(indices, sizeof(indices)), sizeof(unsigned short))
+		);
 	}
 
 	//** инициализировать состояния конвейера
@@ -326,8 +327,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		ContextState csFilter;
 		csFilter.viewportWidth = screenWidth;
 		csFilter.viewportHeight = screenHeight;
-		csFilter.vertexBuffer = quadVertexBuffer;
-		csFilter.indexBuffer = quadIndexBuffer;
+		csFilter.geometry = quadGeometry;
 
 		// атрибуты
 		Attribute<float4> aPosition(0);
@@ -940,11 +940,11 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 		Temp<float> lighted;
 		shader.Append((
 			shadowCoords = mul(tmpWorldPosition, shadowLight.uLightTransform),
-			lighted = shadowCoords["z"] > Value<float>(0),
+			lighted = (shadowCoords["z"] > Value<float>(0)).Cast<float>(),
 			linearShadowZ = shadowCoords["z"],
 			//lighted = lighted * (linearShadowZ > Value<float>(0)),
 			shadowCoords = shadowCoords / shadowCoords["w"],
-			lighted = lighted * (abs(shadowCoords["x"]) < Value<float>(1)) * (abs(shadowCoords["y"]) < Value<float>(1)),
+			lighted = lighted * (abs(shadowCoords["x"]) < Value<float>(1)).Cast<float>() * (abs(shadowCoords["y"]) < Value<float>(1)).Cast<float>(),
 			shadowCoordsXY = newfloat2(
 				(shadowCoords["x"] + Value<float>(1.0f)) * Value<float>(0.5f),
 				(Value<float>(1.0f) - shadowCoords["y"]) * Value<float>(0.5f)),
@@ -1103,8 +1103,7 @@ void Painter::Draw()
 					++batchCount);
 
 				// установить геометрию
-				cs.vertexBuffer = models[j].geometry->GetVertexBuffer();
-				cs.indexBuffer = models[j].geometry->GetIndexBuffer();
+				cs.geometry = models[j].geometry;
 				// установить uniform'ы
 				for(int k = 0; k < batchCount; ++k)
 					uWorlds.SetValue(k, models[j + k].worldTransform);
@@ -1135,8 +1134,7 @@ void Painter::Draw()
 				// установить геометрию, если отличается
 				if(lastGeometry != skinnedModel.shadowGeometry)
 				{
-					cs.vertexBuffer = skinnedModel.shadowGeometry->GetVertexBuffer();
-					cs.indexBuffer = skinnedModel.shadowGeometry->GetIndexBuffer();
+					cs.geometry = skinnedModel.shadowGeometry;
 					lastGeometry = skinnedModel.shadowGeometry;
 				}
 				// установить uniform'ы костей
@@ -1286,8 +1284,7 @@ void Painter::Draw()
 				++geometryBatchCount);
 
 			// установить геометрию
-			cs.vertexBuffer = geometry->GetVertexBuffer();
-			cs.indexBuffer = geometry->GetIndexBuffer();
+			cs.geometry = geometry;
 
 			// установить uniform'ы
 			for(int k = 0; k < geometryBatchCount; ++k)
@@ -1344,8 +1341,7 @@ void Painter::Draw()
 		ptr<Geometry> geometry = skinnedModel.geometry;
 		if(lastGeometry != geometry)
 		{
-			cs.vertexBuffer = geometry->GetVertexBuffer();
-			cs.indexBuffer = geometry->GetIndexBuffer();
+			cs.geometry = geometry;
 			lastGeometry = geometry;
 		}
 
@@ -1378,8 +1374,7 @@ void Painter::Draw()
 	// установить константный буфер
 	ugDecal->Apply(cs);
 	// установить геометрию
-	cs.vertexBuffer = geometryDecal->GetVertexBuffer();
-	cs.indexBuffer = geometryDecal->GetIndexBuffer();
+	cs.geometry = geometryDecal;
 	// состояние смешивания
 	cs.blendState = bsDecal;
 	// убрать карту нормалей и буфер глубины
