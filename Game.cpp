@@ -312,7 +312,7 @@ void Game::Tick(int)
 
 	//std::cout << "cameraPosition = " << cameraPosition << '\n';
 
-	//context->Reset();
+	context->Reset();
 
 	alpha += frameTime;
 

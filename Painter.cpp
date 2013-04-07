@@ -111,8 +111,8 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	uWorlds(ugInstancedModel->AddUniformArray<float4x4>(maxInstancesCount)),
 
 	ugSkinnedModel(NEW(UniformGroup(3))),
-	uBoneOrientations(ugSkinnedModel->AddUniformArray<float4>(maxBonesCount)),
 	uBoneOffsets(ugSkinnedModel->AddUniformArray<float4>(maxBonesCount)),
+	uBoneOrientations(ugSkinnedModel->AddUniformArray<float4>(maxBonesCount)),
 
 	ugDecal(NEW(UniformGroup(3))),
 	uDecalTransforms(ugDecal->AddUniformArray<float4x4>(maxDecalsCount)),
@@ -294,7 +294,11 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			{ float4(1, 1, 0, 1), float2(1, 0) },
 			{ float4(-1, 1, 0, 1), float2(0, 0) }
 		};
+#ifdef FARSH_USE_OPENGL
+		unsigned short indices[] = { 0, 1, 2, 0, 2, 3 };
+#else
 		unsigned short indices[] = { 0, 2, 1, 0, 3, 2 };
+#endif
 
 		// разметка геометрии
 		std::vector<Layout::Element> layoutElements;
@@ -328,6 +332,8 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		csFilter.viewportWidth = screenWidth;
 		csFilter.viewportHeight = screenHeight;
 		csFilter.geometry = quadGeometry;
+		csFilter.depthTestFunc = ContextState::depthTestFuncAlways;
+		csFilter.depthWrite = false;
 
 		// атрибуты
 		Attribute<float4> aPosition(0);
@@ -631,6 +637,8 @@ Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)
 	cs.renderBuffers[0] = rbScreen;
 	cs.renderBuffers[1] = rbScreenNormal;
 	cs.depthStencilBuffer = dsbDepth;
+	cs.depthTestFunc = ContextState::depthTestFuncLess;
+	cs.depthWrite = true;
 	ugCamera->Apply(cs);
 	lightVariant.ugLight->Apply(cs);
 	ugMaterial->Apply(cs);
@@ -1182,7 +1190,7 @@ void Painter::Draw()
 		}
 
 	// очистить рендербуферы
-	float color[4] = { 0, 0, 0, 0 };
+	float color[4] = { 0, 0, 0, 1 };
 	float colorDepth[4] = { 1, 1, 1, 1 };
 	context->ClearRenderBuffer(rbScreen, color);
 	context->ClearRenderBuffer(rbScreenNormal, color);
@@ -1486,6 +1494,6 @@ void Painter::Draw()
 	uToneMaxLuminance.SetValue(toneMaxLuminance);
 	ugTone->Upload(context);
 	cs = csTone;
-	context->ClearRenderBuffer(rbBack, clearColor);
+	context->ClearRenderBuffer(rbBack, zeroColor);
 	context->Draw();
 }
