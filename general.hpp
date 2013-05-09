@@ -17,12 +17,6 @@ using namespace Inanity;
 using namespace Inanity::Graphics;
 using namespace Inanity::Graphics::Shaders;
 
-#if defined(___INANITY_WINDOWS) && 0
-#define FARSH_USE_DIRECTX
-#else
-#define FARSH_USE_OPENGL
-#endif
-
 #ifdef FARSH_USE_DIRECTX
 #include "../inanity2/inanity-dx.hpp"
 #endif
