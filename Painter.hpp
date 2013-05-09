@@ -2,10 +2,12 @@
 #define ___FARSH_PAINTER_HPP___
 
 #include "general.hpp"
+#include "Geometry.hpp"
 #include "Material.hpp"
 #include <unordered_map>
 
 class BoneAnimationFrame;
+class GeometryFormats;
 
 /// Класс, занимающийся рисованием моделей.
 class Painter : public Object
@@ -18,15 +20,11 @@ private:
 	int screenWidth, screenHeight;
 	/// Кэш бинарных шейдеров.
 	ptr<ShaderCache> shaderCache;
+	/// Форматы геометрии.
+	ptr<GeometryFormats> geometryFormats;
 
 	/// Случайная текстура.
 	ptr<Texture> randomTexture;
-
-	/// Геометрия декалей.
-	ptr<Geometry> geometryDecal;
-
-	/// Состояние смешивания для декалей.
-	ptr<BlendState> bsDecal;
 
 	/// Максимальное количество источников света без теней.
 	static const int maxBasicLightsCount = 4;
@@ -40,11 +38,16 @@ private:
 	static const int maxDecalsCount = 64;
 
 	//*** Атрибуты.
-	Attribute<float4> aPosition;
-	Attribute<float3> aNormal;
-	Attribute<float2> aTexcoord;
-	Attribute<uint4> aBoneNumbers;
-	Attribute<float4> aBoneWeights;
+	ptr<AttributeBinding> ab;
+	Value<float3> aPosition;
+	Value<float3> aNormal;
+	Value<float2> aTexcoord;
+	ptr<AttributeBinding> abSkinned;
+	Value<float3> aSkinnedPosition;
+	Value<float3> aSkinnedNormal;
+	Value<float2> aSkinnedTexcoord;
+	Value<uint4> aSkinnedBoneNumbers;
+	Value<float4> aSkinnedBoneWeights;
 
 	///*** Uniform-группа камеры.
 	ptr<UniformGroup> ugCamera;
@@ -207,6 +210,34 @@ private:
 	//*** Выходные переменные.
 	Fragment<float4> fTarget;
 	Fragment<float4> fNormal;
+
+	//*** Декали.
+	struct DecalStuff
+	{
+		struct Vertex
+		{
+			float4 position;
+			float3 normal;
+			float2 texcoord;
+		};
+
+		ptr<VertexLayout> vl;
+		ptr<AttributeLayout> al;
+		ptr<AttributeLayoutSlot> als;
+		Value<float4> aPosition;
+		Value<float3> aNormal;
+		Value<float2> aTexcoord;
+
+		ptr<VertexBuffer> vb;
+		ptr<IndexBuffer> ib;
+
+		ptr<AttributeBinding> ab;
+
+		ptr<BlendState> bs;
+
+		DecalStuff(ptr<Device> device);
+	};
+	DecalStuff decalStuff;
 
 	//** Состояния конвейера.
 	/// Состояние для shadow pass.
@@ -400,7 +431,7 @@ private:
 	ptr<PixelShader> GeneratePS(Expression expression);
 
 public:
-	Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, int screenWidth, int screenHeight, ptr<ShaderCache> shaderCache);
+	Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, int screenWidth, int screenHeight, ptr<ShaderCache> shaderCache, ptr<GeometryFormats> geometryFormats);
 
 	/// Начать кадр.
 	/** Очистить все регистрационные списки. */

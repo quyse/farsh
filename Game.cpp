@@ -1,5 +1,7 @@
 #include "Game.hpp"
 #include "Painter.hpp"
+#include "Geometry.hpp"
+#include "GeometryFormats.hpp"
 #include "Material.hpp"
 #include "Skeleton.hpp"
 #include "BoneAnimation.hpp"
@@ -44,18 +46,6 @@ Game::Game() :
 	singleGame = this;
 
 	tickCoef = 1.0f / Time::GetTicksPerSecond();
-
-	// разметка
-	std::vector<Layout::Element> layoutElements;
-	layoutElements.push_back(Layout::Element(DataTypes::Float3, 0, 0));
-	layoutElements.push_back(Layout::Element(DataTypes::Float3, 12, 1));
-	layoutElements.push_back(Layout::Element(DataTypes::Float2, 24, 2));
-	layout = NEW(Layout(layoutElements, 32));
-
-	// разметка для skinning
-	layoutElements.push_back(Layout::Element(DataTypes::UInt4, 32, 3));
-	layoutElements.push_back(Layout::Element(DataTypes::Float4, 48, 4));
-	skinnedLayout = NEW(Layout(layoutElements, 64));
 }
 
 void Game::Run()
@@ -74,8 +64,16 @@ void Game::Run()
 		this->window = window;
 		window->SetTitle("F.A.R.S.H.");
 
-		inputManager = NEW(Input::RawManager(window->GetHWND()));
-		window->SetInputManager(inputManager);
+#ifdef ___INANITY_WINDOWS
+		{
+			ptr<Input::Win32Manager> im = NEW(Input::Win32RawManager(window->GetHWND()));
+			inputManager = im;
+			window->SetInputManager(im);
+		}
+#endif
+#ifdef ___INANITY_LINUX
+		inputManager = NEW(Input::X11Manager(window));
+#endif
 
 #if defined(_DEBUG) && 1
 		mode.width = 800;
@@ -109,7 +107,9 @@ void Game::Run()
 #endif
 		;
 
-		painter = NEW(Painter(device, context, presenter, mode.width, mode.height, shaderCache));
+		geometryFormats = NEW(GeometryFormats());
+
+		painter = NEW(Painter(device, context, presenter, mode.width, mode.height, shaderCache, geometryFormats));
 
 		textureManager = NEW(TextureManager(fileSystem, device));
 		fontManager = NEW(FontManager(fileSystem, textureManager));
@@ -140,6 +140,7 @@ void Game::Run()
 		}
 		catch(Exception* exception)
 		{
+			scriptState = 0;
 			THROW_SECONDARY_EXCEPTION("Error while running game", exception);
 		}
 	}
@@ -436,18 +437,18 @@ ptr<Texture> Game::LoadTexture(const String& fileName)
 
 ptr<Geometry> Game::LoadGeometry(const String& fileName)
 {
-	return device->CreateGeometry(
-		device->CreateVertexBuffer(fileSystem->LoadFile(fileName + ".vertices"), layout),
-		device->CreateIndexBuffer(fileSystem->LoadFile(fileName + ".indices"), sizeof(short))
-	);
+	return NEW(Geometry(
+		device->CreateStaticVertexBuffer(fileSystem->LoadFile(fileName + ".vertices"), geometryFormats->vl),
+		device->CreateStaticIndexBuffer(fileSystem->LoadFile(fileName + ".indices"), sizeof(short))
+	));
 }
 
 ptr<Geometry> Game::LoadSkinnedGeometry(const String& fileName)
 {
-	return device->CreateGeometry(
-		device->CreateVertexBuffer(fileSystem->LoadFile(fileName + ".vertices"), skinnedLayout),
-		device->CreateIndexBuffer(fileSystem->LoadFile(fileName + ".indices"), sizeof(short))
-	);
+	return NEW(Geometry(
+		device->CreateStaticVertexBuffer(fileSystem->LoadFile(fileName + ".vertices"), geometryFormats->vlSkinned),
+		device->CreateStaticIndexBuffer(fileSystem->LoadFile(fileName + ".indices"), sizeof(short))
+	));
 }
 
 ptr<Skeleton> Game::LoadSkeleton(const String& fileName)

@@ -3,6 +3,8 @@
 
 #include "general.hpp"
 
+class Geometry;
+class GeometryFormats;
 struct Material;
 class Skeleton;
 class BoneAnimation;
@@ -42,6 +44,8 @@ private:
 	ptr<Context> context;
 	ptr<Presenter> presenter;
 
+	ptr<GeometryFormats> geometryFormats;
+
 	ptr<Painter> painter;
 
 	ptr<FileSystem> fileSystem;
@@ -54,8 +58,6 @@ private:
 	ptr<Font> font;
 
 	float alpha;
-
-	ptr<Layout> layout, skinnedLayout;
 
 	ptr<Material> decalMaterial;
 

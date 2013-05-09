@@ -1,5 +1,6 @@
 #include "Painter.hpp"
 #include "BoneAnimation.hpp"
+#include "GeometryFormats.hpp"
 
 // говно FIXME HACK
 #include "../inanity2/graphics/d3dx.hpp"
@@ -75,21 +76,67 @@ Painter::Light::Light(const float3& position, const float3& color)
 Painter::Light::Light(const float3& position, const float3& color, const float4x4& transform)
 : position(position), color(color), transform(transform), shadow(true) {}
 
+//*** Painter::DecalStuff
+
+Painter::DecalStuff::DecalStuff(ptr<Device> device) :
+	vl(NEW(VertexLayout(sizeof(Vertex)))),
+	al(NEW(AttributeLayout())),
+	als(al->AddSlot()),
+	aPosition(al->AddElement(als, vl->AddElement(&Vertex::position))),
+	aNormal(al->AddElement(als, vl->AddElement(&Vertex::normal))),
+	aTexcoord(al->AddElement(als, vl->AddElement(&Vertex::texcoord)))
+{
+	Vertex vertices[] =
+	{
+		{ float4(0, 0, 0, 1), float3(0, 0, 1), float2(0, 0) },
+		{ float4(1, 0, 0, 1), float3(0, 0, 1), float2(1, 0) },
+		{ float4(1, 1, 0, 1), float3(0, 0, 1), float2(1, 1) },
+		{ float4(0, 1, 0, 1), float3(0, 0, 1), float2(0, 1) },
+		{ float4(0, 0, 1, 1), float3(0, 0, 1), float2(0, 0) },
+		{ float4(1, 0, 1, 1), float3(0, 0, 1), float2(1, 0) },
+		{ float4(1, 1, 1, 1), float3(0, 0, 1), float2(1, 1) },
+		{ float4(0, 1, 1, 1), float3(0, 0, 1), float2(0, 1) }
+	};
+	unsigned short indices[] =
+	{
+		0, 2, 1, 0, 3, 2,
+		0, 1, 5, 0, 5, 4,
+		1, 2, 6, 1, 6, 5,
+		2, 3, 7, 2, 7, 6,
+		3, 0, 4, 3, 4, 7
+	};
+
+	vb = device->CreateStaticVertexBuffer(MemoryFile::CreateViaCopy(vertices, sizeof(vertices)), vl);
+	ib = device->CreateStaticIndexBuffer(MemoryFile::CreateViaCopy(indices, sizeof(indices)), sizeof(unsigned short));
+
+	ab = device->CreateAttributeBinding(al);
+
+	// состояние смешивания для декалей
+	bs = device->CreateBlendState();
+	bs->SetColor(BlendState::colorSourceSrcAlpha, BlendState::colorSourceInvSrcAlpha, BlendState::operationAdd);
+}
+
 //*** Painter
 
-Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, int screenWidth, int screenHeight, ptr<ShaderCache> shaderCache) :
+Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, int screenWidth, int screenHeight, ptr<ShaderCache> shaderCache, ptr<GeometryFormats> geometryFormats) :
 	device(device),
 	context(context),
 	presenter(presenter),
+	geometryFormats(geometryFormats),
 	screenWidth(screenWidth),
 	screenHeight(screenHeight),
 	shaderCache(shaderCache),
 
-	aPosition(0),
-	aNormal(1),
-	aTexcoord(2),
-	aBoneNumbers(3),
-	aBoneWeights(4),
+	ab(device->CreateAttributeBinding(geometryFormats->al)),
+	aPosition(geometryFormats->alePosition),
+	aNormal(geometryFormats->aleNormal),
+	aTexcoord(geometryFormats->aleTexcoord),
+	abSkinned(device->CreateAttributeBinding(geometryFormats->alSkinned)),
+	aSkinnedPosition(geometryFormats->aleSkinnedPosition),
+	aSkinnedNormal(geometryFormats->aleSkinnedNormal),
+	aSkinnedTexcoord(geometryFormats->aleSkinnedTexcoord),
+	aSkinnedBoneNumbers(geometryFormats->aleSkinnedBoneNumbers),
+	aSkinnedBoneWeights(geometryFormats->aleSkinnedBoneWeights),
 
 	ugCamera(NEW(UniformGroup(0))),
 	uViewProj(ugCamera->AddUniform<float4x4>()),
@@ -149,7 +196,9 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	iInstance(5),
 
 	fTarget(0),
-	fNormal(1)
+	fNormal(1),
+
+	decalStuff(device)
 
 {
 	// финализировать uniform группы
@@ -232,52 +281,8 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		//uRandomSampler.SetSamplerState(ss);
 	}
 
-	// создать геометрию декалей
-	{
-		struct Vertex
-		{
-			float4 position;
-			float3 normal;
-			float2 texcoord;
-		};
-		Vertex vertices[] =
-		{
-			{ float4(0, 0, 0, 1), float3(0, 0, 1), float2(0, 0) },
-			{ float4(1, 0, 0, 1), float3(0, 0, 1), float2(1, 0) },
-			{ float4(1, 1, 0, 1), float3(0, 0, 1), float2(1, 1) },
-			{ float4(0, 1, 0, 1), float3(0, 0, 1), float2(0, 1) },
-			{ float4(0, 0, 1, 1), float3(0, 0, 1), float2(0, 0) },
-			{ float4(1, 0, 1, 1), float3(0, 0, 1), float2(1, 0) },
-			{ float4(1, 1, 1, 1), float3(0, 0, 1), float2(1, 1) },
-			{ float4(0, 1, 1, 1), float3(0, 0, 1), float2(0, 1) }
-		};
-		unsigned short indices[] =
-		{
-			0, 2, 1, 0, 3, 2,
-			0, 1, 5, 0, 5, 4,
-			1, 2, 6, 1, 6, 5,
-			2, 3, 7, 2, 7, 6,
-			3, 0, 4, 3, 4, 7
-		};
-
-		std::vector<Layout::Element> layoutElements;
-		layoutElements.push_back(Layout::Element(DataTypes::Float4, 0, 0));
-		layoutElements.push_back(Layout::Element(DataTypes::Float3, 16, 1));
-		layoutElements.push_back(Layout::Element(DataTypes::Float2, 28, 2));
-		ptr<Layout> layout = NEW(Layout(layoutElements, sizeof(Vertex)));
-
-		geometryDecal = device->CreateGeometry(
-			device->CreateVertexBuffer(MemoryFile::CreateViaCopy(vertices, sizeof(vertices)), layout),
-			device->CreateIndexBuffer(MemoryFile::CreateViaCopy(indices, sizeof(indices)), sizeof(unsigned short))
-		);
-	}
-
-	// состояние смешивания для декалей
-	bsDecal = device->CreateBlendState();
-	bsDecal->SetColor(BlendState::colorSourceSrcAlpha, BlendState::colorSourceInvSrcAlpha, BlendState::operationAdd);
-
 	// геометрия полноэкранного прохода
-	ptr<Geometry> quadGeometry;
+	struct Quad
 	{
 		// вершина для фильтра
 		struct Vertex
@@ -286,31 +291,46 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			float2 texcoord;
 			float2 gap;
 		};
-		// геометрия полноэкранного квадрата
-		Vertex vertices[] =
+
+		ptr<VertexLayout> vl;
+		ptr<AttributeLayout> al;
+		ptr<AttributeLayoutSlot> als;
+		Value<float4> aPosition;
+		Value<float2> aTexcoord;
+
+		ptr<VertexBuffer> vb;
+		ptr<IndexBuffer> ib;
+
+		ptr<AttributeBinding> ab;
+
+		Quad(ptr<Device> device) :
+			vl(NEW(VertexLayout(sizeof(Vertex)))),
+			al(NEW(AttributeLayout())),
+			als(al->AddSlot()),
+			aPosition(al->AddElement(als, vl->AddElement(&Vertex::position))),
+			aTexcoord(al->AddElement(als, vl->AddElement(&Vertex::texcoord)))
 		{
-			{ float4(-1, -1, 0, 1), float2(0, 1) },
-			{ float4(1, -1, 0, 1), float2(1, 1) },
-			{ float4(1, 1, 0, 1), float2(1, 0) },
-			{ float4(-1, 1, 0, 1), float2(0, 0) }
-		};
+			// разметка геометрии
+			// геометрия полноэкранного квадрата
+			Vertex vertices[] =
+			{
+				{ float4(-1, -1, 0, 1), float2(0, 1) },
+				{ float4(1, -1, 0, 1), float2(1, 1) },
+				{ float4(1, 1, 0, 1), float2(1, 0) },
+				{ float4(-1, 1, 0, 1), float2(0, 0) }
+			};
 #ifdef FARSH_USE_OPENGL
-		unsigned short indices[] = { 0, 1, 2, 0, 2, 3 };
+			unsigned short indices[] = { 0, 1, 2, 0, 2, 3 };
 #else
-		unsigned short indices[] = { 0, 2, 1, 0, 3, 2 };
+			unsigned short indices[] = { 0, 2, 1, 0, 3, 2 };
 #endif
 
-		// разметка геометрии
-		std::vector<Layout::Element> layoutElements;
-		layoutElements.push_back(Layout::Element(DataTypes::Float4, 0, 0));
-		layoutElements.push_back(Layout::Element(DataTypes::Float2, 16, 1));
-		ptr<Layout> layout = NEW(Layout(layoutElements, sizeof(Vertex)));
+			vb = device->CreateStaticVertexBuffer(MemoryFile::CreateViaCopy(vertices, sizeof(vertices)), vl);
+			ib = device->CreateStaticIndexBuffer(MemoryFile::CreateViaCopy(indices, sizeof(indices)), sizeof(unsigned short));
 
-		quadGeometry = device->CreateGeometry(
-			device->CreateVertexBuffer(MemoryFile::CreateViaCopy(vertices, sizeof(vertices)), layout),
-			device->CreateIndexBuffer(MemoryFile::CreateViaCopy(indices, sizeof(indices)), sizeof(unsigned short))
-		);
-	}
+			ab = device->CreateAttributeBinding(al);
+		}
+	} quad(device);
 
 	//** инициализировать состояния конвейера
 
@@ -331,13 +351,12 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		ContextState csFilter;
 		csFilter.viewportWidth = screenWidth;
 		csFilter.viewportHeight = screenHeight;
-		csFilter.geometry = quadGeometry;
+		csFilter.attributeBinding = quad.ab;
+		csFilter.vertexBuffers[0] = quad.vb;
+		csFilter.indexBuffer = quad.ib;
 		csFilter.depthTestFunc = ContextState::depthTestFuncAlways;
 		csFilter.depthWrite = false;
 
-		// атрибуты
-		Attribute<float4> aPosition(0);
-		Attribute<float2> aTexcoord(1);
 		// промежуточные
 		Interpolant<float2> iTexcoord(0);
 		// результат
@@ -345,8 +364,8 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 
 		// вершинный шейдер - общий для всех постпроцессингов
 		ptr<VertexShader> vertexShader = shaderCache->GetVertexShader((
-			setPosition(aPosition),
-			iTexcoord = aTexcoord
+			setPosition(quad.aPosition),
+			iTexcoord = quad.aTexcoord
 			));
 
 		csFilter.vertexShader = vertexShader;
@@ -668,20 +687,20 @@ Expression Painter::GetWorldPositionAndNormal(const VertexShaderKey& key)
 {
 	if(key.skinned)
 	{
-		Value<float3> position = aPosition["xyz"];
+		Value<float3> position = aSkinnedPosition;
 		Value<uint> boneNumbers[] =
 		{
-			aBoneNumbers["x"],
-			aBoneNumbers["y"],
-			aBoneNumbers["z"],
-			aBoneNumbers["w"]
+			aSkinnedBoneNumbers["x"],
+			aSkinnedBoneNumbers["y"],
+			aSkinnedBoneNumbers["z"],
+			aSkinnedBoneNumbers["w"]
 		};
 		Value<float> boneWeights[] =
 		{
-			aBoneWeights["x"],
-			aBoneWeights["y"],
-			aBoneWeights["z"],
-			aBoneWeights["w"]
+			aSkinnedBoneWeights["x"],
+			aSkinnedBoneWeights["y"],
+			aSkinnedBoneWeights["z"],
+			aSkinnedBoneWeights["w"]
 		};
 		Temp<float3> tmpBoneOffsets[4];
 
@@ -697,10 +716,10 @@ Expression Painter::GetWorldPositionAndNormal(const VertexShaderKey& key)
 				(ApplyQuaternion(uBoneOrientations[boneNumbers[3]], position) + tmpBoneOffsets[3]) * boneWeights[3],
 				1.0f),
 			tmpVertexNormal =
-				ApplyQuaternion(uBoneOrientations[boneNumbers[0]], aNormal) * boneWeights[0] +
-				ApplyQuaternion(uBoneOrientations[boneNumbers[1]], aNormal) * boneWeights[1] +
-				ApplyQuaternion(uBoneOrientations[boneNumbers[2]], aNormal) * boneWeights[2] +
-				ApplyQuaternion(uBoneOrientations[boneNumbers[3]], aNormal) * boneWeights[3];
+				ApplyQuaternion(uBoneOrientations[boneNumbers[0]], aSkinnedNormal) * boneWeights[0] +
+				ApplyQuaternion(uBoneOrientations[boneNumbers[1]], aSkinnedNormal) * boneWeights[1] +
+				ApplyQuaternion(uBoneOrientations[boneNumbers[2]], aSkinnedNormal) * boneWeights[2] +
+				ApplyQuaternion(uBoneOrientations[boneNumbers[3]], aSkinnedNormal) * boneWeights[3];
 	}
 	else
 	{
@@ -711,32 +730,32 @@ Expression Painter::GetWorldPositionAndNormal(const VertexShaderKey& key)
 			key.instanced ?
 			(
 				tmpInstance = getInstanceID(),
-				iInstance = tmpInstance,
 				(
 					key.decal ?
 					(
+						iInstance = tmpInstance,
 						tmpWorld = uDecalInvTransforms[tmpInstance],
-						tmpPosition = mul(aPosition, tmpWorld),
+						tmpPosition = mul(decalStuff.aPosition, tmpWorld),
 						tmpPosition = tmpPosition / tmpPosition["w"]
 					)
 					:
 					(
 						tmpWorld = uWorlds[tmpInstance],
-						tmpPosition = mul(aPosition, tmpWorld)
+						tmpPosition = mul(newfloat4(aPosition, 1.0f), tmpWorld)
 					)
 				)
 			)
 			:
 			(
 				tmpWorld = uWorld,
-				tmpPosition = mul(aPosition, tmpWorld)
+				tmpPosition = mul(newfloat4(aPosition, 1.0f), tmpWorld)
 			)
 		));
 
 		return
 			e,
 			tmpVertexPosition = Value<float4>(tmpPosition),
-			tmpVertexNormal = mul(aNormal, tmpWorld.Cast<float3x3>());
+			tmpVertexNormal = mul(key.decal ? decalStuff.aNormal : aNormal, tmpWorld.Cast<float3x3>());
 	}
 }
 
@@ -861,7 +880,7 @@ ptr<VertexShader> Painter::GetVertexShader(const VertexShaderKey& key)
 		p = mul(tmpVertexPosition, uViewProj),
 		setPosition(p),
 		iNormal = tmpVertexNormal,
-		iTexcoord = aTexcoord,
+		iTexcoord = key.skinned ? aSkinnedTexcoord : aTexcoord,
 		iWorldPosition = tmpVertexPosition["xyz"]
 	));
 
@@ -1094,6 +1113,8 @@ void Painter::Draw()
 			// отсортировать объекты по геометрии
 			std::sort(models.begin(), models.end(), GeometrySorter());
 
+			// установить привязку атрибутов
+			cs.attributeBinding = ab;
 			// установить вершинный шейдер
 			cs.vertexShader = GetVertexShadowShader(VertexShaderKey(true, false, false));
 			// установить константный буфер
@@ -1111,7 +1132,8 @@ void Painter::Draw()
 					++batchCount);
 
 				// установить геометрию
-				cs.geometry = models[j].geometry;
+				cs.vertexBuffers[0] = models[j].geometry->GetVertexBuffer();
+				cs.indexBuffer = models[j].geometry->GetIndexBuffer();
 				// установить uniform'ы
 				for(int k = 0; k < batchCount; ++k)
 					uWorlds.SetValue(k, models[j + k].worldTransform);
@@ -1129,6 +1151,8 @@ void Painter::Draw()
 			// отсортировать объекты по геометрии
 			std::sort(skinnedModels.begin(), skinnedModels.end(), GeometrySorter());
 
+			// установить привязку атрибутов
+			cs.attributeBinding = abSkinned;
 			// установить вершинный шейдер
 			cs.vertexShader = GetVertexShadowShader(VertexShaderKey(false, true, false));
 			// установить константный буфер
@@ -1142,7 +1166,8 @@ void Painter::Draw()
 				// установить геометрию, если отличается
 				if(lastGeometry != skinnedModel.shadowGeometry)
 				{
-					cs.geometry = skinnedModel.shadowGeometry;
+					cs.vertexBuffers[0] = skinnedModel.shadowGeometry->GetVertexBuffer();
+					cs.indexBuffer = skinnedModel.shadowGeometry->GetIndexBuffer();
 					lastGeometry = skinnedModel.shadowGeometry;
 				}
 				// установить uniform'ы костей
@@ -1248,6 +1273,8 @@ void Painter::Draw()
 
 	std::sort(models.begin(), models.end(), Sorter());
 
+	// установить привязку атрибутов
+	cs.attributeBinding = ab;
 	// установить вершинный шейдер
 	cs.vertexShader = GetVertexShader(VertexShaderKey(true, false, false));
 	// установить константный буфер
@@ -1292,7 +1319,8 @@ void Painter::Draw()
 				++geometryBatchCount);
 
 			// установить геометрию
-			cs.geometry = geometry;
+			cs.vertexBuffers[0] = geometry->GetVertexBuffer();
+			cs.indexBuffer = geometry->GetIndexBuffer();
 
 			// установить uniform'ы
 			for(int k = 0; k < geometryBatchCount; ++k)
@@ -1312,6 +1340,8 @@ void Painter::Draw()
 
 	std::sort(skinnedModels.begin(), skinnedModels.end(), Sorter());
 
+	// установить привязку атрибутов
+	cs.attributeBinding = abSkinned;
 	// установить вершинный шейдер
 	cs.vertexShader = GetVertexShader(VertexShaderKey(false, true, false));
 	// установить константный буфер
@@ -1349,7 +1379,8 @@ void Painter::Draw()
 		ptr<Geometry> geometry = skinnedModel.geometry;
 		if(lastGeometry != geometry)
 		{
-			cs.geometry = geometry;
+			cs.vertexBuffers[0] = geometry->GetVertexBuffer();
+			cs.indexBuffer = geometry->GetIndexBuffer();
 			lastGeometry = geometry;
 		}
 
@@ -1382,9 +1413,11 @@ void Painter::Draw()
 	// установить константный буфер
 	ugDecal->Apply(cs);
 	// установить геометрию
-	cs.geometry = geometryDecal;
+	cs.attributeBinding = decalStuff.ab;
+	cs.vertexBuffers[0] = decalStuff.vb;
+	cs.indexBuffer = decalStuff.ib;
 	// состояние смешивания
-	cs.blendState = bsDecal;
+	cs.blendState = decalStuff.bs;
 	// убрать карту нормалей и буфер глубины
 	cs.renderBuffers[1] = 0;
 	cs.depthStencilBuffer = 0;
