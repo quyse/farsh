@@ -12,11 +12,11 @@ public:
 	struct Bone
 	{
 		/// Оригинальная мировая ориентация.
-		quaternion originalWorldOrientation;
+		quat originalWorldOrientation;
 		/// Оригинальная мировая позицця.
-		float3 originalWorldPosition;
+		vec3 originalWorldPosition;
 		/// Относительная мировая позиция.
-		float3 originalRelativePosition;
+		vec3 originalRelativePosition;
 		/// Номер родительской кости.
 		int parent;
 	};

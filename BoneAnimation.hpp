@@ -17,7 +17,7 @@ public:
 		/// Время ключа анимации.
 		float time;
 		/// Ориентация относительно родительской кости.
-		quaternion orientation;
+		quat orientation;
 	};
 
 private:
@@ -27,10 +27,10 @@ private:
 	std::vector<std::vector<Key> > keys;
 
 	/// Смещения корневой кости (по времени соответствуют ключам анимации).
-	std::vector<float3> rootBoneOffsets;
+	std::vector<vec3> rootBoneOffsets;
 
 public:
-	BoneAnimation(ptr<Skeleton> skeleton, const std::vector<std::vector<Key> >& keys, const std::vector<float3>& rootBoneOffsets);
+	BoneAnimation(ptr<Skeleton> skeleton, const std::vector<std::vector<Key> >& keys, const std::vector<vec3>& rootBoneOffsets);
 
 	static ptr<BoneAnimation> Deserialize(ptr<InputStream> inputStream, ptr<Skeleton> skeleton);
 
@@ -45,23 +45,23 @@ public:
 	ptr<BoneAnimation> animation;
 
 	/// Анимационные относительные ориентации.
-	std::vector<quaternion> animationRelativeOrientations;
+	std::vector<quat> animationRelativeOrientations;
 	/// Анимационные мировые ориентации.
-	std::vector<quaternion> animationWorldOrientations;
+	std::vector<quat> animationWorldOrientations;
 	/// Анимационные мировые позиции.
-	std::vector<float3> animationWorldPositions;
+	std::vector<vec3> animationWorldPositions;
 
 public:
 	/// Результирующие преобразования для точек.
-	std::vector<quaternion> orientations;
+	std::vector<quat> orientations;
 	/// Результирующие смещения для точек.
-	std::vector<float3> offsets;
+	std::vector<vec3> offsets;
 
 public:
 	BoneAnimationFrame(ptr<BoneAnimation> animation);
 
 	/// Установить параметры и рассчитать положение.
-	void Setup(const float3& originOffset, const quaternion& originOrientation, float time);
+	void Setup(const vec3& originOffset, const quat& originOrientation, float time);
 };
 
 #endif

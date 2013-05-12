@@ -20,9 +20,9 @@ struct Material : public Object
 	ptr<Texture> diffuseTexture;
 	ptr<Texture> specularTexture;
 	ptr<Texture> normalTexture;
-	float4 diffuse;
-	float4 specular;
-	float4 normalCoordTransform;
+	vec4 diffuse;
+	vec4 specular;
+	vec4 normalCoordTransform;
 
 	Material();
 

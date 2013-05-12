@@ -13,13 +13,13 @@ class Painter;
 
 struct StaticLight : public Object
 {
-	float3 position;
-	float3 target;
+	vec3 position;
+	vec3 target;
 	float angle;
 	float nearPlane, farPlane;
-	float3 color;
+	vec3 color;
 	bool shadow;
-	float4x4 transform;
+	mat4x4 transform;
 
 	StaticLight();
 
@@ -99,7 +99,7 @@ private:
 	{
 		ptr<Geometry> geometry;
 		ptr<Material> material;
-		float4x4 transform;
+		mat4x4 transform;
 	};
 	std::vector<StaticModel> staticModels;
 
@@ -124,8 +124,8 @@ private:
 	struct Cube
 	{
 		ptr<Physics::RigidBody> rigidBody;
-		float3 scale;
-		Cube(ptr<Physics::RigidBody> rigidBody, const float3& scale = float3(1, 1, 1))
+		vec3 scale;
+		Cube(ptr<Physics::RigidBody> rigidBody, const vec3& scale = vec3(1, 1, 1))
 		: rigidBody(rigidBody), scale(scale) {}
 	};
 	std::vector<Cube> cubes;

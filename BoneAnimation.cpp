@@ -22,7 +22,7 @@ SCRIPTABLE_MAP_END();
 
 //*** BoneAnimation
 
-BoneAnimation::BoneAnimation(ptr<Skeleton> skeleton, const std::vector<std::vector<Key> >& keys, const std::vector<float3>& rootBoneOffsets)
+BoneAnimation::BoneAnimation(ptr<Skeleton> skeleton, const std::vector<std::vector<Key> >& keys, const std::vector<vec3>& rootBoneOffsets)
 : skeleton(skeleton), keys(keys), rootBoneOffsets(rootBoneOffsets) {}
 
 ptr<BoneAnimation> BoneAnimation::Deserialize(ptr<InputStream> inputStream, ptr<Skeleton> skeleton)
@@ -46,8 +46,8 @@ ptr<BoneAnimation> BoneAnimation::Deserialize(ptr<InputStream> inputStream, ptr<
 		struct RootKey
 		{
 			Key key;
-			float3 offset;
-			RootKey(const Key& key, const float3& offset) : key(key), offset(offset) {}
+			vec3 offset;
+			RootKey(const Key& key, const vec3& offset) : key(key), offset(offset) {}
 		};
 		std::vector<RootKey> rootKeys;
 
@@ -56,7 +56,7 @@ ptr<BoneAnimation> BoneAnimation::Deserialize(ptr<InputStream> inputStream, ptr<
 		{
 			float keyTime = reader.Read<float>();
 			int keyBone = reader.ReadShortly();
-			quaternion keyOrientation = reader.Read<quaternion>();
+			quat keyOrientation = reader.Read<quat>();
 
 			Key key;
 			key.time = keyTime;
@@ -64,7 +64,7 @@ ptr<BoneAnimation> BoneAnimation::Deserialize(ptr<InputStream> inputStream, ptr<
 			if(keyBone)
 				keys[keyBone].push_back(key);
 			else
-				rootKeys.push_back(RootKey(key, reader.Read<float3>()));
+				rootKeys.push_back(RootKey(key, reader.Read<vec3>()));
 		}
 
 		// отсортировать ключи по времени
@@ -88,7 +88,7 @@ ptr<BoneAnimation> BoneAnimation::Deserialize(ptr<InputStream> inputStream, ptr<
 
 		// перенести корневые ключи на место
 		keys[0].reserve(rootKeys.size());
-		std::vector<float3> rootBoneOffsets;
+		std::vector<vec3> rootBoneOffsets;
 		rootBoneOffsets.reserve(rootKeys.size());
 		for(size_t i = 0; i < rootKeys.size(); ++i)
 		{
@@ -115,22 +115,11 @@ BoneAnimationFrame::BoneAnimationFrame(ptr<BoneAnimation> animation)
 	offsets(animationRelativeOrientations.size())
 {}
 
-template <int n>
-std::ostream& operator<<(std::ostream& s, vector<n> v)
-{
-	for(int i = 0; i < n; ++i)
-	{
-		if(i) s << ' ';
-		s << v.t[i];
-	}
-	return s;
-}
-
-void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& originOrientation, float time)
+void BoneAnimationFrame::Setup(const vec3& originOffset, const quat& originOrientation, float time)
 {
 	// получить ключи и смещения
 	const std::vector<std::vector<BoneAnimation::Key> >& keys = animation->keys;
-	const std::vector<float3>& rootBoneOffsets = animation->rootBoneOffsets;
+	const std::vector<vec3>& rootBoneOffsets = animation->rootBoneOffsets;
 
 	struct Sorter
 	{
@@ -146,11 +135,11 @@ void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& ori
 
 	// для каждой кости получить анимационную относительную ориентацию
 	// а для корневой кости получить ещё и позицию
-	float3 rootBoneOffset;
+	vec3 rootBoneOffset;
 	for(int i = 0; i < bonesCount; ++i)
 	{
 		const std::vector<BoneAnimation::Key>& boneKeys = keys[i];
-		quaternion& animationRelativeOrientation = animationRelativeOrientations[i];
+		quat& animationRelativeOrientation = animationRelativeOrientations[i];
 
 		// найти бинарным поиском следующий за временем ключ
 		BoneAnimation::Key timeKey;
@@ -164,7 +153,7 @@ void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& ori
 		else
 		{
 			interframeTime = (time - boneKeys[frame - 1].time) / (boneKeys[frame].time - boneKeys[frame - 1].time);
-			animationRelativeOrientation = slerp(boneKeys[frame - 1].orientation, boneKeys[frame].orientation, interframeTime);
+			animationRelativeOrientation = fromEigen(toEigenQuat(boneKeys[frame - 1].orientation).slerp(interframeTime, toEigenQuat(boneKeys[frame].orientation)));
 		}
 
 		//std::cout << "ARO " << i << ": " << animationRelativeOrientation << '\n';
@@ -199,13 +188,13 @@ void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& ori
 			if(!f[parent])
 				THROW_PRIMARY_EXCEPTION("Parent is not calculated");
 #endif
-			animationWorldOrientations[boneNumber] = animationWorldOrientations[parent] * animationRelativeOrientations[boneNumber];
-			animationWorldPositions[boneNumber] = animationWorldPositions[parent] + bone.originalRelativePosition * animationWorldOrientations[parent];
+			animationWorldOrientations[boneNumber] = fromEigen(toEigenQuat(animationWorldOrientations[parent]) * toEigenQuat(animationRelativeOrientations[boneNumber]));
+			animationWorldPositions[boneNumber] = fromEigen((toEigen(animationWorldPositions[parent]) + toEigenQuat(animationWorldOrientations[parent]) * toEigen(bone.originalRelativePosition)).eval());
 		}
 		else
 		{
-			animationWorldOrientations[boneNumber] = originOrientation * animationRelativeOrientations[boneNumber];
-			animationWorldPositions[boneNumber] = originOffset + rootBoneOffset * originOrientation;
+			animationWorldOrientations[boneNumber] = fromEigen(toEigenQuat(originOrientation) * toEigenQuat(animationRelativeOrientations[boneNumber]));
+			animationWorldPositions[boneNumber] = fromEigen((toEigen(originOffset) + toEigenQuat(originOrientation) * toEigen(rootBoneOffset)).eval());
 		}
 #ifdef _DEBUG
 		f[boneNumber] = true;
@@ -216,8 +205,8 @@ void BoneAnimationFrame::Setup(const float3& originOffset, const quaternion& ori
 	// вычислить результирующие ориентации для костей
 	for(int i = 0; i < bonesCount; ++i)
 	{
-		orientations[i] = animationWorldOrientations[i] * bones[i].originalWorldOrientation.conjugate();
-		offsets[i] = animationWorldPositions[i] - bones[i].originalWorldPosition * orientations[i];
+		orientations[i] = fromEigen(toEigenQuat(animationWorldOrientations[i]) * toEigenQuat(bones[i].originalWorldOrientation).conjugate());
+		offsets[i] = fromEigen((toEigen(animationWorldPositions[i]) - toEigenQuat(orientations[i]) * toEigen(bones[i].originalWorldPosition)).eval());
 		//std::cout << "Result " << i << " O=" << orientations[i] << ", P=" << offsets[i] << '\n';
 	}
 	//std::cout << '\n';

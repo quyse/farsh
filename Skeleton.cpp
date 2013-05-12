@@ -67,14 +67,16 @@ ptr<Skeleton> Skeleton::Deserialize(ptr<InputStream> inputStream)
 		for(size_t i = 0; i < bonesCount; ++i)
 		{
 			bones[i].parent = (int)reader.ReadShortly();
-			bones[i].originalWorldOrientation = reader.Read<quaternion>();
-			bones[i].originalWorldPosition = reader.Read<float3>();
+			bones[i].originalWorldOrientation = reader.Read<quat>();
+			bones[i].originalWorldPosition = reader.Read<vec3>();
 		}
 		bones[0].originalRelativePosition = bones[0].originalWorldPosition;
 		for(size_t i = 1; i < bonesCount; ++i)
 			bones[i].originalRelativePosition =
-				(bones[i].originalWorldPosition - bones[bones[i].parent].originalWorldPosition)
-				* bones[bones[i].parent].originalWorldOrientation.conjugate();
+				fromEigen(
+					toEigenQuat(bones[bones[i].parent].originalWorldOrientation).conjugate()
+					* (toEigen(bones[i].originalWorldPosition) - toEigen(bones[bones[i].parent].originalWorldPosition))
+				);
 
 		return NEW(Skeleton(bones));
 	}

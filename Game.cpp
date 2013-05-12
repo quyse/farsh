@@ -8,9 +8,6 @@
 #include "../inanity2/inanity-sqlitefs.hpp"
 #include <iostream>
 
-// говно
-#include "../inanity2/graphics/d3dx.hpp"
-
 SCRIPTABLE_MAP_BEGIN(Game, Farsh.Game);
 	SCRIPTABLE_METHOD(Game, Get);
 	SCRIPTABLE_METHOD(Game, LoadTexture);
@@ -176,6 +173,11 @@ void Game::Tick(int)
 				switch(inputEvent.keyboard.key)
 				{
 				case 27: // escape
+					// TEST
+#ifdef ___INANITY_TRACE_PTR
+					managedHeap.PrintPtrs(std::cout);
+#endif
+
 					window->Close();
 					return;
 				case 32:
@@ -198,7 +200,7 @@ void Game::Tick(int)
 				case 'Z':
 					{
 						//ptr<Physics::RigidBody> rigidBody = physicsWorld->CreateRigidBody(cubePhysicsShape, 100, physicsCharacter->GetTransform());
-						//rigidBody->ApplyImpulse(float3(cos(cameraAlpha) * cos(cameraBeta), sin(cameraAlpha) * cos(cameraBeta), sin(cameraBeta)) * 1000);
+						//rigidBody->ApplyImpulse(vec3(cos(cameraAlpha) * cos(cameraBeta), sin(cameraAlpha) * cos(cameraBeta), sin(cameraBeta)) * 1000);
 						//cubes.push_back(rigidBody);
 					}
 					break;
@@ -271,9 +273,9 @@ void Game::Tick(int)
 		}
 	}
 
-	float3 cameraDirection = float3(cos(cameraAlpha) * cos(cameraBeta), sin(cameraAlpha) * cos(cameraBeta), sin(cameraBeta));
-	float3 cameraRightDirection = normalize(cross(cameraDirection, float3(0, 0, 1)));
-	float3 cameraUpDirection = cross(cameraRightDirection, cameraDirection);
+	vec3 cameraDirection = vec3(cos(cameraAlpha) * cos(cameraBeta), sin(cameraAlpha) * cos(cameraBeta), sin(cameraBeta));
+	vec3 cameraRightDirection = normalize(cross(cameraDirection, vec3(0, 0, 1)));
+	vec3 cameraUpDirection = cross(cameraRightDirection, cameraDirection);
 
 	const Input::State& inputState = inputFrame->GetCurrentState();
 	/*
@@ -282,10 +284,10 @@ void Game::Tick(int)
 	65 87 68 83 81 69
 	*/
 	float cameraStep = 5;
-	float3 cameraMove(0, 0, 0);
-	float3 cameraMoveDirectionFront(cos(cameraAlpha), sin(cameraAlpha), 0);
-	float3 cameraMoveDirectionUp(0, 0, 1);
-	float3 cameraMoveDirectionRight = cross(cameraMoveDirectionFront, cameraMoveDirectionUp);
+	vec3 cameraMove(0, 0, 0);
+	vec3 cameraMoveDirectionFront(cos(cameraAlpha), sin(cameraAlpha), 0);
+	vec3 cameraMoveDirectionUp(0, 0, 1);
+	vec3 cameraMoveDirectionRight = cross(cameraMoveDirectionFront, cameraMoveDirectionUp);
 	if(inputState.keyboard[37] || inputState.keyboard[65])
 		cameraMove -= cameraMoveDirectionRight * cameraStep;
 	if(inputState.keyboard[38] || inputState.keyboard[87])
@@ -303,12 +305,12 @@ void Game::Tick(int)
 
 	physicsWorld->Simulate(frameTime);
 
-	float4x4 heroTransform = heroCharacter->GetTransform();
-	float3 heroPosition(heroTransform.t[3][0], heroTransform.t[3][1], heroTransform.t[3][2]);
-	quaternion heroOrientation(float3(0, 0, 1), cameraAlpha);
+	mat4x4 heroTransform = heroCharacter->GetTransform();
+	vec3 heroPosition(heroTransform(0, 3), heroTransform(1, 3), heroTransform(2, 3));
+	quat heroOrientation = axis_rotation(vec3(0, 0, 1), cameraAlpha);
 
-	static float3 cameraPosition(0, 0, 0);
-	//float3 cameraPosition = heroPosition - cameraMoveDirectionFront * 2.0f + cameraMoveDirectionUp * 2.0f;
+	static vec3 cameraPosition(0, 0, 0);
+	//vec3 cameraPosition = heroPosition - cameraMoveDirectionFront * 2.0f + cameraMoveDirectionUp * 2.0f;
 	cameraPosition += cameraMove * frameTime;
 
 	//std::cout << "cameraPosition = " << cameraPosition << '\n';
@@ -317,16 +319,16 @@ void Game::Tick(int)
 
 	alpha += frameTime;
 
-	float4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, float3(0, 0, 1));
+	mat4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, vec3(0, 0, 1));
 #ifdef FARSH_USE_OPENGL
-	viewMatrix = viewMatrix * CreateScalingMatrix(1, -1, 1);
+	viewMatrix = fromEigen((toEigen(viewMatrix) * Eigen::Scaling(Eigen::Vector3f(1, -1, 1))).eval().matrix());
 #endif
-	float4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 0.1f, 100.0f);
+	mat4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 0.1f, 100.0f);
 
 	// зарегистрировать все объекты
 	painter->BeginFrame(frameTime);
-	painter->SetCamera(viewMatrix * projMatrix, cameraPosition);
-	painter->SetAmbientColor(float3(0, 0, 0));
+	painter->SetCamera(projMatrix * viewMatrix, cameraPosition);
+	painter->SetAmbientColor(vec3(0, 0, 0));
 
 	for(size_t i = 0; i < staticModels.size(); ++i)
 	{
@@ -361,38 +363,58 @@ void Game::Tick(int)
 #if 1
 	static float heroTime = 0;
 	heroTime += frameTime;
-	heroOrientation = quaternion(float3(0, 0, 1), heroTime);
+	heroOrientation = axis_rotation(vec3(0, 0, 1), heroTime);
 #endif
 
 	heroAnimationFrame->Setup(heroPosition, heroOrientation, heroAnimationTime);
-	//float3 shouldBeHeroPosition = heroPosition - (heroAnimationFrame->animationWorldPositions[0] - heroPosition) * float3(1, 1, 0);
+	//vec3 shouldBeHeroPosition = heroPosition - (heroAnimationFrame->animationWorldPositions[0] - heroPosition) * vec3(1, 1, 0);
 	//heroAnimationFrame->Setup(shouldBeHeroPosition, heroOrientation, heroAnimationTime);
 	painter->AddSkinnedModel(heroMaterial, heroGeometry, heroAnimationFrame);
 	zombieAnimationFrame->Setup(heroPosition, heroOrientation, heroAnimationTime);
 	painter->AddSkinnedModel(zombieMaterial, zombieGeometry, zombieAnimationFrame);
 	if(0)
 	for(size_t i = 0; i < heroAnimationFrame->animationWorldPositions.size(); ++i)
-		painter->AddModel(staticModels[0].material, staticModels[0].geometry, CreateScalingMatrix(0.1f, 0.1f, 0.1f) * (float4x4)heroAnimationFrame->animationWorldOrientations[i] * CreateTranslationMatrix(heroAnimationFrame->animationWorldPositions[i]));
+		painter->AddModel(
+			staticModels[0].material,
+			staticModels[0].geometry,
+			fromEigen((
+				Eigen::Translation3f(toEigen(heroAnimationFrame->animationWorldPositions[i])) *
+				toEigenQuat(heroAnimationFrame->animationWorldOrientations[i]) *
+				Eigen::Scaling(Eigen::Vector3f(0.1f, 0.1f, 0.1f))
+			).matrix().eval())
+		);
 	circularAnimationFrame->Setup(heroPosition, heroOrientation, heroAnimationTime);
-	painter->AddModel(circularMaterial, circularGeometry, (float4x4)circularAnimationFrame->animationWorldOrientations[0] * CreateTranslationMatrix(circularAnimationFrame->animationWorldPositions[0]));
+	painter->AddModel(circularMaterial, circularGeometry,
+		fromEigen((
+			Eigen::Translation3f(toEigen(circularAnimationFrame->animationWorldPositions[0])) *
+			toEigenQuat(circularAnimationFrame->animationWorldOrientations[0])
+		).matrix().eval())
+	);
 	axeAnimationFrame->Setup(heroPosition, heroOrientation, heroAnimationTime);
-	painter->AddModel(axeMaterial, axeGeometry, (float4x4)axeAnimationFrame->animationWorldOrientations[0] * CreateTranslationMatrix(axeAnimationFrame->animationWorldPositions[0]));
+	painter->AddModel(axeMaterial, axeGeometry,
+		fromEigen((
+			Eigen::Translation3f(toEigen(axeAnimationFrame->animationWorldPositions[0])) *
+			toEigenQuat(axeAnimationFrame->animationWorldOrientations[0])
+		).matrix().eval())
+	);
 
 	// тестовая декаль
+#if 0
 	if(0)
 	{
-		float4x4 transform = CreateLookAtMatrix(float3(9, 10, 1), float3(10, 10, 0), float3(0, 0, 1))
+		mat4x4 transform = CreateLookAtMatrix(vec3(9, 10, 1), vec3(10, 10, 0), vec3(0, 0, 1))
 			* CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 2, 1.0f, 0.1f, 10.0f);
 		// полный отстой, но инвертирования матрицы пока нет
 		D3DXMATRIX mxA((const float*)transform.t), mxB;
 		D3DXMatrixInverse(&mxB, NULL, &mxA);
-		float4x4 c;
-		c.t[0][0] = mxB._11; c.t[0][1] = mxB._12; c.t[0][2] = mxB._13; c.t[0][3] = mxB._14;
-		c.t[1][0] = mxB._21; c.t[1][1] = mxB._22; c.t[1][2] = mxB._23; c.t[1][3] = mxB._24;
-		c.t[2][0] = mxB._31; c.t[2][1] = mxB._32; c.t[2][2] = mxB._33; c.t[2][3] = mxB._34;
-		c.t[3][0] = mxB._41; c.t[3][1] = mxB._42; c.t[3][2] = mxB._43; c.t[3][3] = mxB._44;
+		mat4x4 c;
+		c(0, 0) = mxB._11; c(0, 1) = mxB._12; c(0, 2) = mxB._13; c(0, 3) = mxB._14;
+		c(1, 0) = mxB._21; c(1, 1) = mxB._22; c(1, 2) = mxB._23; c(1, 3) = mxB._24;
+		c(2, 0) = mxB._31; c(2, 1) = mxB._32; c(2, 2) = mxB._33; c(2, 3) = mxB._34;
+		c(3, 0) = mxB._41; c(3, 1) = mxB._42; c(3, 2) = mxB._43; c(3, 3) = mxB._44;
 		painter->AddDecal(decalMaterial, transform, c);
 	}
+#endif
 
 	painter->SetupPostprocess(bloomLimit, toneLuminanceKey, toneMaxLuminance);
 
@@ -416,8 +438,8 @@ void Game::Tick(int)
 		}
 		char fpsString[64];
 		sprintf(fpsString, "frameTime: %.6f sec, FPS: %.6f\n", lastAllTicksTime / needTickCount, needTickCount / lastAllTicksTime);
-		textDrawer->DrawTextLine(fpsString, -0.95f - 2.0f / context->GetTargetState().viewportWidth, -0.95f - 2.0f / context->GetTargetState().viewportHeight, float4(1, 1, 1, 1), FontAlignments::Left | FontAlignments::Bottom);
-		textDrawer->DrawTextLine(fpsString, -0.95f, -0.95f, float4(1, 0, 0, 1), FontAlignments::Left | FontAlignments::Bottom);
+		textDrawer->DrawTextLine(fpsString, -0.95f - 2.0f / context->GetTargetState().viewportWidth, -0.95f - 2.0f / context->GetTargetState().viewportHeight, vec4(1, 1, 1, 1), FontAlignments::Left | FontAlignments::Bottom);
+		textDrawer->DrawTextLine(fpsString, -0.95f, -0.95f, vec4(1, 0, 0, 1), FontAlignments::Left | FontAlignments::Bottom);
 	}
 
 	textDrawer->Flush();
@@ -461,8 +483,8 @@ ptr<BoneAnimation> Game::LoadBoneAnimation(const String& fileName, ptr<Skeleton>
 	if(!skeleton)
 	{
 		std::vector<Skeleton::Bone> bones(1);
-		bones[0].originalWorldPosition = float3(0, 0, 0);
-		bones[0].originalRelativePosition = float3(0, 0, 0);
+		bones[0].originalWorldPosition = vec3(0, 0, 0);
+		bones[0].originalRelativePosition = vec3(0, 0, 0);
 		bones[0].parent = 0;
 		skeleton = NEW(Skeleton(bones));
 	}
@@ -471,12 +493,14 @@ ptr<BoneAnimation> Game::LoadBoneAnimation(const String& fileName, ptr<Skeleton>
 
 ptr<Physics::Shape> Game::CreatePhysicsBoxShape(float halfSizeX, float halfSizeY, float halfSizeZ)
 {
-	return physicsWorld->CreateBoxShape(float3(halfSizeX, halfSizeY, halfSizeZ));
+	return physicsWorld->CreateBoxShape(vec3(halfSizeX, halfSizeY, halfSizeZ));
 }
 
 ptr<Physics::RigidBody> Game::CreatePhysicsRigidBody(ptr<Physics::Shape> physicsShape, float mass, float x, float y, float z)
 {
-	return physicsWorld->CreateRigidBody(physicsShape, mass, CreateTranslationMatrix(x, y, z));
+	Eigen::Affine3f startTransform = Eigen::Affine3f::Identity();
+	startTransform.translate(Eigen::Vector3f(x, y, z));
+	return physicsWorld->CreateRigidBody(physicsShape, mass, fromEigen(startTransform.matrix()));
 }
 
 void Game::AddStaticModel(ptr<Geometry> geometry, ptr<Material> material, float x, float y, float z)
@@ -484,7 +508,9 @@ void Game::AddStaticModel(ptr<Geometry> geometry, ptr<Material> material, float 
 	StaticModel model;
 	model.geometry = geometry;
 	model.material = material;
-	model.transform = CreateTranslationMatrix(x, y, z);
+	Eigen::Affine3f transform = Eigen::Affine3f::Identity();
+	transform.translate(Eigen::Vector3f(x, y, z));
+	model.transform = fromEigen(transform.matrix());
 	staticModels.push_back(model);
 }
 
@@ -541,7 +567,10 @@ void Game::SetCircularParams(ptr<Material> material, ptr<Geometry> geometry, ptr
 
 void Game::PlaceHero(float x, float y, float z)
 {
-	heroCharacter = physicsWorld->CreateCharacter(physicsWorld->CreateCapsuleShape(0.2f, 1.4f), CreateTranslationMatrix(x, y, z));
+	Eigen::Affine3f startTransform = Eigen::Affine3f::Identity();
+	startTransform.translate(Eigen::Vector3f(x, y, z));
+	mat4x4 initialTransform = fromEigen(startTransform.matrix());
+	heroCharacter = physicsWorld->CreateCharacter(physicsWorld->CreateCapsuleShape(0.2f, 1.4f), initialTransform);
 	heroAnimationFrame = NEW(BoneAnimationFrame(heroAnimation));
 	circularAnimationFrame = NEW(BoneAnimationFrame(circularAnimation));
 	zombieAnimationFrame = NEW(BoneAnimationFrame(zombieAnimation));
@@ -566,18 +595,20 @@ StaticLight::StaticLight() :
 
 void StaticLight::UpdateTransform()
 {
-	transform = CreateLookAtMatrix(position, target, float3(0, 0, 1)) * CreateProjectionPerspectiveFovMatrix(angle, 1.0f, nearPlane, farPlane);
+	transform =
+		CreateProjectionPerspectiveFovMatrix(angle, 1.0f, nearPlane, farPlane) *
+		CreateLookAtMatrix(position, target, vec3(0, 0, 1));
 }
 
 void StaticLight::SetPosition(float x, float y, float z)
 {
-	position = float3(x, y, z);
+	position = vec3(x, y, z);
 	UpdateTransform();
 }
 
 void StaticLight::SetTarget(float x, float y, float z)
 {
-	target = float3(x, y, z);
+	target = vec3(x, y, z);
 	UpdateTransform();
 }
 
@@ -591,7 +622,7 @@ void StaticLight::SetProjection(float angle, float nearPlane, float farPlane)
 
 void StaticLight::SetColor(float r, float g, float b)
 {
-	color = float3(r, g, b);
+	color = vec3(r, g, b);
 }
 
 void StaticLight::SetShadow(bool shadow)

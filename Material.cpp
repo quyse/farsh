@@ -48,15 +48,15 @@ void Material::SetNormalTexture(ptr<Texture> normalTexture)
 
 void Material::SetDiffuse(float red, float green, float blue, float alpha)
 {
-	this->diffuse = float4(red, green, blue, alpha);
+	this->diffuse = vec4(red, green, blue, alpha);
 }
 
 void Material::SetSpecular(float red, float green, float blue, float glossiness)
 {
-	this->specular = float4(red, green, blue, glossiness);
+	this->specular = vec4(red, green, blue, glossiness);
 }
 
 void Material::SetNormalCoordTransform(float scaleX, float scaleY, float offsetX, float offsetY)
 {
-	this->normalCoordTransform = float4(scaleX, scaleY, offsetX, offsetY);
+	this->normalCoordTransform = vec4(scaleX, scaleY, offsetX, offsetY);
 }

@@ -2,9 +2,6 @@
 #include "BoneAnimation.hpp"
 #include "GeometryFormats.hpp"
 
-// говно FIXME HACK
-#include "../inanity2/graphics/d3dx.hpp"
-
 const int Painter::shadowMapSize = 1024;
 const int Painter::randomMapSize = 64;
 const int Painter::downsamplingStepForBloom = 1;
@@ -13,15 +10,15 @@ const int Painter::bloomMapSize = 1 << (Painter::downsamplingPassesCount - 1 - P
 //*** Painter::BasicLight
 
 Painter::BasicLight::BasicLight(ptr<UniformGroup> ug) :
-	uLightPosition(ug->AddUniform<float3>()),
-	uLightColor(ug->AddUniform<float3>())
+	uLightPosition(ug->AddUniform<vec3>()),
+	uLightColor(ug->AddUniform<vec3>())
 {}
 
 //*** Painter::ShadowLight
 
 Painter::ShadowLight::ShadowLight(ptr<UniformGroup> ug, int samplerNumber) :
 	BasicLight(ug),
-	uLightTransform(ug->AddUniform<float4x4>()),
+	uLightTransform(ug->AddUniform<mat4x4>()),
 	uShadowSampler(samplerNumber)
 {}
 
@@ -29,7 +26,7 @@ Painter::ShadowLight::ShadowLight(ptr<UniformGroup> ug, int samplerNumber) :
 
 Painter::LightVariant::LightVariant() :
 	ugLight(NEW(UniformGroup(1))),
-	uAmbientColor(ugLight->AddUniform<float3>())
+	uAmbientColor(ugLight->AddUniform<vec3>())
 {}
 
 //*** Painter::VertexShaderKey
@@ -55,7 +52,7 @@ Painter::PixelShaderKey::operator size_t() const
 
 //*** Painter::Model
 
-Painter::Model::Model(ptr<Material> material, ptr<Geometry> geometry, const float4x4& worldTransform)
+Painter::Model::Model(ptr<Material> material, ptr<Geometry> geometry, const mat4x4& worldTransform)
 : material(material), geometry(geometry), worldTransform(worldTransform) {}
 
 //*** Painter::SkinnedModel
@@ -65,15 +62,15 @@ Painter::SkinnedModel::SkinnedModel(ptr<Material> material, ptr<Geometry> geomet
 
 //*** Painter::Decal
 
-Painter::Decal::Decal(ptr<Material> material, const float4x4& transform, const float4x4& invTransform)
+Painter::Decal::Decal(ptr<Material> material, const mat4x4& transform, const mat4x4& invTransform)
 : material(material), transform(transform), invTransform(invTransform) {}
 
 //*** Painter::Light
 
-Painter::Light::Light(const float3& position, const float3& color)
+Painter::Light::Light(const vec3& position, const vec3& color)
 : position(position), color(color), shadow(false) {}
 
-Painter::Light::Light(const float3& position, const float3& color, const float4x4& transform)
+Painter::Light::Light(const vec3& position, const vec3& color, const mat4x4& transform)
 : position(position), color(color), transform(transform), shadow(true) {}
 
 //*** Painter::DecalStuff
@@ -88,14 +85,14 @@ Painter::DecalStuff::DecalStuff(ptr<Device> device) :
 {
 	Vertex vertices[] =
 	{
-		{ float4(0, 0, 0, 1), float3(0, 0, 1), float2(0, 0) },
-		{ float4(1, 0, 0, 1), float3(0, 0, 1), float2(1, 0) },
-		{ float4(1, 1, 0, 1), float3(0, 0, 1), float2(1, 1) },
-		{ float4(0, 1, 0, 1), float3(0, 0, 1), float2(0, 1) },
-		{ float4(0, 0, 1, 1), float3(0, 0, 1), float2(0, 0) },
-		{ float4(1, 0, 1, 1), float3(0, 0, 1), float2(1, 0) },
-		{ float4(1, 1, 1, 1), float3(0, 0, 1), float2(1, 1) },
-		{ float4(0, 1, 1, 1), float3(0, 0, 1), float2(0, 1) }
+		{ vec4(0, 0, 0, 1), vec3(0, 0, 1), vec2(0, 0) },
+		{ vec4(1, 0, 0, 1), vec3(0, 0, 1), vec2(1, 0) },
+		{ vec4(1, 1, 0, 1), vec3(0, 0, 1), vec2(1, 1) },
+		{ vec4(0, 1, 0, 1), vec3(0, 0, 1), vec2(0, 1) },
+		{ vec4(0, 0, 1, 1), vec3(0, 0, 1), vec2(0, 0) },
+		{ vec4(1, 0, 1, 1), vec3(0, 0, 1), vec2(1, 0) },
+		{ vec4(1, 1, 1, 1), vec3(0, 0, 1), vec2(1, 1) },
+		{ vec4(0, 1, 1, 1), vec3(0, 0, 1), vec2(0, 1) }
 	};
 	unsigned short indices[] =
 	{
@@ -139,40 +136,40 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	aSkinnedBoneWeights(geometryFormats->aleSkinnedBoneWeights),
 
 	ugCamera(NEW(UniformGroup(0))),
-	uViewProj(ugCamera->AddUniform<float4x4>()),
-	uInvViewProj(ugCamera->AddUniform<float4x4>()),
-	uCameraPosition(ugCamera->AddUniform<float3>()),
+	uViewProj(ugCamera->AddUniform<mat4x4>()),
+	uInvViewProj(ugCamera->AddUniform<mat4x4>()),
+	uCameraPosition(ugCamera->AddUniform<vec3>()),
 
 	ugMaterial(NEW(UniformGroup(2))),
-	uDiffuse(ugMaterial->AddUniform<float4>()),
-	uSpecular(ugMaterial->AddUniform<float4>()),
-	uNormalCoordTransform(ugMaterial->AddUniform<float4>()),
+	uDiffuse(ugMaterial->AddUniform<vec4>()),
+	uSpecular(ugMaterial->AddUniform<vec4>()),
+	uNormalCoordTransform(ugMaterial->AddUniform<vec4>()),
 	uDiffuseSampler(0),
 	uSpecularSampler(1),
 	uNormalSampler(2),
 
 	ugModel(NEW(UniformGroup(3))),
-	uWorld(ugModel->AddUniform<float4x4>()),
+	uWorld(ugModel->AddUniform<mat4x4>()),
 
 	ugInstancedModel(NEW(UniformGroup(3))),
-	uWorlds(ugInstancedModel->AddUniformArray<float4x4>(maxInstancesCount)),
+	uWorlds(ugInstancedModel->AddUniformArray<mat4x4>(maxInstancesCount)),
 
 	ugSkinnedModel(NEW(UniformGroup(3))),
-	uBoneOffsets(ugSkinnedModel->AddUniformArray<float4>(maxBonesCount)),
-	uBoneOrientations(ugSkinnedModel->AddUniformArray<float4>(maxBonesCount)),
+	uBoneOffsets(ugSkinnedModel->AddUniformArray<vec4>(maxBonesCount)),
+	uBoneOrientations(ugSkinnedModel->AddUniformArray<vec4>(maxBonesCount)),
 
 	ugDecal(NEW(UniformGroup(3))),
-	uDecalTransforms(ugDecal->AddUniformArray<float4x4>(maxDecalsCount)),
-	uDecalInvTransforms(ugDecal->AddUniformArray<float4x4>(maxDecalsCount)),
+	uDecalTransforms(ugDecal->AddUniformArray<mat4x4>(maxDecalsCount)),
+	uDecalInvTransforms(ugDecal->AddUniformArray<mat4x4>(maxDecalsCount)),
 	uScreenNormalSampler(3),
 	uScreenDepthSampler(4),
 
 	ugShadowBlur(NEW(UniformGroup(0))),
-	uShadowBlurDirection(ugShadowBlur->AddUniform<float2>()),
+	uShadowBlurDirection(ugShadowBlur->AddUniform<vec2>()),
 	uShadowBlurSourceSampler(0),
 
 	ugDownsample(NEW(UniformGroup(0))),
-	uDownsampleOffsets(ugDownsample->AddUniform<float4>()),
+	uDownsampleOffsets(ugDownsample->AddUniform<vec4>()),
 	uDownsampleBlend(ugDownsample->AddUniform<float>()),
 	uDownsampleSourceSampler(0),
 	uDownsampleLuminanceSourceSampler(0),
@@ -287,16 +284,16 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		// вершина для фильтра
 		struct Vertex
 		{
-			float4 position;
-			float2 texcoord;
-			float2 gap;
+			vec4 position;
+			vec2 texcoord;
+			vec2 gap;
 		};
 
 		ptr<VertexLayout> vl;
 		ptr<AttributeLayout> al;
 		ptr<AttributeLayoutSlot> als;
-		Value<float4> aPosition;
-		Value<float2> aTexcoord;
+		Value<vec4> aPosition;
+		Value<vec2> aTexcoord;
 
 		ptr<VertexBuffer> vb;
 		ptr<IndexBuffer> ib;
@@ -314,10 +311,10 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			// геометрия полноэкранного квадрата
 			Vertex vertices[] =
 			{
-				{ float4(-1, -1, 0, 1), float2(0, 1) },
-				{ float4(1, -1, 0, 1), float2(1, 1) },
-				{ float4(1, 1, 0, 1), float2(1, 0) },
-				{ float4(-1, 1, 0, 1), float2(0, 0) }
+				{ vec4(-1, -1, 0, 1), vec2(0, 1) },
+				{ vec4(1, -1, 0, 1), vec2(1, 1) },
+				{ vec4(1, 1, 0, 1), vec2(1, 0) },
+				{ vec4(-1, 1, 0, 1), vec2(0, 0) }
 			};
 #ifdef FARSH_USE_OPENGL
 			unsigned short indices[] = { 0, 1, 2, 0, 2, 3 };
@@ -343,7 +340,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	// пиксельный шейдер для теней
 	csShadow.pixelShader = shaderCache->GetPixelShader(Expression((
 		iDepth,
-		fTarget = newfloat4(iDepth, 0, 0, 0)
+		fTarget = newvec4(iDepth, 0, 0, 0)
 		)));
 
 	//** шейдеры и состояния постпроцессинга и размытия теней
@@ -358,9 +355,9 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		csFilter.depthWrite = false;
 
 		// промежуточные
-		Interpolant<float2> iTexcoord(0);
+		Interpolant<vec2> iTexcoord(0);
 		// результат
-		Fragment<float4> fTarget(0);
+		Fragment<vec4> fTarget(0);
 
 		// вершинный шейдер - общий для всех постпроцессингов
 		ptr<VertexShader> vertexShader = shaderCache->GetVertexShader((
@@ -384,7 +381,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 					sum = sum + exp(uShadowBlurSourceSampler.Sample(iTexcoord + uShadowBlurDirection * Value<float>((float)i - 3))) * Value<float>(taps[i])
 					));
 			shader.Append((
-				fTarget = newfloat4(log(sum), 0, 0, 1)
+				fTarget = newvec4(log(sum), 0, 0, 1)
 				));
 			psShadowBlur = shaderCache->GetPixelShader(shader);
 		}
@@ -394,7 +391,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		{
 			Expression shader = (
 				iTexcoord,
-				fTarget = newfloat4((
+				fTarget = newvec4((
 					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xz"]) +
 					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xw"]) +
 					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["yz"]) +
@@ -406,11 +403,11 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		// пиксельный шейдер для первого downsample luminance
 		ptr<PixelShader> psDownsampleLuminanceFirst;
 		{
-			Temp<float3> luminanceCoef;
+			Temp<vec3> luminanceCoef;
 			Expression shader = (
 				iTexcoord,
-				luminanceCoef = newfloat3(0.2126f, 0.7152f, 0.0722f),
-				fTarget = newfloat4((
+				luminanceCoef = newvec3(0.2126f, 0.7152f, 0.0722f),
+				fTarget = newvec4((
 					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xz"]), luminanceCoef) + Value<float>(0.0001f)) +
 					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xw"]), luminanceCoef) + Value<float>(0.0001f)) +
 					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["yz"]), luminanceCoef) + Value<float>(0.0001f)) +
@@ -424,7 +421,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		{
 			Expression shader = (
 				iTexcoord,
-				fTarget = newfloat4((
+				fTarget = newvec4((
 					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xz"]) +
 					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xw"]) +
 					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets["yz"]) +
@@ -441,75 +438,75 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		// пиксельный шейдер для самого первого прохода (с ограничением по освещённости)
 		ptr<PixelShader> psBloomLimit;
 		{
-			Temp<float3> sum;
+			Temp<vec3> sum;
 			Expression shader = (
 				iTexcoord,
-				sum = newfloat3(0, 0, 0)
+				sum = newvec3(0, 0, 0)
 				);
 			for(int i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i)
 			{
 				shader.Append((
-					sum = sum + max(uBloomSourceSampler.Sample(iTexcoord + newfloat2(offsets[i] * offsetScaleX, 0)) - uBloomLimit, newfloat3(0, 0, 0))
+					sum = sum + max(uBloomSourceSampler.Sample(iTexcoord + newvec2(offsets[i] * offsetScaleX, 0)) - uBloomLimit, newvec3(0, 0, 0))
 					));
 			}
 			shader.Append((
-				fTarget = newfloat4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f)
+				fTarget = newvec4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f)
 				));
 			psBloomLimit = shaderCache->GetPixelShader(shader);
 		}
 		// пиксельный шейдер для первого прохода
 		ptr<PixelShader> psBloom1;
 		{
-			Temp<float3> sum;
+			Temp<vec3> sum;
 			Expression shader = (
 				iTexcoord,
-				sum = newfloat3(0, 0, 0)
+				sum = newvec3(0, 0, 0)
 				);
 			for(int i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i)
 			{
 				shader.Append((
-					sum = sum + uBloomSourceSampler.Sample(iTexcoord + newfloat2(offsets[i] * offsetScaleX, 0))
+					sum = sum + uBloomSourceSampler.Sample(iTexcoord + newvec2(offsets[i] * offsetScaleX, 0))
 					));
 			}
 			shader.Append((
-				fTarget = newfloat4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f)
+				fTarget = newvec4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f)
 				));
 			psBloom1 = shaderCache->GetPixelShader(shader);
 		}
 		// пиксельный шейдер для второго прохода
 		ptr<PixelShader> psBloom2;
 		{
-			Temp<float3> sum;
+			Temp<vec3> sum;
 			Expression shader = (
 				iTexcoord,
-				sum = newfloat3(0, 0, 0)
+				sum = newvec3(0, 0, 0)
 				);
 			for(int i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i)
 			{
 				shader.Append((
-					sum = sum + uBloomSourceSampler.Sample(iTexcoord + newfloat2(0, offsets[i] * offsetScaleY))
+					sum = sum + uBloomSourceSampler.Sample(iTexcoord + newvec2(0, offsets[i] * offsetScaleY))
 					));
 			}
 			shader.Append((
-				fTarget = newfloat4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f)
+				fTarget = newvec4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f)
 				));
 			psBloom2 = shaderCache->GetPixelShader(shader);
 		}
 		// шейдер tone mapping
 		ptr<PixelShader> psTone;
 		{
-			Temp<float3> color;
+			Temp<vec3> color;
 			Temp<float> luminance, relativeLuminance, intensity;
 			Expression shader = (
 				iTexcoord,
 				color = uToneScreenSampler.Sample(iTexcoord) + uToneBloomSampler.Sample(iTexcoord),
-				luminance = dot(color, newfloat3(0.2126f, 0.7152f, 0.0722f)),
-				relativeLuminance = uToneLuminanceKey * luminance / exp(uToneAverageSampler.Sample(newfloat2(0.5f, 0.5f))),
+				luminance = dot(color, newvec3(0.2126f, 0.7152f, 0.0722f)),
+				relativeLuminance = uToneLuminanceKey * luminance / exp(uToneAverageSampler.Sample(newvec2(0.5f, 0.5f))),
 				intensity = relativeLuminance * (Value<float>(1) + relativeLuminance / uToneMaxLuminance) / (Value<float>(1) + relativeLuminance),
 				color = saturate(color * (intensity / luminance)),
 				// гамма-коррекция
-				color = pow(color, newfloat3(0.45f, 0.45f, 0.45f)),
-				fTarget = newfloat4(color, 1.0f)
+				color = pow(color, newvec3(0.45f, 0.45f, 0.45f)),
+				fTarget = newvec4(color, 1.0f)
 			);
 			psTone = shaderCache->GetPixelShader(shader);
 		}
@@ -678,7 +675,7 @@ Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)
 	return lightVariantsCache.find(key)->second;
 }
 
-Value<float3> Painter::ApplyQuaternion(Value<float4> q, Value<float3> v)
+Value<vec3> Painter::ApplyQuaternion(Value<vec4> q, Value<vec3> v)
 {
 	return v + cross(q["xyz"], cross(q["xyz"], v) + v * q["w"]) * Value<float>(2);
 }
@@ -687,7 +684,7 @@ Expression Painter::GetWorldPositionAndNormal(const VertexShaderKey& key)
 {
 	if(key.skinned)
 	{
-		Value<float3> position = aSkinnedPosition;
+		Value<vec3> position = aSkinnedPosition;
 		Value<uint> boneNumbers[] =
 		{
 			aSkinnedBoneNumbers["x"],
@@ -702,14 +699,14 @@ Expression Painter::GetWorldPositionAndNormal(const VertexShaderKey& key)
 			aSkinnedBoneWeights["z"],
 			aSkinnedBoneWeights["w"]
 		};
-		Temp<float3> tmpBoneOffsets[4];
+		Temp<vec3> tmpBoneOffsets[4];
 
 		return
 			tmpBoneOffsets[0] = uBoneOffsets[boneNumbers[0]]["xyz"],
 			tmpBoneOffsets[1] = uBoneOffsets[boneNumbers[1]]["xyz"],
 			tmpBoneOffsets[2] = uBoneOffsets[boneNumbers[2]]["xyz"],
 			tmpBoneOffsets[3] = uBoneOffsets[boneNumbers[3]]["xyz"],
-			tmpVertexPosition = newfloat4(
+			tmpVertexPosition = newvec4(
 				(ApplyQuaternion(uBoneOrientations[boneNumbers[0]], position) + tmpBoneOffsets[0]) * boneWeights[0] +
 				(ApplyQuaternion(uBoneOrientations[boneNumbers[1]], position) + tmpBoneOffsets[1]) * boneWeights[1] +
 				(ApplyQuaternion(uBoneOrientations[boneNumbers[2]], position) + tmpBoneOffsets[2]) * boneWeights[2] +
@@ -723,8 +720,8 @@ Expression Painter::GetWorldPositionAndNormal(const VertexShaderKey& key)
 	}
 	else
 	{
-		Temp<float4x4> tmpWorld;
-		Temp<float4> tmpPosition;
+		Temp<mat4x4> tmpWorld;
+		Temp<vec4> tmpPosition;
 		Temp<uint> tmpInstance;
 		Expression e((
 			key.instanced ?
@@ -735,57 +732,57 @@ Expression Painter::GetWorldPositionAndNormal(const VertexShaderKey& key)
 					(
 						iInstance = tmpInstance,
 						tmpWorld = uDecalInvTransforms[tmpInstance],
-						tmpPosition = mul(decalStuff.aPosition, tmpWorld),
+						tmpPosition = mul(tmpWorld, decalStuff.aPosition),
 						tmpPosition = tmpPosition / tmpPosition["w"]
 					)
 					:
 					(
 						tmpWorld = uWorlds[tmpInstance],
-						tmpPosition = mul(newfloat4(aPosition, 1.0f), tmpWorld)
+						tmpPosition = mul(tmpWorld, newvec4(aPosition, 1.0f))
 					)
 				)
 			)
 			:
 			(
 				tmpWorld = uWorld,
-				tmpPosition = mul(newfloat4(aPosition, 1.0f), tmpWorld)
+				tmpPosition = mul(tmpWorld, newvec4(aPosition, 1.0f))
 			)
 		));
 
 		return
 			e,
-			tmpVertexPosition = Value<float4>(tmpPosition),
-			tmpVertexNormal = mul(key.decal ? decalStuff.aNormal : aNormal, tmpWorld.Cast<float3x3>());
+			tmpVertexPosition = Value<vec4>(tmpPosition),
+			tmpVertexNormal = mul(tmpWorld.Cast<mat3x3>(), key.decal ? decalStuff.aNormal : aNormal);
 	}
 }
 
-Expression Painter::BeginMaterialLighting(const PixelShaderKey& key, Value<float3> ambientColor)
+Expression Painter::BeginMaterialLighting(const PixelShaderKey& key, Value<vec3> ambientColor)
 {
 	Expression e =
-		tmpWorldPosition = newfloat4(iWorldPosition, 1.0f);
+		tmpWorldPosition = newvec4(iWorldPosition, 1.0f);
 
 	// получить текстурные координаты
 	if(key.decal)
 	{
-		Temp<float4> tmpScreen, tmpProjectedPosition;
-		Temp<float2> tmpScreenCoords;
+		Temp<vec4> tmpScreen, tmpProjectedPosition;
+		Temp<vec2> tmpScreenCoords;
 		Temp<float> tmpScreenDepth;
 		e.Append((
 			// получить спроецированную позицию
 			tmpScreen = iScreen / iScreen["w"],
-			tmpScreenCoords = newfloat2(
+			tmpScreenCoords = newvec2(
 				tmpScreen["x"] + Value<float>(1),
 				- tmpScreen["y"] + Value<float>(1)) * Value<float>(0.5f),
 			tmpScreenDepth = uScreenDepthSampler.Sample(tmpScreenCoords),
-			tmpProjectedPosition = mul(newfloat4(tmpScreen["xy"], tmpScreenDepth, 1), uInvViewProj),
+			tmpProjectedPosition = mul(uInvViewProj, newvec4(tmpScreen["xy"], tmpScreenDepth, 1)),
 			tmpProjectedPosition = tmpProjectedPosition / tmpProjectedPosition["w"],
 			// преобразовать эту позицию в пространство декали
-			tmpProjectedPosition = mul(tmpProjectedPosition, uDecalTransforms[iInstance]),
+			tmpProjectedPosition = mul(uDecalTransforms[iInstance], tmpProjectedPosition),
 			tmpProjectedPosition = tmpProjectedPosition / tmpProjectedPosition["w"],
 			//clip(tmpProjectedPosition["z"]),
 			//clip(Value<float>(1) - tmpProjectedPosition["z"]),
 			// получить текстурные координаты
-			tmpTexcoord = newfloat2(
+			tmpTexcoord = newvec2(
 				tmpProjectedPosition["x"] + Value<float>(1),
 				-tmpProjectedPosition["y"] + Value<float>(1)) * Value<float>(0.5f),
 
@@ -802,10 +799,10 @@ Expression Painter::BeginMaterialLighting(const PixelShaderKey& key, Value<float
 		// получить нормаль
 		if(key.materialKey.hasNormalTexture)
 		{
-			Temp<float3> dxPosition, dyPosition;
-			Temp<float2> dxTexcoord, dyTexcoord;
-			Temp<float3> r0, r1, r2, T1, T2, T3;
-			Temp<float3> perturbedNormal;
+			Temp<vec3> dxPosition, dyPosition;
+			Temp<vec2> dxTexcoord, dyTexcoord;
+			Temp<vec3> r0, r1, r2, T1, T2, T3;
+			Temp<vec3> perturbedNormal;
 			e.Append((
 				dxPosition = ddx(iWorldPosition),
 				dyPosition = ddy(iWorldPosition),
@@ -842,9 +839,9 @@ Expression Painter::BeginMaterialLighting(const PixelShaderKey& key, Value<float
 	return e;
 }
 
-Expression Painter::ApplyMaterialLighting(Value<float3> lightPosition, Value<float3> lightColor)
+Expression Painter::ApplyMaterialLighting(Value<vec3> lightPosition, Value<vec3> lightColor)
 {
-	Temp<float3> tmpToLight, tmpLightViewBissect, tmpDiffusePart, tmpSpecularPart;
+	Temp<vec3> tmpToLight, tmpLightViewBissect, tmpDiffusePart, tmpSpecularPart;
 	return
 		// направление на свет
 		tmpToLight = normalize(lightPosition - iWorldPosition),
@@ -852,12 +849,12 @@ Expression Painter::ApplyMaterialLighting(Value<float3> lightPosition, Value<flo
 		tmpLightViewBissect = normalize(tmpToLight + tmpToCamera),
 		// диффузная составляющая
 		tmpDiffusePart = tmpDiffuse["xyz"]
-			* max(dot(tmpNormal, tmpToLight), 0),
+			* max(dot(tmpNormal, tmpToLight), Value<float>(0.0f)),
 		// specular составляющая
 		tmpSpecularPart = tmpDiffuse["xyz"]
-			* pow(max(dot(tmpLightViewBissect, tmpNormal), 0), tmpSpecularExponent)
+			* pow(max(dot(tmpLightViewBissect, tmpNormal), Value<float>(0.0f)), tmpSpecularExponent)
 			//* dot(tmpNormal, tmpToLight) // хз, может не нужно оно?
-			* (tmpSpecularExponent + Value<float>(1)) / (max(pow(dot(tmpToLight, tmpLightViewBissect), 3.0f), 0.1f) * Value<float>(8)),
+			* (tmpSpecularExponent + Value<float>(1)) / (max(pow(dot(tmpToLight, tmpLightViewBissect), Value<float>(3.0f)), Value<float>(0.1f)) * Value<float>(8)),
 		// результирующая добавка к цвету
 		tmpColor = tmpColor + lightColor * (tmpDiffusePart + tmpSpecularPart);
 }
@@ -873,11 +870,11 @@ ptr<VertexShader> Painter::GetVertexShader(const VertexShaderKey& key)
 
 	// делаем новый
 
-	Temp<float4> p;
+	Temp<vec4> p;
 
 	Expression e((
 		GetWorldPositionAndNormal(key),
-		p = mul(tmpVertexPosition, uViewProj),
+		p = mul(uViewProj, tmpVertexPosition),
 		setPosition(p),
 		iNormal = tmpVertexNormal,
 		iTexcoord = key.skinned ? aSkinnedTexcoord : aTexcoord,
@@ -908,10 +905,10 @@ ptr<VertexShader> Painter::GetVertexShadowShader(const VertexShaderKey& key)
 
 	// делаем новый
 
-	Temp<float4> tmpPosition;
+	Temp<vec4> tmpPosition;
 	ptr<VertexShader> vertexShader = shaderCache->GetVertexShader(Expression((
 		GetWorldPositionAndNormal(key),
-		tmpPosition = mul(tmpVertexPosition, uViewProj),
+		tmpPosition = mul(uViewProj, tmpVertexPosition),
 		setPosition(tmpPosition),
 		iDepth = tmpPosition["z"]
 		)));
@@ -960,19 +957,19 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 		ShadowLight& shadowLight = lightVariant.shadowLights[i];
 
 		// тень
-		Temp<float4> shadowCoords;
+		Temp<vec4> shadowCoords;
 		Temp<float> shadowMultiplier;
-		Temp<float2> shadowCoordsXY;
+		Temp<vec2> shadowCoordsXY;
 		Temp<float> linearShadowZ;
 		Temp<float> lighted;
 		shader.Append((
-			shadowCoords = mul(tmpWorldPosition, shadowLight.uLightTransform),
+			shadowCoords = mul(shadowLight.uLightTransform, tmpWorldPosition),
 			lighted = (shadowCoords["z"] > Value<float>(0)).Cast<float>(),
 			linearShadowZ = shadowCoords["z"],
 			//lighted = lighted * (linearShadowZ > Value<float>(0)),
 			shadowCoords = shadowCoords / shadowCoords["w"],
 			lighted = lighted * (abs(shadowCoords["x"]) < Value<float>(1)).Cast<float>() * (abs(shadowCoords["y"]) < Value<float>(1)).Cast<float>(),
-			shadowCoordsXY = newfloat2(
+			shadowCoordsXY = newvec2(
 				(shadowCoords["x"] + Value<float>(1.0f)) * Value<float>(0.5f),
 				(Value<float>(1.0f) - shadowCoords["y"]) * Value<float>(0.5f)),
 			shadowMultiplier = lighted * saturate(exp(Value<float>(4) * (shadowLight.uShadowSampler.Sample(shadowCoordsXY) - linearShadowZ))),
@@ -983,12 +980,12 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 
 	// вернуть цвет
 	shader.Append((
-		fTarget = newfloat4(tmpColor, tmpDiffuse["w"])
+		fTarget = newvec4(tmpColor, tmpDiffuse["w"])
 	));
 	// если не декали, вернуть нормаль
 	if(!key.decal)
 		shader.Append((
-			fNormal = newfloat4((tmpNormal + Value<float>(1)) * Value<float>(0.5f), 1)
+			fNormal = newvec4((tmpNormal + Value<float>(1)) * Value<float>(0.5f), 1)
 		));
 
 	ptr<PixelShader> pixelShader = shaderCache->GetPixelShader(shader);
@@ -1008,21 +1005,14 @@ void Painter::BeginFrame(float frameTime)
 	lights.clear();
 }
 
-void Painter::SetCamera(const float4x4& cameraViewProj, const float3& cameraPosition)
+void Painter::SetCamera(const mat4x4& cameraViewProj, const vec3& cameraPosition)
 {
 	this->cameraViewProj = cameraViewProj;
-	// полный отстой, но инвертирования матрицы пока нет
-	D3DXMATRIX mxA((const float*)cameraViewProj.t), mxB;
-	D3DXMatrixInverse(&mxB, NULL, &mxA);
-	matrix<4, 4>& c = this->cameraInvViewProj;
-	c.t[0][0] = mxB._11; c.t[0][1] = mxB._12; c.t[0][2] = mxB._13; c.t[0][3] = mxB._14;
-	c.t[1][0] = mxB._21; c.t[1][1] = mxB._22; c.t[1][2] = mxB._23; c.t[1][3] = mxB._24;
-	c.t[2][0] = mxB._31; c.t[2][1] = mxB._32; c.t[2][2] = mxB._33; c.t[2][3] = mxB._34;
-	c.t[3][0] = mxB._41; c.t[3][1] = mxB._42; c.t[3][2] = mxB._43; c.t[3][3] = mxB._44;
+	this->cameraInvViewProj = fromEigen(toEigen(cameraViewProj).inverse().eval());
 	this->cameraPosition = cameraPosition;
 }
 
-void Painter::AddModel(ptr<Material> material, ptr<Geometry> geometry, const float4x4& worldTransform)
+void Painter::AddModel(ptr<Material> material, ptr<Geometry> geometry, const mat4x4& worldTransform)
 {
 	models.push_back(Model(material, geometry, worldTransform));
 }
@@ -1037,22 +1027,22 @@ void Painter::AddSkinnedModel(ptr<Material> material, ptr<Geometry> geometry, pt
 	skinnedModels.push_back(SkinnedModel(material, geometry, shadowGeometry, animationFrame));
 }
 
-void Painter::AddDecal(ptr<Material> material, const float4x4& transform, const float4x4& invTransform)
+void Painter::AddDecal(ptr<Material> material, const mat4x4& transform, const mat4x4& invTransform)
 {
 	decals.push_back(Decal(material, transform, invTransform));
 }
 
-void Painter::SetAmbientColor(const float3& ambientColor)
+void Painter::SetAmbientColor(const vec3& ambientColor)
 {
 	this->ambientColor = ambientColor;
 }
 
-void Painter::AddBasicLight(const float3& position, const float3& color)
+void Painter::AddBasicLight(const vec3& position, const vec3& color)
 {
 	lights.push_back(Light(position, color));
 }
 
-void Painter::AddShadowLight(const float3& position, const float3& color, const float4x4& transform)
+void Painter::AddShadowLight(const vec3& position, const vec3& color, const mat4x4& transform)
 {
 	lights.push_back(Light(position, color, transform));
 }
@@ -1172,8 +1162,8 @@ void Painter::Draw()
 				}
 				// установить uniform'ы костей
 				ptr<BoneAnimationFrame> animationFrame = skinnedModel.animationFrame;
-				const std::vector<quaternion>& orientations = animationFrame->orientations;
-				const std::vector<float3>& offsets = animationFrame->offsets;
+				const std::vector<quat>& orientations = animationFrame->orientations;
+				const std::vector<vec3>& offsets = animationFrame->offsets;
 				int bonesCount = (int)orientations.size();
 #ifdef _DEBUG
 				if(bonesCount > maxBonesCount)
@@ -1182,7 +1172,7 @@ void Painter::Draw()
 				for(int k = 0; k < bonesCount; ++k)
 				{
 					uBoneOrientations.SetValue(k, orientations[k]);
-					uBoneOffsets.SetValue(k, float4(offsets[k].x, offsets[k].y, offsets[k].z, 0));
+					uBoneOffsets.SetValue(k, vec4(offsets[k].x, offsets[k].y, offsets[k].z, 0));
 				}
 				// и залить в GPU
 				ugSkinnedModel->Upload(context);
@@ -1197,7 +1187,7 @@ void Painter::Draw()
 			cs.renderBuffers[0] = rbShadowBlur;
 			uShadowBlurSourceSampler.SetTexture(rb->GetTexture());
 			uShadowBlurSourceSampler.Apply(cs);
-			uShadowBlurDirection.SetValue(float2(1.0f / shadowMapSize, 0));
+			uShadowBlurDirection.SetValue(vec2(1.0f / shadowMapSize, 0));
 			ugShadowBlur->Upload(context);
 			context->ClearRenderBuffer(rbShadowBlur, zeroColor);
 			context->Draw();
@@ -1206,7 +1196,7 @@ void Painter::Draw()
 			cs.renderBuffers[0] = rb;
 			uShadowBlurSourceSampler.SetTexture(rbShadowBlur->GetTexture());
 			uShadowBlurSourceSampler.Apply(cs);
-			uShadowBlurDirection.SetValue(float2(0, 1.0f / shadowMapSize));
+			uShadowBlurDirection.SetValue(vec2(0, 1.0f / shadowMapSize));
 			ugShadowBlur->Upload(context);
 			context->ClearRenderBuffer(rb, zeroColor);
 			context->Draw();
@@ -1386,8 +1376,8 @@ void Painter::Draw()
 
 		// установить uniform'ы костей
 		ptr<BoneAnimationFrame> animationFrame = skinnedModel.animationFrame;
-		const std::vector<quaternion>& orientations = animationFrame->orientations;
-		const std::vector<float3>& offsets = animationFrame->offsets;
+		const std::vector<quat>& orientations = animationFrame->orientations;
+		const std::vector<vec3>& offsets = animationFrame->offsets;
 		int bonesCount = (int)orientations.size();
 #ifdef _DEBUG
 		if(bonesCount > maxBonesCount)
@@ -1396,7 +1386,7 @@ void Painter::Draw()
 		for(int k = 0; k < bonesCount; ++k)
 		{
 			uBoneOrientations.SetValue(k, orientations[k]);
-			uBoneOffsets.SetValue(k, float4(offsets[k].x, offsets[k].y, offsets[k].z, 0));
+			uBoneOffsets.SetValue(k, vec4(offsets[k].x, offsets[k].y, offsets[k].z, 0));
 		}
 		ugSkinnedModel->Upload(context);
 
@@ -1482,7 +1472,7 @@ void Painter::Draw()
 	{
 		float halfSourcePixelWidth = 0.5f / (i == 0 ? screenWidth : (1 << (downsamplingPassesCount - i)));
 		float halfSourcePixelHeight = 0.5f / (i == 0 ? screenHeight : (1 << (downsamplingPassesCount - i)));
-		uDownsampleOffsets.SetValue(float4(-halfSourcePixelWidth, halfSourcePixelWidth, -halfSourcePixelHeight, halfSourcePixelHeight));
+		uDownsampleOffsets.SetValue(vec4(-halfSourcePixelWidth, halfSourcePixelWidth, -halfSourcePixelHeight, halfSourcePixelHeight));
 		ugDownsample->Upload(context);
 		cs = csDownsamples[i];
 		if(veryFirstDownsampling || i < downsamplingPassesCount - 1)

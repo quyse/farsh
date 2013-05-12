@@ -39,24 +39,24 @@ private:
 
 	//*** Атрибуты.
 	ptr<AttributeBinding> ab;
-	Value<float3> aPosition;
-	Value<float3> aNormal;
-	Value<float2> aTexcoord;
+	Value<vec3> aPosition;
+	Value<vec3> aNormal;
+	Value<vec2> aTexcoord;
 	ptr<AttributeBinding> abSkinned;
-	Value<float3> aSkinnedPosition;
-	Value<float3> aSkinnedNormal;
-	Value<float2> aSkinnedTexcoord;
-	Value<uint4> aSkinnedBoneNumbers;
-	Value<float4> aSkinnedBoneWeights;
+	Value<vec3> aSkinnedPosition;
+	Value<vec3> aSkinnedNormal;
+	Value<vec2> aSkinnedTexcoord;
+	Value<uvec4> aSkinnedBoneNumbers;
+	Value<vec4> aSkinnedBoneWeights;
 
 	///*** Uniform-группа камеры.
 	ptr<UniformGroup> ugCamera;
 	/// Матрица вид-проекция.
-	Uniform<float4x4> uViewProj;
+	Uniform<mat4x4> uViewProj;
 	/// Обратная матрица вид-проекция.
-	Uniform<float4x4> uInvViewProj;
+	Uniform<mat4x4> uInvViewProj;
 	/// Положение камеры.
-	Uniform<float3> uCameraPosition;
+	Uniform<vec3> uCameraPosition;
 
 	/// Настройки семплера для карт теней.
 	ptr<SamplerState> shadowSamplerState;
@@ -65,9 +65,9 @@ private:
 	struct BasicLight
 	{
 		/// Положение источника.
-		Uniform<float3> uLightPosition;
+		Uniform<vec3> uLightPosition;
 		/// Цвет источника.
-		Uniform<float3> uLightColor;
+		Uniform<vec3> uLightColor;
 
 		BasicLight(ptr<UniformGroup> ug);
 	};
@@ -75,9 +75,9 @@ private:
 	struct ShadowLight : public BasicLight
 	{
 		/// Матрица трансформации источника света.
-		Uniform<float4x4> uLightTransform;
+		Uniform<mat4x4> uLightTransform;
 		/// Семплер карты теней источника света.
-		Sampler<float, float2> uShadowSampler;
+		Sampler<float, vec2> uShadowSampler;
 
 		ShadowLight(ptr<UniformGroup> ug, int samplerNumber);
 	};
@@ -87,7 +87,7 @@ private:
 		/// Uniform-группа параметров.
 		ptr<UniformGroup> ugLight;
 		/// Рассеянный свет.
-		Uniform<float3> uAmbientColor;
+		Uniform<vec3> uAmbientColor;
 		/// Простые источники света.
 		std::vector<BasicLight> basicLights;
 		/// Источники света с тенями.
@@ -120,71 +120,71 @@ private:
 	///*** Uniform-группа материала.
 	ptr<UniformGroup> ugMaterial;
 	/// Диффузный цвет с альфа-каналом.
-	Uniform<float4> uDiffuse;
+	Uniform<vec4> uDiffuse;
 	/// Specular + glossiness.
-	Uniform<float4> uSpecular;
+	Uniform<vec4> uSpecular;
 	/// Преобразование текстурных координат для карты нормалей.
-	Uniform<float4> uNormalCoordTransform;
+	Uniform<vec4> uNormalCoordTransform;
 	/// Семплер диффузной текстуры.
-	Sampler<float4, float2> uDiffuseSampler;
+	Sampler<vec4, vec2> uDiffuseSampler;
 	/// Семплер specular текстуры.
-	Sampler<float4, float2> uSpecularSampler;
+	Sampler<vec4, vec2> uSpecularSampler;
 	/// Семплер карты нормалей.
-	Sampler<float3, float2> uNormalSampler;
+	Sampler<vec3, vec2> uNormalSampler;
 
 	///*** Uniform-группа модели.
 	ptr<UniformGroup> ugModel;
 	/// Матрица мира.
-	Uniform<float4x4> uWorld;
+	Uniform<mat4x4> uWorld;
 
 	///*** Uniform-группа instanced-модели.
 	ptr<UniformGroup> ugInstancedModel;
 	/// Матрицы мира.
-	UniformArray<float4x4> uWorlds;
+	UniformArray<mat4x4> uWorlds;
 
 	///*** Uniform-группа skinned-модели.
 	ptr<UniformGroup> ugSkinnedModel;
 	/// Кватернионы костей.
-	UniformArray<float4> uBoneOrientations;
+	UniformArray<vec4> uBoneOrientations;
 	/// Смещения костей.
-	UniformArray<float4> uBoneOffsets;
+	UniformArray<vec4> uBoneOffsets;
 
 	///*** Uniform-группа декалей.
 	ptr<UniformGroup> ugDecal;
 	/// Матрицы декалей.
-	UniformArray<float4x4> uDecalTransforms;
+	UniformArray<mat4x4> uDecalTransforms;
 	/// Обратные матрицы декалей.
-	UniformArray<float4x4> uDecalInvTransforms;
+	UniformArray<mat4x4> uDecalInvTransforms;
 	/// Семплер нормалей.
-	Sampler<float3, float2> uScreenNormalSampler;
+	Sampler<vec3, vec2> uScreenNormalSampler;
 	/// Семплер глубины.
-	Sampler<float, float2> uScreenDepthSampler;
+	Sampler<float, vec2> uScreenDepthSampler;
 
 	///*** Uniform-группа размытия тени.
 	ptr<UniformGroup> ugShadowBlur;
 	/// Вектор направления размытия.
-	Uniform<float2> uShadowBlurDirection;
+	Uniform<vec2> uShadowBlurDirection;
 	/// Семплер для тени.
-	Sampler<float, float2> uShadowBlurSourceSampler;
+	Sampler<float, vec2> uShadowBlurSourceSampler;
 
 	///*** Uniform-группа даунсемплинга.
 	ptr<UniformGroup> ugDownsample;
 	/// Смещения для семплов.
 	/** Смещения это xz, xw, yz, yw. */
-	Uniform<float4> uDownsampleOffsets;
+	Uniform<vec4> uDownsampleOffsets;
 	/// Коэффициент смешивания.
 	Uniform<float> uDownsampleBlend;
 	/// Исходный семплер.
-	Sampler<float3, float2> uDownsampleSourceSampler;
+	Sampler<vec3, vec2> uDownsampleSourceSampler;
 	/// Исходный семплер для освещённости.
-	Sampler<float, float2> uDownsampleLuminanceSourceSampler;
+	Sampler<float, vec2> uDownsampleLuminanceSourceSampler;
 
 	///*** Uniform-группа bloom.
 	ptr<UniformGroup> ugBloom;
 	/// Ограничение по освещённости для bloom.
 	Uniform<float> uBloomLimit;
 	/// Семплер исходника для bloom.
-	Sampler<float3, float2> uBloomSourceSampler;
+	Sampler<vec3, vec2> uBloomSourceSampler;
 
 	///*** Uniform-группа tone mapping.
 	ptr<UniformGroup> ugTone;
@@ -193,40 +193,40 @@ private:
 	/// Максимальная освещённость.
 	Uniform<float> uToneMaxLuminance;
 	/// Семплер результата bloom.
-	Sampler<float3, float2> uToneBloomSampler;
+	Sampler<vec3, vec2> uToneBloomSampler;
 	/// Семплер экрана.
-	Sampler<float3, float2> uToneScreenSampler;
+	Sampler<vec3, vec2> uToneScreenSampler;
 	/// Семплер результата downsample для средней освещённости.
-	Sampler<float, float2> uToneAverageSampler;
+	Sampler<float, vec2> uToneAverageSampler;
 
 	//*** Промежуточные переменные.
-	Interpolant<float3> iNormal;
-	Interpolant<float2> iTexcoord;
-	Interpolant<float3> iWorldPosition;
+	Interpolant<vec3> iNormal;
+	Interpolant<vec2> iTexcoord;
+	Interpolant<vec3> iWorldPosition;
 	Interpolant<float> iDepth;
-	Interpolant<float4> iScreen;
+	Interpolant<vec4> iScreen;
 	Interpolant<uint> iInstance;
 
 	//*** Выходные переменные.
-	Fragment<float4> fTarget;
-	Fragment<float4> fNormal;
+	Fragment<vec4> fTarget;
+	Fragment<vec4> fNormal;
 
 	//*** Декали.
 	struct DecalStuff
 	{
 		struct Vertex
 		{
-			float4 position;
-			float3 normal;
-			float2 texcoord;
+			vec4 position;
+			vec3 normal;
+			vec2 texcoord;
 		};
 
 		ptr<VertexLayout> vl;
 		ptr<AttributeLayout> al;
 		ptr<AttributeLayoutSlot> als;
-		Value<float4> aPosition;
-		Value<float3> aNormal;
-		Value<float2> aTexcoord;
+		Value<vec4> aPosition;
+		Value<vec3> aNormal;
+		Value<vec2> aTexcoord;
 
 		ptr<VertexBuffer> vb;
 		ptr<IndexBuffer> ib;
@@ -315,11 +315,11 @@ private:
 	ptr<VertexShader> GetVertexShadowShader(const VertexShaderKey& key);
 
 	/// Временные переменные вершинного шейдера моделей.
-	Temp<float4> tmpVertexPosition;
-	Temp<float3> tmpVertexNormal;
+	Temp<vec4> tmpVertexPosition;
+	Temp<vec3> tmpVertexNormal;
 
 	/// Повернуть вектор кватернионом.
-	static Value<float3> ApplyQuaternion(Value<float4> q, Value<float3> v);
+	static Value<vec3> ApplyQuaternion(Value<vec4> q, Value<vec3> v);
 	/// Получить положение вершины и нормаль в мире.
 	/** Возвращает выражение, которое записывает положение и нормаль во
 	временные переменные tmpVertexPosition и tmpVertexNormal. */
@@ -348,18 +348,18 @@ private:
 	ptr<PixelShader> GetPixelShader(const PixelShaderKey& key);
 
 	//*** Временные переменные пиксельного шейдера материала.
-	Temp<float4> tmpWorldPosition;
-	Temp<float2> tmpTexcoord;
-	Temp<float3> tmpNormal;
-	Temp<float3> tmpToCamera;
-	Temp<float4> tmpDiffuse, tmpSpecular;
+	Temp<vec4> tmpWorldPosition;
+	Temp<vec2> tmpTexcoord;
+	Temp<vec3> tmpNormal;
+	Temp<vec3> tmpToCamera;
+	Temp<vec4> tmpDiffuse, tmpSpecular;
 	Temp<float> tmpSpecularExponent;
-	Temp<float3> tmpColor;
+	Temp<vec3> tmpColor;
 
 	/// Получить временные переменные для освещения в пиксельном шейдере.
-	Expression BeginMaterialLighting(const PixelShaderKey& key, Value<float3> ambientColor);
+	Expression BeginMaterialLighting(const PixelShaderKey& key, Value<vec3> ambientColor);
 	/// Вычислить добавку к цвету и прибавить её к tmpColor.
-	Expression ApplyMaterialLighting(Value<float3> lightPosition, Value<float3> lightColor);
+	Expression ApplyMaterialLighting(Value<vec3> lightPosition, Value<vec3> lightColor);
 
 	/// Текущее время кадра.
 	float frameTime;
@@ -367,18 +367,18 @@ private:
 	//*** зарегистрированные объекты для рисования
 
 	// Текущая камера для opaque pass.
-	float4x4 cameraViewProj;
-	float4x4 cameraInvViewProj;
-	float3 cameraPosition;
+	mat4x4 cameraViewProj;
+	mat4x4 cameraInvViewProj;
+	vec3 cameraPosition;
 
 	/// Модель для рисования.
 	struct Model
 	{
 		ptr<Material> material;
 		ptr<Geometry> geometry;
-		float4x4 worldTransform;
+		mat4x4 worldTransform;
 
-		Model(ptr<Material> material, ptr<Geometry> geometry, const float4x4& worldTransform);
+		Model(ptr<Material> material, ptr<Geometry> geometry, const mat4x4& worldTransform);
 	};
 	std::vector<Model> models;
 
@@ -399,26 +399,26 @@ private:
 	struct Decal
 	{
 		ptr<Material> material;
-		float4x4 transform;
-		float4x4 invTransform;
+		mat4x4 transform;
+		mat4x4 invTransform;
 
-		Decal(ptr<Material> material, const float4x4& transform, const float4x4& invTransform);
+		Decal(ptr<Material> material, const mat4x4& transform, const mat4x4& invTransform);
 	};
 	std::vector<Decal> decals;
 
 	// Источники света.
 	/// Рассеянный свет.
-	float3 ambientColor;
+	vec3 ambientColor;
 	/// Структура источника света.
 	struct Light
 	{
-		float3 position;
-		float3 color;
-		float4x4 transform;
+		vec3 position;
+		vec3 color;
+		mat4x4 transform;
 		bool shadow;
 
-		Light(const float3& position, const float3& color);
-		Light(const float3& position, const float3& color, const float4x4& transform);
+		Light(const vec3& position, const vec3& color);
+		Light(const vec3& position, const vec3& color, const mat4x4& transform);
 	};
 	std::vector<Light> lights;
 
@@ -437,20 +437,20 @@ public:
 	/** Очистить все регистрационные списки. */
 	void BeginFrame(float frameTime);
 	/// Установить камеру.
-	void SetCamera(const float4x4& cameraViewProj, const float3& cameraPosition);
+	void SetCamera(const mat4x4& cameraViewProj, const vec3& cameraPosition);
 	/// Зарегистрировать модель.
-	void AddModel(ptr<Material> material, ptr<Geometry> geometry, const float4x4& worldTransform);
+	void AddModel(ptr<Material> material, ptr<Geometry> geometry, const mat4x4& worldTransform);
 	/// Зарегистрировать skinned-модель.
 	void AddSkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimationFrame> animationFrame);
 	void AddSkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<Geometry> shadowGeometry, ptr<BoneAnimationFrame> animationFrame);
 	/// Добавить декаль.
-	void AddDecal(ptr<Material> material, const float4x4& transform, const float4x4& invTransform);
+	void AddDecal(ptr<Material> material, const mat4x4& transform, const mat4x4& invTransform);
 	/// Установить рассеянный свет.
-	void SetAmbientColor(const float3& ambientColor);
+	void SetAmbientColor(const vec3& ambientColor);
 	/// Зарегистрировать простой источник света.
-	void AddBasicLight(const float3& position, const float3& color);
+	void AddBasicLight(const vec3& position, const vec3& color);
 	/// Зарегистрировать источник света с тенью.
-	void AddShadowLight(const float3& position, const float3& color, const float4x4& transform);
+	void AddShadowLight(const vec3& position, const vec3& color, const mat4x4& transform);
 
 	/// Установить параметры постпроцессинга.
 	void SetupPostprocess(float bloomLimit, float toneLuminanceKey, float toneMaxLuminance);
