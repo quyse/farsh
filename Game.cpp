@@ -173,11 +173,6 @@ void Game::Tick(int)
 				switch(inputEvent.keyboard.key)
 				{
 				case 27: // escape
-					// TEST
-#ifdef ___INANITY_TRACE_PTR
-					managedHeap.PrintPtrs(std::cout);
-#endif
-
 					window->Close();
 					return;
 				case 32:
@@ -321,7 +316,7 @@ void Game::Tick(int)
 
 	mat4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, vec3(0, 0, 1));
 #ifdef FARSH_USE_OPENGL
-	viewMatrix = fromEigen((toEigen(viewMatrix) * Eigen::Scaling(Eigen::Vector3f(1, -1, 1))).eval().matrix());
+	viewMatrix = fromEigen((Eigen::Scaling(Eigen::Vector3f(1, -1, 1)) * Eigen::Affine3f(toEigen(viewMatrix))).matrix());
 #endif
 	mat4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 0.1f, 100.0f);
 
