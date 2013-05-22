@@ -49,8 +49,8 @@ void Game::Run()
 {
 	try
 	{
-#ifdef FARSH_USE_DIRECTX
-		ptr<Graphics::System> system = NEW(DxSystem());
+#ifdef FARSH_USE_DIRECTX11
+		ptr<Graphics::System> system = NEW(Dx11System());
 #endif
 #ifdef FARSH_USE_OPENGL
 		ptr<Graphics::System> system = NEW(GlSystem());

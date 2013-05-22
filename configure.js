@@ -1,5 +1,5 @@
 var apiDefines = {
-	dx: 'FARSH_USE_DIRECTX',
+	dx11: 'FARSH_USE_DIRECTX11',
 	gl: 'FARSH_USE_OPENGL'
 };
 
@@ -17,7 +17,7 @@ var staticLibraries = [
 	'libinanity-win32window',
 	'libinanity-graphics',
 	'libinanity-shaders',
-	{ lib: 'libinanity-dx', api: 'dx' },
+	{ lib: 'libinanity-dx11', api: 'dx11' },
 	{ lib: 'libinanity-gl', api: 'gl' },
 	'libinanity-lua',
 	'libinanity-input',

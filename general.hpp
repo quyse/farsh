@@ -17,8 +17,8 @@ using namespace Inanity;
 using namespace Inanity::Graphics;
 using namespace Inanity::Graphics::Shaders;
 
-#ifdef FARSH_USE_DIRECTX
-#include "../inanity2/inanity-dx.hpp"
+#ifdef FARSH_USE_DIRECTX11
+#include "../inanity2/inanity-dx11.hpp"
 #endif
 #ifdef FARSH_USE_OPENGL
 #include "../inanity2/inanity-gl.hpp"
