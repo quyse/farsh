@@ -131,6 +131,8 @@ private:
 	std::vector<Cube> cubes;
 	ptr<Physics::Shape> cubePhysicsShape;
 
+	vec3 ambientColor;
+
 	float bloomLimit, toneLuminanceKey, toneMaxLuminance;
 
 	/// Скрипт.
@@ -160,6 +162,7 @@ public:
 	ptr<StaticLight> AddStaticLight();
 	void SetDecalMaterial(ptr<Material> decalMaterial);
 
+	void SetAmbient(float r, float g, float b);
 	void SetZombieParams(ptr<Material> material, ptr<Geometry> geometry, ptr<Skeleton> skeleton, ptr<BoneAnimation> animation);
 	void SetHeroParams(ptr<Material> material, ptr<Geometry> geometry, ptr<Skeleton> skeleton, ptr<BoneAnimation> animation);
 	void SetAxeParams(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimation> animation);

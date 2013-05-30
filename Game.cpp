@@ -21,6 +21,7 @@ SCRIPTABLE_MAP_BEGIN(Game, Farsh.Game);
 	SCRIPTABLE_METHOD(Game, AddRigidModel);
 	SCRIPTABLE_METHOD(Game, AddStaticLight);
 	SCRIPTABLE_METHOD(Game, SetDecalMaterial);
+	SCRIPTABLE_METHOD(Game, SetAmbient);
 	SCRIPTABLE_METHOD(Game, SetZombieParams);
 	SCRIPTABLE_METHOD(Game, SetHeroParams);
 	SCRIPTABLE_METHOD(Game, SetAxeParams);
@@ -323,7 +324,7 @@ void Game::Tick(int)
 	// зарегистрировать все объекты
 	painter->BeginFrame(frameTime);
 	painter->SetCamera(projMatrix * viewMatrix, cameraPosition);
-	painter->SetAmbientColor(vec3(0, 0, 0));
+	painter->SetAmbientColor(ambientColor);
 
 	for(size_t i = 0; i < staticModels.size(); ++i)
 	{
@@ -528,6 +529,11 @@ ptr<StaticLight> Game::AddStaticLight()
 void Game::SetDecalMaterial(ptr<Material> decalMaterial)
 {
 	this->decalMaterial = decalMaterial;
+}
+
+void Game::SetAmbient(float r, float g, float b)
+{
+	this->ambientColor = vec3(r, g, b);
 }
 
 void Game::SetZombieParams(ptr<Material> material, ptr<Geometry> geometry, ptr<Skeleton> skeleton, ptr<BoneAnimation> animation)

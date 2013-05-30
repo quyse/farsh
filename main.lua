@@ -3,6 +3,8 @@ local game = Farsh.Game.Get()
 Farsh.t = {}
 local t = Farsh.t
 
+game:SetAmbient(0.1, 0.1, 0.1)
+
 -- материал кровищи
 local matBlood = Farsh.Material()
 matBlood:SetDiffuseTexture(game:LoadTexture("blood.png"))
