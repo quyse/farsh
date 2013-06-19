@@ -35,7 +35,7 @@ public:
 
 	static ptr<Skeleton> Deserialize(ptr<InputStream> inputStream);
 
-	SCRIPTABLE_CLASS(Skeleton);
+	META_DECLARE_CLASS(Skeleton);
 };
 
 #endif

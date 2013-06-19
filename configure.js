@@ -19,6 +19,7 @@ var staticLibraries = [
 	'libinanity-shaders',
 	{ lib: 'libinanity-dx11', api: 'dx11' },
 	{ lib: 'libinanity-gl', api: 'gl' },
+	'libinanity-meta',
 	'libinanity-lua',
 	'libinanity-input',
 	'libinanity-physics',
@@ -56,11 +57,11 @@ exports.configureLinker = function(executableFile, linker) {
 		else if(staticLibraries[i].api == api)
 			lib = staticLibraries[i].lib;
 		if(lib)
-			linker.addStaticLibrary('../inanity2/' + a[1] + lib);
+			linker.addStaticLibrary('../inanity/' + a[1] + lib);
 	}
 	for(var i = 0; i < staticDepsLibraries.length; ++i)
 		if(!staticDepsLibraries[i].api || staticDepsLibraries[i].api == api)
-			linker.addStaticLibrary('../inanity2/deps/' + staticDepsLibraries[i].dir + '/' + a[1] + staticDepsLibraries[i].lib);
+			linker.addStaticLibrary('../inanity/deps/' + staticDepsLibraries[i].dir + '/' + a[1] + staticDepsLibraries[i].lib);
 
 	for(var i = 0; i < dynamicLibraries.length; ++i) {
 		var lib = undefined;

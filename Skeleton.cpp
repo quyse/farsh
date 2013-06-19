@@ -1,8 +1,8 @@
 #include "Skeleton.hpp"
 #include <stack>
 
-SCRIPTABLE_MAP_BEGIN(Skeleton, Farsh.Skeleton);
-SCRIPTABLE_MAP_END();
+META_CLASS(Skeleton, Farsh.Skeleton);
+META_CLASS_END();
 
 /*
 Формат файла скелета:

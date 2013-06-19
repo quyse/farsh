@@ -1,14 +1,14 @@
 #include "Material.hpp"
 
-SCRIPTABLE_MAP_BEGIN(Material, Farsh.Material);
-	SCRIPTABLE_CONSTRUCTOR(Material);
-	SCRIPTABLE_METHOD(Material, SetDiffuseTexture);
-	SCRIPTABLE_METHOD(Material, SetSpecularTexture);
-	SCRIPTABLE_METHOD(Material, SetNormalTexture);
-	SCRIPTABLE_METHOD(Material, SetDiffuse);
-	SCRIPTABLE_METHOD(Material, SetSpecular);
-	SCRIPTABLE_METHOD(Material, SetNormalCoordTransform);
-SCRIPTABLE_MAP_END();
+META_CLASS(Material, Farsh.Material);
+	META_CONSTRUCTOR();
+	META_METHOD(SetDiffuseTexture);
+	META_METHOD(SetSpecularTexture);
+	META_METHOD(SetNormalTexture);
+	META_METHOD(SetDiffuse);
+	META_METHOD(SetSpecular);
+	META_METHOD(SetNormalCoordTransform);
+META_CLASS_END();
 
 //*** MaterialKey
 

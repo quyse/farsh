@@ -5,29 +5,29 @@
 #include "Material.hpp"
 #include "Skeleton.hpp"
 #include "BoneAnimation.hpp"
-#include "../inanity2/inanity-sqlitefs.hpp"
+#include "../inanity/inanity-sqlitefs.hpp"
 #include <iostream>
 
-SCRIPTABLE_MAP_BEGIN(Game, Farsh.Game);
-	SCRIPTABLE_METHOD(Game, Get);
-	SCRIPTABLE_METHOD(Game, LoadTexture);
-	SCRIPTABLE_METHOD(Game, LoadGeometry);
-	SCRIPTABLE_METHOD(Game, LoadSkinnedGeometry);
-	SCRIPTABLE_METHOD(Game, LoadSkeleton);
-	SCRIPTABLE_METHOD(Game, LoadBoneAnimation);
-	SCRIPTABLE_METHOD(Game, CreatePhysicsBoxShape);
-	SCRIPTABLE_METHOD(Game, CreatePhysicsRigidBody);
-	SCRIPTABLE_METHOD(Game, AddStaticModel);
-	SCRIPTABLE_METHOD(Game, AddRigidModel);
-	SCRIPTABLE_METHOD(Game, AddStaticLight);
-	SCRIPTABLE_METHOD(Game, SetDecalMaterial);
-	SCRIPTABLE_METHOD(Game, SetAmbient);
-	SCRIPTABLE_METHOD(Game, SetZombieParams);
-	SCRIPTABLE_METHOD(Game, SetHeroParams);
-	SCRIPTABLE_METHOD(Game, SetAxeParams);
-	SCRIPTABLE_METHOD(Game, SetCircularParams);
-	SCRIPTABLE_METHOD(Game, PlaceHero);
-SCRIPTABLE_MAP_END();
+META_CLASS(Game, Farsh.Game);
+	META_STATIC_METHOD(Get);
+	META_METHOD(LoadTexture);
+	META_METHOD(LoadGeometry);
+	META_METHOD(LoadSkinnedGeometry);
+	META_METHOD(LoadSkeleton);
+	META_METHOD(LoadBoneAnimation);
+	META_METHOD(CreatePhysicsBoxShape);
+	META_METHOD(CreatePhysicsRigidBody);
+	META_METHOD(AddStaticModel);
+	META_METHOD(AddRigidModel);
+	META_METHOD(AddStaticLight);
+	META_METHOD(SetDecalMaterial);
+	META_METHOD(SetAmbient);
+	META_METHOD(SetZombieParams);
+	META_METHOD(SetHeroParams);
+	META_METHOD(SetAxeParams);
+	META_METHOD(SetCircularParams);
+	META_METHOD(PlaceHero);
+META_CLASS_END();
 
 Game* Game::singleGame = 0;
 
@@ -117,18 +117,18 @@ void Game::Run()
 		physicsWorld = NEW(Physics::BtWorld());
 
 		// запустить стартовый скрипт
-		scriptState = NEW(Lua::State());
-		scriptState->RegisterClass<Game>();
-		scriptState->RegisterClass<Material>();
+		scriptState = NEW(Script::Lua::State());
+		scriptState->Register<Game>();
+		scriptState->Register<Material>();
 
-		ptr<Script> mainScript = scriptState->LoadScript(fileSystem->LoadFile(
+		ptr<Script::Function> mainScript = scriptState->LoadScript(fileSystem->LoadFile(
 #ifdef PRODUCTION
 			"main.luab"
 #else
 			"main.lua"
 #endif
 		));
-		mainScript->Run<void>();
+		mainScript->Run();
 
 		try
 		{
@@ -183,7 +183,7 @@ void Game::Tick(int)
 				case 'M':
 					try
 					{
-						scriptState->LoadScript(fileSystem->LoadFile("console.lua"))->Run<void>();
+						scriptState->LoadScript(fileSystem->LoadFile("console.lua"))->Run();
 						std::cout << "console.lua successfully executed.\n";
 					}
 					catch(Exception* exception)
@@ -580,13 +580,13 @@ void Game::PlaceHero(float x, float y, float z)
 
 //******* Game::StaticLight
 
-SCRIPTABLE_MAP_BEGIN(StaticLight, Farsh.StaticLight);
-	SCRIPTABLE_METHOD(StaticLight, SetPosition);
-	SCRIPTABLE_METHOD(StaticLight, SetTarget);
-	SCRIPTABLE_METHOD(StaticLight, SetProjection);
-	SCRIPTABLE_METHOD(StaticLight, SetColor);
-	SCRIPTABLE_METHOD(StaticLight, SetShadow);
-SCRIPTABLE_MAP_END();
+META_CLASS(StaticLight, Farsh.StaticLight);
+	META_METHOD(SetPosition);
+	META_METHOD(SetTarget);
+	META_METHOD(SetProjection);
+	META_METHOD(SetColor);
+	META_METHOD(SetShadow);
+META_CLASS_END();
 
 StaticLight::StaticLight() :
 	position(-1, 0, 0), target(0, 0, 0), angle(3.1415926535897932f / 4), nearPlane(0.1f), farPlane(100.0f), color(1, 1, 1), shadow(false)

@@ -15,7 +15,7 @@ public:
 	ptr<VertexBuffer> GetVertexBuffer() const;
 	ptr<IndexBuffer> GetIndexBuffer() const;
 
-	SCRIPTABLE_CLASS(Geometry);
+	META_DECLARE_CLASS(Geometry);
 };
 
 #endif

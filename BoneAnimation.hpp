@@ -34,7 +34,7 @@ public:
 
 	static ptr<BoneAnimation> Deserialize(ptr<InputStream> inputStream, ptr<Skeleton> skeleton);
 
-	SCRIPTABLE_CLASS(BoneAnimation);
+	META_DECLARE_CLASS(BoneAnimation);
 };
 
 /// Класс кадра анимации костей.

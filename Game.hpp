@@ -32,7 +32,7 @@ struct StaticLight : public Object
 	void SetColor(float r, float g, float b);
 	void SetShadow(bool shadow);
 
-	SCRIPTABLE_CLASS(StaticLight);
+	META_DECLARE_CLASS(StaticLight);
 };
 
 /// Класс игры.
@@ -136,7 +136,7 @@ private:
 	float bloomLimit, toneLuminanceKey, toneMaxLuminance;
 
 	/// Скрипт.
-	ptr<ScriptState> scriptState;
+	ptr<Script::State> scriptState;
 	/// Единственный экземпляр для игры.
 	static Game* singleGame;
 
@@ -170,7 +170,7 @@ public:
 
 	void PlaceHero(float x, float y, float z);
 
-	SCRIPTABLE_CLASS(Game);
+	META_DECLARE_CLASS(Game);
 };
 
 #endif

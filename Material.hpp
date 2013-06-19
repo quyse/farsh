@@ -36,7 +36,7 @@ struct Material : public Object
 	void SetSpecular(float red, float green, float blue, float glossiness);
 	void SetNormalCoordTransform(float scaleX, float scaleY, float offsetX, float offsetY);
 
-	SCRIPTABLE_CLASS(Material);
+	META_DECLARE_CLASS(Material);
 };
 
 #endif

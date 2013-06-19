@@ -1,7 +1,7 @@
 #include "Geometry.hpp"
 
-SCRIPTABLE_MAP_BEGIN(Geometry, Farsh.Geometry);
-SCRIPTABLE_MAP_END();
+META_CLASS(Geometry, Farsh.Geometry);
+META_CLASS_END();
 
 Geometry::Geometry(ptr<VertexBuffer> vertexBuffer, ptr<IndexBuffer> indexBuffer)
 : vertexBuffer(vertexBuffer), indexBuffer(indexBuffer) {}
