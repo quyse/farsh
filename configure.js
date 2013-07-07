@@ -14,7 +14,7 @@ exports.configureCompiler = function(objectFile, compiler) {
 var staticLibraries = [
 	'libinanity-base',
 	'libinanity-compress',
-	'libinanity-win32window',
+	'libinanity-platform',
 	'libinanity-graphics',
 	'libinanity-shaders',
 	{ lib: 'libinanity-dx11', api: 'dx11' },

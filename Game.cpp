@@ -57,33 +57,40 @@ void Game::Run()
 		ptr<Graphics::System> system = NEW(GlSystem());
 #endif
 
-		device = system->CreatePrimaryDevice();
-		ptr<Win32Window> window = system->CreateDefaultWindow().FastCast<Win32Window>();
+		ptr<Graphics::Adapter> adapter = system->GetAdapters()[0];
+		device = system->CreateDevice(adapter);
+		ptr<Graphics::Monitor> monitor = adapter->GetMonitors()[0];
+
+#if defined(_DEBUG) && 1
+		screenWidth = 800;
+		screenHeight = 600;
+		bool fullscreen = false;
+#else
+		screenWidth = GetSystemMetrics(SM_CXSCREEN);
+		screenHeight = GetSystemMetrics(SM_CYSCREEN);
+		bool fullscreen = true;
+#endif
+
+		ptr<Platform::Window> window = monitor->CreateWindowCentered(
+			"F.A.R.S.H.", screenWidth, screenHeight);
 		this->window = window;
-		window->SetTitle("F.A.R.S.H.");
 
 #ifdef ___INANITY_WINDOWS
+		ptr<Platform::Win32Window> win32Window = window.DynamicCast<Platform::Win32Window>();
 		{
-			ptr<Input::Win32Manager> im = NEW(Input::Win32RawManager(window->GetHWND()));
+			ptr<Input::Win32Manager> im = NEW(Input::Win32RawManager(win32Window->GetHWND()));
 			inputManager = im;
-			window->SetInputManager(im);
+			win32Window->SetInputManager(im);
 		}
 #endif
 #ifdef ___INANITY_LINUX
 		inputManager = NEW(Input::X11Manager(window));
 #endif
 
-#if defined(_DEBUG) && 1
-		mode.width = 800;
-		mode.height = 600;
-		mode.fullscreen = false;
-#else
-		mode.width = GetSystemMetrics(SM_CXSCREEN);
-		mode.height = GetSystemMetrics(SM_CYSCREEN);
-		mode.fullscreen = true;
-#endif
-		mode.pixelFormat = PixelFormats::intR8G8B8A8;
-		presenter = device->CreatePresenter(window->CreateOutput(), mode);
+		ptr<Graphics::MonitorMode> monitorMode;
+		if(fullscreen)
+			monitorMode = monitor->TryCreateMode(screenWidth, screenHeight);
+		presenter = device->CreatePresenter(window->CreateOutput(), monitorMode);
 
 		context = device->GetContext();
 
@@ -107,7 +114,7 @@ void Game::Run()
 
 		geometryFormats = NEW(GeometryFormats());
 
-		painter = NEW(Painter(device, context, presenter, mode.width, mode.height, shaderCache, geometryFormats));
+		painter = NEW(Painter(device, context, presenter, screenWidth, screenHeight, shaderCache, geometryFormats));
 
 		textureManager = NEW(TextureManager(fileSystem, device));
 		fontManager = NEW(FontManager(fileSystem, textureManager));
@@ -132,7 +139,9 @@ void Game::Run()
 
 		try
 		{
-			window->Run(Win32Window::ActiveHandler::CreateDelegate(MakePointer(this), &Game::Tick));
+#ifdef ___INANITY_WINDOWS
+			win32Window->Run(Handler::Bind(MakePointer(this), &Game::Tick));
+#endif
 
 			scriptState = 0;
 		}
@@ -148,7 +157,7 @@ void Game::Run()
 	}
 }
 
-void Game::Tick(int)
+void Game::Tick()
 {
 	long long tick = Time::GetTicks();
 	float frameTime = lastTick ? (tick - lastTick) * tickCoef : 0;
@@ -158,6 +167,8 @@ void Game::Tick(int)
 	static bool theTimePaused = false;
 
 	const float maxAngleChange = frameTime * 50;
+
+	bool shoot = false;
 
 	ptr<Input::Frame> inputFrame = inputManager->GetCurrentFrame();
 	while(inputFrame->NextEvent())
@@ -194,11 +205,7 @@ void Game::Tick(int)
 					}
 					break;
 				case 'Z':
-					{
-						//ptr<Physics::RigidBody> rigidBody = physicsWorld->CreateRigidBody(cubePhysicsShape, 100, physicsCharacter->GetTransform());
-						//rigidBody->ApplyImpulse(vec3(cos(cameraAlpha) * cos(cameraBeta), sin(cameraAlpha) * cos(cameraBeta), sin(cameraBeta)) * 1000);
-						//cubes.push_back(rigidBody);
-					}
+					shoot = true;
 					break;
 				case 'X':
 					theTimePaused = !theTimePaused;
@@ -311,6 +318,14 @@ void Game::Tick(int)
 
 	//std::cout << "cameraPosition = " << cameraPosition << '\n';
 
+	if(shoot)
+	{
+		mat4x4 transform = CreateTranslationMatrix(cameraPosition);
+		ptr<Physics::RigidBody> rigidBody = physicsWorld->CreateRigidBody(rigidModels[0].rigidBody->GetShape(), 100, transform);
+		rigidBody->ApplyImpulse(vec3(cos(cameraAlpha) * cos(cameraBeta), sin(cameraAlpha) * cos(cameraBeta), sin(cameraBeta)) * 10000.0f);
+		AddRigidModel(rigidModels[0].geometry, rigidModels[0].material, rigidBody);
+	}
+
 	context->Reset();
 
 	alpha += frameTime;
@@ -319,7 +334,7 @@ void Game::Tick(int)
 #ifdef FARSH_USE_OPENGL
 	viewMatrix = fromEigen((Eigen::Scaling(Eigen::Vector3f(1, -1, 1)) * Eigen::Affine3f(toEigen(viewMatrix))).matrix());
 #endif
-	mat4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(mode.width) / float(mode.height), 0.1f, 100.0f);
+	mat4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(screenWidth) / float(screenHeight), 0.1f, 100.0f);
 
 	// зарегистрировать все объекты
 	painter->BeginFrame(frameTime);

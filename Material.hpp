@@ -9,8 +9,9 @@ struct MaterialKey
 	bool hasDiffuseTexture;
 	bool hasSpecularTexture;
 	bool hasNormalTexture;
+	bool useEnvironment;
 
-	MaterialKey(bool hasDiffuseTexture, bool hasSpecularTexture, bool hasNormalTexture);
+	MaterialKey(bool hasDiffuseTexture, bool hasSpecularTexture, bool hasNormalTexture, bool useEnvironment);
 	operator size_t() const;
 };
 
@@ -23,6 +24,8 @@ struct Material : public Object
 	vec4 diffuse;
 	vec4 specular;
 	vec4 normalCoordTransform;
+	/// Коэффициент примешивания окружения к цвету.
+	float environmentCoef;
 
 	Material();
 
@@ -35,6 +38,7 @@ struct Material : public Object
 	void SetDiffuse(float red, float green, float blue, float alpha);
 	void SetSpecular(float red, float green, float blue, float glossiness);
 	void SetNormalCoordTransform(float scaleX, float scaleY, float offsetX, float offsetY);
+	void SetEnvironmentCoef(float environmentCoef);
 
 	META_DECLARE_CLASS(Material);
 };

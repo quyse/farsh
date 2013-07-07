@@ -8,17 +8,18 @@ META_CLASS(Material, Farsh.Material);
 	META_METHOD(SetDiffuse);
 	META_METHOD(SetSpecular);
 	META_METHOD(SetNormalCoordTransform);
+	META_METHOD(SetEnvironmentCoef);
 META_CLASS_END();
 
 //*** MaterialKey
 
-MaterialKey::MaterialKey(bool hasDiffuseTexture, bool hasSpecularTexture, bool hasNormalTexture)
-: hasDiffuseTexture(hasDiffuseTexture), hasSpecularTexture(hasSpecularTexture), hasNormalTexture(hasNormalTexture)
-{}
+MaterialKey::MaterialKey(bool hasDiffuseTexture, bool hasSpecularTexture, bool hasNormalTexture, bool useEnvironment) :
+	hasDiffuseTexture(hasDiffuseTexture), hasSpecularTexture(hasSpecularTexture), hasNormalTexture(hasNormalTexture),
+	useEnvironment(useEnvironment) {}
 
 MaterialKey::operator size_t() const
 {
-	return (size_t)hasDiffuseTexture | ((size_t)hasSpecularTexture << 1) | ((size_t)hasNormalTexture << 2);
+	return (size_t)hasDiffuseTexture | ((size_t)hasSpecularTexture << 1) | ((size_t)hasNormalTexture << 2) | ((size_t)useEnvironment << 3);
 }
 
 //*** Material
@@ -28,7 +29,7 @@ Material::Material()
 
 MaterialKey Material::GetKey() const
 {
-	return MaterialKey(diffuseTexture, specularTexture, normalTexture);
+	return MaterialKey(diffuseTexture, specularTexture, normalTexture, environmentCoef > 0);
 }
 
 void Material::SetDiffuseTexture(ptr<Texture> diffuseTexture)
@@ -59,4 +60,9 @@ void Material::SetSpecular(float red, float green, float blue, float glossiness)
 void Material::SetNormalCoordTransform(float scaleX, float scaleY, float offsetX, float offsetY)
 {
 	this->normalCoordTransform = vec4(scaleX, scaleY, offsetX, offsetY);
+}
+
+void Material::SetEnvironmentCoef(float environmentCoef)
+{
+	this->environmentCoef = environmentCoef;
 }

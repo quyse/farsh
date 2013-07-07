@@ -3,18 +3,20 @@ local game = Farsh.Game.Get()
 Farsh.t = {}
 local t = Farsh.t
 
-game:SetAmbient(0.1, 0.1, 0.1)
+game:SetAmbient(0.02, 0.02, 0.02)
 
 -- материал кровищи
 local matBlood = Farsh.Material()
-matBlood:SetDiffuseTexture(game:LoadTexture("blood.png"))
+--matBlood:SetDiffuseTexture(game:LoadTexture("blood.png"))
+matBlood:SetDiffuse(1, 0, 0, 1)
 matBlood:SetSpecular(0.2, 0, 0, 0)
 game:SetDecalMaterial(matBlood)
 
 -- материал кубика
 local matCube = Farsh.Material()
 t.matCube = matCube
-matCube:SetDiffuseTexture(game:LoadTexture("blood.png"))
+--matCube:SetDiffuseTexture(game:LoadTexture("blood.png"))
+matCube:SetDiffuse(1, 1, 1, 1)
 --matCube:SetSpecularTexture(game:LoadTexture("specular.jpg"))
 matCube:SetSpecular(0.2, 0, 0, 0)
 
@@ -43,11 +45,15 @@ for i = 1, 10 do
 		game:AddStaticModel(geoCube, matCube, i * 2, j * 2, -1)
 	end
 end
---[[
-for i = 1, 10 do
-	game:AddRigidModel(geoCube, matCube, game:CreatePhysicsRigidBody(shapeCube, 100, i * 2, i * 2, 10))
-	game:AddRigidModel(geoCube, matCube, game:CreatePhysicsRigidBody(shapeCube, 100, i * 2, i * 2 + 1, 13))
-	game:AddRigidModel(geoCube, matCube, game:CreatePhysicsRigidBody(shapeCube, 100, i * 2, i * 2 - 1, 13))
+--[ 8x8x4 (256) ok, 9x9x4 (324) not, 10x10x3 (300) ok, 7x7x5 (245) ok, 8x8x5 (320) not
+for i = 1, 4 do
+for j = 1, 4 do
+	for k = 1, 5 do
+		game:AddRigidModel(geoCube, matCube, game:CreatePhysicsRigidBody(shapeCube, 100, i * 2 + k, j * 2 + k, k * 4 + 20))
+		--game:AddRigidModel(geoCube, matCube, game:CreatePhysicsRigidBody(shapeCube, 100, i * 2, i * 2 + 1, 13))
+		--game:AddRigidModel(geoCube, matCube, game:CreatePhysicsRigidBody(shapeCube, 100, i * 2, i * 2 - 1, 13))
+	end
+end
 end
 --]]
 --[[

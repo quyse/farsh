@@ -23,8 +23,8 @@ private:
 	/// Форматы геометрии.
 	ptr<GeometryFormats> geometryFormats;
 
-	/// Случайная текстура.
-	ptr<Texture> randomTexture;
+	/// Текстура окружения.
+	ptr<Texture> environmentTexture;
 
 	/// Максимальное количество источников света без теней.
 	static const int maxBasicLightsCount = 4;
@@ -77,7 +77,7 @@ private:
 		/// Матрица трансформации источника света.
 		Uniform<mat4x4> uLightTransform;
 		/// Семплер карты теней источника света.
-		Sampler<float, vec2> uShadowSampler;
+		Sampler<float, 2> uShadowSampler;
 
 		ShadowLight(ptr<UniformGroup> ug, int samplerNumber);
 	};
@@ -126,11 +126,13 @@ private:
 	/// Преобразование текстурных координат для карты нормалей.
 	Uniform<vec4> uNormalCoordTransform;
 	/// Семплер диффузной текстуры.
-	Sampler<vec4, vec2> uDiffuseSampler;
+	Sampler<vec4, 2> uDiffuseSampler;
 	/// Семплер specular текстуры.
-	Sampler<vec4, vec2> uSpecularSampler;
+	Sampler<vec4, 2> uSpecularSampler;
 	/// Семплер карты нормалей.
-	Sampler<vec3, vec2> uNormalSampler;
+	Sampler<vec3, 2> uNormalSampler;
+	/// Семплер текстуры окружения.
+	SamplerCube<vec3> uEnvironmentSampler;
 
 	///*** Uniform-группа модели.
 	ptr<UniformGroup> ugModel;
@@ -156,16 +158,16 @@ private:
 	/// Обратные матрицы декалей.
 	UniformArray<mat4x4> uDecalInvTransforms;
 	/// Семплер нормалей.
-	Sampler<vec3, vec2> uScreenNormalSampler;
+	Sampler<vec3, 2> uScreenNormalSampler;
 	/// Семплер глубины.
-	Sampler<float, vec2> uScreenDepthSampler;
+	Sampler<float, 2> uScreenDepthSampler;
 
 	///*** Uniform-группа размытия тени.
 	ptr<UniformGroup> ugShadowBlur;
 	/// Вектор направления размытия.
 	Uniform<vec2> uShadowBlurDirection;
 	/// Семплер для тени.
-	Sampler<float, vec2> uShadowBlurSourceSampler;
+	Sampler<float, 2> uShadowBlurSourceSampler;
 
 	///*** Uniform-группа даунсемплинга.
 	ptr<UniformGroup> ugDownsample;
@@ -175,16 +177,16 @@ private:
 	/// Коэффициент смешивания.
 	Uniform<float> uDownsampleBlend;
 	/// Исходный семплер.
-	Sampler<vec3, vec2> uDownsampleSourceSampler;
+	Sampler<vec3, 2> uDownsampleSourceSampler;
 	/// Исходный семплер для освещённости.
-	Sampler<float, vec2> uDownsampleLuminanceSourceSampler;
+	Sampler<float, 2> uDownsampleLuminanceSourceSampler;
 
 	///*** Uniform-группа bloom.
 	ptr<UniformGroup> ugBloom;
 	/// Ограничение по освещённости для bloom.
 	Uniform<float> uBloomLimit;
 	/// Семплер исходника для bloom.
-	Sampler<vec3, vec2> uBloomSourceSampler;
+	Sampler<vec3, 2> uBloomSourceSampler;
 
 	///*** Uniform-группа tone mapping.
 	ptr<UniformGroup> ugTone;
@@ -193,11 +195,11 @@ private:
 	/// Максимальная освещённость.
 	Uniform<float> uToneMaxLuminance;
 	/// Семплер результата bloom.
-	Sampler<vec3, vec2> uToneBloomSampler;
+	Sampler<vec3, 2> uToneBloomSampler;
 	/// Семплер экрана.
-	Sampler<vec3, vec2> uToneScreenSampler;
+	Sampler<vec3, 2> uToneScreenSampler;
 	/// Семплер результата downsample для средней освещённости.
-	Sampler<float, vec2> uToneAverageSampler;
+	Sampler<float, 2> uToneAverageSampler;
 
 	//*** Промежуточные переменные.
 	Interpolant<vec3> iNormal;
@@ -247,8 +249,6 @@ private:
 
 	/// Размер карты теней.
 	static const int shadowMapSize;
-	/// Размер случайной текстуры.
-	static const int randomMapSize;
 	/// Количество проходов downsampling.
 	static const int downsamplingPassesCount = 10;
 	/// Номер прохода, после которого делать bloom.
@@ -447,6 +447,8 @@ public:
 	void AddDecal(ptr<Material> material, const mat4x4& transform, const mat4x4& invTransform);
 	/// Установить рассеянный свет.
 	void SetAmbientColor(const vec3& ambientColor);
+	/// Установить текстуру окружения.
+	void SetEnvironmentTexture(ptr<Texture> environmentTexture);
 	/// Зарегистрировать простой источник света.
 	void AddBasicLight(const vec3& position, const vec3& color);
 	/// Зарегистрировать источник света с тенью.

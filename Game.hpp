@@ -39,7 +39,7 @@ struct StaticLight : public Object
 class Game : public Object
 {
 private:
-	ptr<Window> window;
+	ptr<Platform::Window> window;
 	ptr<Device> device;
 	ptr<Context> context;
 	ptr<Presenter> presenter;
@@ -113,7 +113,7 @@ private:
 
 	std::vector<ptr<StaticLight> > staticLights;
 
-	PresentMode mode;
+	int screenWidth, screenHeight;
 
 	long long lastTick;
 	float tickCoef;
@@ -129,7 +129,6 @@ private:
 		: rigidBody(rigidBody), scale(scale) {}
 	};
 	std::vector<Cube> cubes;
-	ptr<Physics::Shape> cubePhysicsShape;
 
 	vec3 ambientColor;
 
@@ -144,7 +143,7 @@ public:
 	Game();
 
 	void Run();
-	void Tick(int);
+	void Tick();
 
 	//******* Методы, доступные из скрипта.
 

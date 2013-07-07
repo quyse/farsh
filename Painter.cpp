@@ -3,7 +3,6 @@
 #include "GeometryFormats.hpp"
 
 const int Painter::shadowMapSize = 1024;
-const int Painter::randomMapSize = 64;
 const int Painter::downsamplingStepForBloom = 1;
 const int Painter::bloomMapSize = 1 << (Painter::downsamplingPassesCount - 1 - Painter::downsamplingStepForBloom);
 
@@ -147,6 +146,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	uDiffuseSampler(0),
 	uSpecularSampler(1),
 	uNormalSampler(2),
+	uEnvironmentSampler(3),
 
 	ugModel(NEW(UniformGroup(3))),
 	uWorld(ugModel->AddUniform<mat4x4>()),
@@ -224,16 +224,16 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	rbShadowBlur = device->CreateRenderBuffer(shadowMapSize, shadowMapSize, PixelFormats::floatR16);
 
 	// экранный буфер
-	rbScreen = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatR11G11B10);
+	rbScreen = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatRGB32);
 	// экранный буфер нормалей
-	rbScreenNormal = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatR11G11B10);
+	rbScreenNormal = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatRGB32);
 	// буферы для downsample
 	for(int i = 0; i < downsamplingPassesCount; ++i)
 		rbDownsamples[i] = device->CreateRenderBuffer(1 << (downsamplingPassesCount - 1 - i), 1 << (downsamplingPassesCount - 1 - i),
-			i <= downsamplingStepForBloom ? PixelFormats::floatR11G11B10 : PixelFormats::floatR16);
+			i <= downsamplingStepForBloom ? PixelFormats::floatRGB32 : PixelFormats::floatR16);
 	// буферы для Bloom
-	rbBloom1 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatR11G11B10);
-	rbBloom2 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatR11G11B10);
+	rbBloom1 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatRGB32);
+	rbBloom2 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatRGB32);
 
 	shadowSamplerState = device->CreateSamplerState();
 	shadowSamplerState->SetWrap(SamplerState::wrapBorder, SamplerState::wrapBorder, SamplerState::wrapBorder);
@@ -247,36 +247,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	uScreenNormalSampler.SetSamplerState(shadowSamplerState);
 	uScreenDepthSampler.SetTexture(dsbDepth->GetTexture());
 	uScreenDepthSampler.SetSamplerState(shadowSamplerState);
-
-	// создать случайную текстуру
-	if(0)
-	{
-		int width = randomMapSize, height = randomMapSize;
-		ptr<File> randomTextureFile = NEW(MemoryFile(sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + width * height * 4));
-		BITMAPFILEHEADER* bfh = (BITMAPFILEHEADER*)randomTextureFile->GetData();
-		ZeroMemory(bfh, sizeof(*bfh));
-		bfh->bfType = 'MB';
-		bfh->bfSize = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER) + width * height * 4;
-		bfh->bfReserved1 = 0;
-		bfh->bfReserved2 = 0;
-		bfh->bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
-		BITMAPINFOHEADER* bih = (BITMAPINFOHEADER*)(bfh + 1);
-		ZeroMemory(bih, sizeof(*bih));
-		bih->biSize = sizeof(BITMAPINFOHEADER);
-		bih->biWidth = width;
-		bih->biHeight = height;
-		bih->biPlanes = 1;
-		bih->biBitCount = 32;
-		unsigned char* pixels = (unsigned char*)(bih + 1);
-		int count = width * height * 4;
-		for(int i = 0; i < count; ++i)
-			pixels[i] = rand() % 256;
-		randomTexture = device->CreateStaticTexture(randomTextureFile);
-		//uRandomSampler.SetTexture(randomTexture);
-		ptr<SamplerState> ss = device->CreateSamplerState();
-		ss->SetWrap(SamplerState::wrapRepeat, SamplerState::wrapRepeat, SamplerState::wrapRepeat);
-		//uRandomSampler.SetSamplerState(ss);
-	}
 
 	// геометрия полноэкранного прохода
 	struct Quad
@@ -1037,6 +1007,11 @@ void Painter::SetAmbientColor(const vec3& ambientColor)
 	this->ambientColor = ambientColor;
 }
 
+void Painter::SetEnvironmentTexture(ptr<Texture> environmentTexture)
+{
+	this->environmentTexture = environmentTexture;
+}
+
 void Painter::AddBasicLight(const vec3& position, const vec3& color)
 {
 	lights.push_back(Light(position, color));
@@ -1288,6 +1263,8 @@ void Painter::Draw()
 		uSpecularSampler.Apply(cs);
 		uNormalSampler.SetTexture(material->normalTexture);
 		uNormalSampler.Apply(cs);
+		uEnvironmentSampler.SetTexture(environmentTexture);
+		uEnvironmentSampler.Apply(cs);
 		uDiffuse.SetValue(material->diffuse);
 		uSpecular.SetValue(material->specular);
 		uNormalCoordTransform.SetValue(material->normalCoordTransform);
@@ -1354,6 +1331,8 @@ void Painter::Draw()
 			uSpecularSampler.Apply(cs);
 			uNormalSampler.SetTexture(material->normalTexture);
 			uNormalSampler.Apply(cs);
+			uEnvironmentSampler.SetTexture(environmentTexture);
+			uEnvironmentSampler.Apply(cs);
 			uDiffuse.SetValue(material->diffuse);
 			uSpecular.SetValue(material->specular);
 			uNormalCoordTransform.SetValue(material->normalCoordTransform);
