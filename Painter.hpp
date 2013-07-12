@@ -13,6 +13,97 @@ class GeometryFormats;
 class Painter : public Object
 {
 private:
+	/// Параметры простого источника света.
+	struct BasicLight
+	{
+		/// Положение источника.
+		Uniform<vec3> uLightPosition;
+		/// Цвет источника.
+		Uniform<vec3> uLightColor;
+
+		BasicLight(ptr<UniformGroup> ug);
+	};
+	/// Параметры источника света с тенями.
+	struct ShadowLight : public BasicLight
+	{
+		/// Матрица трансформации источника света.
+		Uniform<mat4x4> uLightTransform;
+		/// Семплер карты теней источника света.
+		Sampler<float, 2> uShadowSampler;
+
+		ShadowLight(ptr<UniformGroup> ug, int samplerNumber);
+	};
+
+	/// Структура ключа варианта света.
+	struct LightVariantKey
+	{
+		int basicLightsCount;
+		int shadowLightsCount;
+
+		LightVariantKey(int basicLightsCount, int shadowLightsCount)
+		: basicLightsCount(basicLightsCount), shadowLightsCount(shadowLightsCount)
+		{}
+	};
+	/// Структура варианта света.
+	struct LightVariant
+	{
+		/// Uniform-группа параметров.
+		ptr<UniformGroup> ugLight;
+		/// Рассеянный свет.
+		Uniform<vec3> uAmbientColor;
+		/// Простые источники света.
+		std::vector<BasicLight> basicLights;
+		/// Источники света с тенями.
+		std::vector<ShadowLight> shadowLights;
+		/// Состояние контекста для opaque pass.
+		ContextState csOpaque;
+
+		LightVariant();
+	};
+
+	/// Ключ вершинного шейдера в кэше.
+	struct VertexShaderKey
+	{
+		/// Instanced?
+		bool instanced;
+		/// Скиннинг?
+		/** Только при instanced=false. */
+		bool skinned;
+		/// Декаль?
+		/** Только при instanced = true, skinned = false. */
+		bool decal;
+
+		VertexShaderKey(bool instanced, bool skinned, bool decal);
+	};
+
+	/// Ключ пиксельного шейдера в кэше.
+	struct PixelShaderKey
+	{
+		/// Количество источников света без теней.
+		int basicLightsCount;
+		/// Количество источников света с тенями.
+		int shadowLightsCount;
+		/// Декаль?
+		bool decal;
+		/// Ключ материала.
+		MaterialKey materialKey;
+
+		PixelShaderKey(int basicLightsCount, int shadowLightsCount, bool decal, const MaterialKey& materialKey);
+	};
+
+	struct Hasher
+	{
+		size_t operator()(const LightVariantKey& key) const;
+		size_t operator()(const VertexShaderKey& key) const;
+		size_t operator()(const PixelShaderKey& key) const;
+		size_t operator()(const MaterialKey& key) const;
+	};
+
+	friend bool operator==(const LightVariantKey& a, const LightVariantKey& b);
+	friend bool operator==(const VertexShaderKey& a, const VertexShaderKey& b);
+	friend bool operator==(const PixelShaderKey& a, const PixelShaderKey& b);
+
+private:
 	ptr<Device> device;
 	ptr<Context> context;
 	ptr<Presenter> presenter;
@@ -61,59 +152,8 @@ private:
 	/// Настройки семплера для карт теней.
 	ptr<SamplerState> shadowSamplerState;
 
-	/// Параметры простого источника света.
-	struct BasicLight
-	{
-		/// Положение источника.
-		Uniform<vec3> uLightPosition;
-		/// Цвет источника.
-		Uniform<vec3> uLightColor;
-
-		BasicLight(ptr<UniformGroup> ug);
-	};
-	/// Параметры источника света с тенями.
-	struct ShadowLight : public BasicLight
-	{
-		/// Матрица трансформации источника света.
-		Uniform<mat4x4> uLightTransform;
-		/// Семплер карты теней источника света.
-		Sampler<float, 2> uShadowSampler;
-
-		ShadowLight(ptr<UniformGroup> ug, int samplerNumber);
-	};
-	/// Структура варианта света.
-	struct LightVariant
-	{
-		/// Uniform-группа параметров.
-		ptr<UniformGroup> ugLight;
-		/// Рассеянный свет.
-		Uniform<vec3> uAmbientColor;
-		/// Простые источники света.
-		std::vector<BasicLight> basicLights;
-		/// Источники света с тенями.
-		std::vector<ShadowLight> shadowLights;
-		/// Состояние контекста для opaque pass.
-		ContextState csOpaque;
-
-		LightVariant();
-	};
-	/// Структура ключа варианта света.
-	struct LightVariantKey
-	{
-		int basicLightsCount;
-		int shadowLightsCount;
-
-		LightVariantKey(int basicLightsCount, int shadowLightsCount)
-		: basicLightsCount(basicLightsCount), shadowLightsCount(shadowLightsCount)
-		{}
-
-		operator size_t() const
-		{
-			return basicLightsCount | (shadowLightsCount << 3);
-		}
-	};
 	/// Варианты света.
-	std::unordered_map<LightVariantKey, LightVariant> lightVariantsCache;
+	std::unordered_map<LightVariantKey, LightVariant, Hasher> lightVariantsCache;
 	/// Получить вариант света.
 	LightVariant& GetLightVariant(const LightVariantKey& key);
 
@@ -289,28 +329,12 @@ private:
 	ptr<RenderBuffer> rbShadowBlur;
 
 private:
-	/// Ключ вершинного шейдера в кэше.
-	struct VertexShaderKey
-	{
-		/// Instanced?
-		bool instanced;
-		/// Скиннинг?
-		/** Только при instanced=false. */
-		bool skinned;
-		/// Декаль?
-		/** Только при instanced = true, skinned = false. */
-		bool decal;
-
-		VertexShaderKey(bool instanced, bool skinned, bool decal);
-
-		operator size_t() const;
-	};
 	/// Кэш вершинных шейдеров.
-	std::unordered_map<VertexShaderKey, ptr<VertexShader> > vertexShaderCache;
+	std::unordered_map<VertexShaderKey, ptr<VertexShader>, Hasher> vertexShaderCache;
 	/// Получить вершинный шейдер.
 	ptr<VertexShader> GetVertexShader(const VertexShaderKey& key);
 	/// Кэш вершинных шейдеров для теневого прохода.
-	std::unordered_map<VertexShaderKey, ptr<VertexShader> > vertexShadowShaderCache;
+	std::unordered_map<VertexShaderKey, ptr<VertexShader>, Hasher> vertexShadowShaderCache;
 	/// Получить вершинный шейдер для теневого прохода.
 	ptr<VertexShader> GetVertexShadowShader(const VertexShaderKey& key);
 
@@ -325,25 +349,8 @@ private:
 	временные переменные tmpVertexPosition и tmpVertexNormal. */
 	Expression GetWorldPositionAndNormal(const VertexShaderKey& key);
 
-	/// Ключ пиксельного шейдера в кэше.
-	struct PixelShaderKey
-	{
-		/// Количество источников света без теней.
-		int basicLightsCount;
-		/// Количество источников света с тенями.
-		int shadowLightsCount;
-		/// Декаль?
-		bool decal;
-		/// Ключ материала.
-		MaterialKey materialKey;
-
-		PixelShaderKey(int basicLightsCount, int shadowLightsCount, bool decal, const MaterialKey& materialKey);
-
-		/// Получить хеш.
-		operator size_t() const;
-	};
 	/// Кэш пиксельных шейдеров.
-	std::unordered_map<PixelShaderKey, ptr<PixelShader> > pixelShaderCache;
+	std::unordered_map<PixelShaderKey, ptr<PixelShader>, Hasher> pixelShaderCache;
 	/// Получить пиксельный шейдер.
 	ptr<PixelShader> GetPixelShader(const PixelShaderKey& key);
 

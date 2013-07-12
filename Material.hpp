@@ -12,7 +12,8 @@ struct MaterialKey
 	bool useEnvironment;
 
 	MaterialKey(bool hasDiffuseTexture, bool hasSpecularTexture, bool hasNormalTexture, bool useEnvironment);
-	operator size_t() const;
+
+	friend bool operator==(const MaterialKey& a, const MaterialKey& b);
 };
 
 /// Структура материала.

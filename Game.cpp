@@ -51,10 +51,10 @@ void Game::Run()
 	try
 	{
 #ifdef FARSH_USE_DIRECTX11
-		ptr<Graphics::System> system = NEW(Dx11System());
+		ptr<Graphics::System> system = Inanity::Platform::Game::CreateDx11System();
 #endif
 #ifdef FARSH_USE_OPENGL
-		ptr<Graphics::System> system = NEW(GlSystem());
+		ptr<Graphics::System> system = Inanity::Platform::Game::CreateGlSystem();
 #endif
 
 		ptr<Graphics::Adapter> adapter = system->GetAdapters()[0];
@@ -71,21 +71,11 @@ void Game::Run()
 		bool fullscreen = true;
 #endif
 
-		ptr<Platform::Window> window = monitor->CreateWindowCentered(
+		ptr<Platform::Window> window = monitor->CreateDefaultWindow(
 			"F.A.R.S.H.", screenWidth, screenHeight);
 		this->window = window;
 
-#ifdef ___INANITY_WINDOWS
-		ptr<Platform::Win32Window> win32Window = window.DynamicCast<Platform::Win32Window>();
-		{
-			ptr<Input::Win32Manager> im = NEW(Input::Win32RawManager(win32Window->GetHWND()));
-			inputManager = im;
-			win32Window->SetInputManager(im);
-		}
-#endif
-#ifdef ___INANITY_LINUX
-		inputManager = NEW(Input::X11Manager(window));
-#endif
+		inputManager = Inanity::Platform::Game::CreateInputManager(window);
 
 		ptr<Graphics::MonitorMode> monitorMode;
 		if(fullscreen)

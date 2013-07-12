@@ -17,9 +17,13 @@ MaterialKey::MaterialKey(bool hasDiffuseTexture, bool hasSpecularTexture, bool h
 	hasDiffuseTexture(hasDiffuseTexture), hasSpecularTexture(hasSpecularTexture), hasNormalTexture(hasNormalTexture),
 	useEnvironment(useEnvironment) {}
 
-MaterialKey::operator size_t() const
+bool operator==(const MaterialKey& a, const MaterialKey& b)
 {
-	return (size_t)hasDiffuseTexture | ((size_t)hasSpecularTexture << 1) | ((size_t)hasNormalTexture << 2) | ((size_t)useEnvironment << 3);
+	return
+		a.hasDiffuseTexture == b.hasDiffuseTexture &&
+		a.hasSpecularTexture == b.hasSpecularTexture &&
+		a.hasNormalTexture == b.hasNormalTexture &&
+		a.useEnvironment == b.useEnvironment;
 }
 
 //*** Material

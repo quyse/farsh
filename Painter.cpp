@@ -6,6 +6,28 @@ const int Painter::shadowMapSize = 1024;
 const int Painter::downsamplingStepForBloom = 1;
 const int Painter::bloomMapSize = 1 << (Painter::downsamplingPassesCount - 1 - Painter::downsamplingStepForBloom);
 
+//*** Painter::Hasher
+
+size_t Painter::Hasher::operator()(const LightVariantKey& key) const
+{
+	return key.basicLightsCount | (key.shadowLightsCount << 3);
+}
+
+size_t Painter::Hasher::operator()(const VertexShaderKey& key) const
+{
+	return (size_t)key.instanced | ((size_t)key.skinned << 1) | ((size_t)key.decal << 2);
+}
+
+size_t Painter::Hasher::operator()(const PixelShaderKey& key) const
+{
+	return key.basicLightsCount | (key.shadowLightsCount << 3) | ((size_t)key.decal << 6) | ((*this)(key.materialKey) << 7);
+}
+
+size_t Painter::Hasher::operator()(const MaterialKey& key) const
+{
+	return (size_t)key.hasDiffuseTexture | ((size_t)key.hasSpecularTexture << 1) | ((size_t)key.hasNormalTexture << 2) | ((size_t)key.useEnvironment << 3);
+}
+
 //*** Painter::BasicLight
 
 Painter::BasicLight::BasicLight(ptr<UniformGroup> ug) :
@@ -28,14 +50,24 @@ Painter::LightVariant::LightVariant() :
 	uAmbientColor(ugLight->AddUniform<vec3>())
 {}
 
+bool operator==(const Painter::LightVariantKey& a, const Painter::LightVariantKey& b)
+{
+	return
+		a.basicLightsCount == b.basicLightsCount &&
+		a.shadowLightsCount == b.shadowLightsCount;
+}
+
 //*** Painter::VertexShaderKey
 
 Painter::VertexShaderKey::VertexShaderKey(bool instanced, bool skinned, bool decal)
 : instanced(instanced), skinned(skinned), decal(decal) {}
 
-Painter::VertexShaderKey::operator size_t() const
+bool operator==(const Painter::VertexShaderKey& a, const Painter::VertexShaderKey& b)
 {
-	return (size_t)instanced | ((size_t)skinned << 1) | ((size_t)decal << 2);
+	return
+		a.instanced == b.instanced &&
+		a.skinned == b.skinned &&
+		a.decal == b.decal;
 }
 
 //*** Painter::PixelShaderKey
@@ -44,9 +76,13 @@ Painter::PixelShaderKey::PixelShaderKey(int basicLightsCount, int shadowLightsCo
 basicLightsCount(basicLightsCount), shadowLightsCount(shadowLightsCount), decal(decal), materialKey(materialKey)
 {}
 
-Painter::PixelShaderKey::operator size_t() const
+bool operator==(const Painter::PixelShaderKey& a, const Painter::PixelShaderKey& b)
 {
-	return basicLightsCount | (shadowLightsCount << 3) | ((size_t)decal << 6) | (((size_t)materialKey) << 7);
+	return
+		a.basicLightsCount == b.basicLightsCount &&
+		a.shadowLightsCount == b.shadowLightsCount &&
+		a.decal == b.decal &&
+		a.materialKey == b.materialKey;
 }
 
 //*** Painter::Model
@@ -596,7 +632,7 @@ Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)
 {
 	// если он уже есть в кэше, вернуть
 	{
-		std::unordered_map<LightVariantKey, LightVariant>::iterator i = lightVariantsCache.find(key);
+		std::unordered_map<LightVariantKey, LightVariant, Hasher>::iterator i = lightVariantsCache.find(key);
 		if(i != lightVariantsCache.end())
 			return i->second;
 	}
@@ -833,7 +869,7 @@ ptr<VertexShader> Painter::GetVertexShader(const VertexShaderKey& key)
 {
 	// если есть в кэше, вернуть
 	{
-		std::unordered_map<VertexShaderKey, ptr<VertexShader> >::iterator i = vertexShaderCache.find(key);
+		std::unordered_map<VertexShaderKey, ptr<VertexShader>, Hasher>::iterator i = vertexShaderCache.find(key);
 		if(i != vertexShaderCache.end())
 			return i->second;
 	}
@@ -868,7 +904,7 @@ ptr<VertexShader> Painter::GetVertexShadowShader(const VertexShaderKey& key)
 {
 	// если есть в кэше, вернуть
 	{
-		std::unordered_map<VertexShaderKey, ptr<VertexShader> >::iterator i = vertexShadowShaderCache.find(key);
+		std::unordered_map<VertexShaderKey, ptr<VertexShader>, Hasher>::iterator i = vertexShadowShaderCache.find(key);
 		if(i != vertexShadowShaderCache.end())
 			return i->second;
 	}
@@ -892,7 +928,7 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 {
 	// если есть в кэше, вернуть
 	{
-		std::unordered_map<PixelShaderKey, ptr<PixelShader> >::iterator i = pixelShaderCache.find(key);
+		std::unordered_map<PixelShaderKey, ptr<PixelShader>, Hasher>::iterator i = pixelShaderCache.find(key);
 		if(i != pixelShaderCache.end())
 			return i->second;
 	}

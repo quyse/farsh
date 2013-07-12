@@ -9,36 +9,44 @@ exports.configureCompiler = function(objectFile, compiler) {
 	compiler.configuration = a[1];
 	compiler.setSourceFile(a[3].replace(/\./g, '/') + '.cpp');
 	compiler.addMacro(apiDefines[a[2]]);
+	compiler.addIncludeDir('../inanity/deps/bullet/src');
 };
 
 var staticLibraries = [
-	'libinanity-base',
-	'libinanity-compress',
 	'libinanity-platform',
-	'libinanity-graphics',
-	'libinanity-shaders',
 	{ lib: 'libinanity-dx11', api: 'dx11' },
 	{ lib: 'libinanity-gl', api: 'gl' },
+	'libinanity-graphics',
+	'libinanity-platform',
+	'libinanity-shaders',
 	'libinanity-meta',
 	'libinanity-lua',
 	'libinanity-input',
-	'libinanity-physics',
 	'libinanity-bullet',
+	'libinanity-physics',
 	'libinanity-crypto',
-	'libinanity-sqlitefs'
+	'libinanity-sqlitefs',
+	'libinanity-compress',
+	'libinanity-base'
 ];
 var staticDepsLibraries = [
 	{ dir: 'lua', lib: 'liblua' },
-	{ dir: 'bullet', lib: 'libbullet-linearmath' },
-	{ dir: 'bullet', lib: 'libbullet-collision' },
 	{ dir: 'bullet', lib: 'libbullet-dynamics' },
+	{ dir: 'bullet', lib: 'libbullet-collision' },
+	{ dir: 'bullet', lib: 'libbullet-linearmath' },
 	{ dir: 'libpng', lib: 'libpng' },
-	{ dir: 'glew', lib: 'libglew', api: 'gl' }
+	{ dir: 'glew', lib: 'libglew', api: 'gl' },
+	{ dir: 'sqlite', lib: 'libsqlite' }
 ];
-var dynamicLibraries = [
-	'user32.lib', 'gdi32.lib', 'dxgi.lib', 'd3d11.lib', 'd3dx11.lib', 'd3dx10.lib',
-	{ lib: 'opengl32.lib', api: 'gl' }
-];
+var dynamicLibraries = {
+	win32: [
+		'user32.lib', 'gdi32.lib', 'dxgi.lib', 'd3d11.lib', 'd3dx11.lib', 'd3dx10.lib',
+		{ lib: 'opengl32.lib', api: 'gl' }
+	],
+	linux: [
+		'pthread', 'GL', 'X11', 'dl', 'z'
+	]
+};
 
 exports.configureLinker = function(executableFile, linker) {
 	var a = /^(([^\/]+)\/)[^\/]+\-([^\/]+)$/.exec(executableFile);
@@ -63,12 +71,14 @@ exports.configureLinker = function(executableFile, linker) {
 		if(!staticDepsLibraries[i].api || staticDepsLibraries[i].api == api)
 			linker.addStaticLibrary('../inanity/deps/' + staticDepsLibraries[i].dir + '/' + a[1] + staticDepsLibraries[i].lib);
 
-	for(var i = 0; i < dynamicLibraries.length; ++i) {
+	var dl = dynamicLibraries[linker.platform];
+
+	for(var i = 0; i < dl.length; ++i) {
 		var lib = undefined;
-		if(typeof dynamicLibraries[i] == 'string')
-			lib = dynamicLibraries[i];
-		else if(dynamicLibraries[i].api == api)
-			lib = dynamicLibraries[i].lib;
+		if(typeof dl[i] == 'string')
+			lib = dl[i];
+		else if(dl[i].api == api)
+			lib = dl[i].lib;
 		if(lib)
 			linker.addDynamicLibrary(lib);
 	}

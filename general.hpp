@@ -13,19 +13,12 @@
 #include "../inanity/meta/decl.hpp"
 #include "../inanity/meta/impl.hpp"
 
-using namespace Inanity;
-using namespace Inanity::Graphics;
-using namespace Inanity::Graphics::Shaders;
-
-#ifdef FARSH_USE_DIRECTX11
-#include "../inanity/inanity-dx11.hpp"
-#endif
-#ifdef FARSH_USE_OPENGL
-#include "../inanity/inanity-gl.hpp"
-#endif
-
 #ifndef _DEBUG
 //#define PRODUCTION
 #endif
+
+using namespace Inanity;
+using namespace Inanity::Graphics;
+using namespace Inanity::Graphics::Shaders;
 
 #endif
