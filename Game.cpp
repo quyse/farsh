@@ -50,12 +50,28 @@ void Game::Run()
 {
 	try
 	{
-#ifdef FARSH_USE_DIRECTX11
-		ptr<Graphics::System> system = Inanity::Platform::Game::CreateDx11System();
+		ptr<Graphics::System> system;
+#ifdef ___INANITY_WINDOWS
+		try
+		{
+			system = Inanity::Platform::Game::CreateDx11System();
+		}
+		catch(Exception* exception)
+		{
+			MakePointer(exception)->PrintStack(std::cout);
+		}
 #endif
-#ifdef FARSH_USE_OPENGL
-		ptr<Graphics::System> system = Inanity::Platform::Game::CreateGlSystem();
-#endif
+		if(!system)
+			try
+			{
+				system = Inanity::Platform::Game::CreateGlSystem();
+			}
+			catch(Exception* exception)
+			{
+				MakePointer(exception)->PrintStack(std::cout);
+			}
+		if(!system)
+			THROW_PRIMARY_EXCEPTION("Can't create graphics system");
 
 		ptr<Graphics::Adapter> adapter = system->GetAdapters()[0];
 		device = system->CreateDevice(adapter);
@@ -321,9 +337,6 @@ void Game::Tick()
 	alpha += frameTime;
 
 	mat4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, vec3(0, 0, 1));
-#ifdef FARSH_USE_OPENGL
-	viewMatrix = fromEigen((Eigen::Scaling(Eigen::Vector3f(1, -1, 1)) * Eigen::Affine3f(toEigen(viewMatrix))).matrix());
-#endif
 	mat4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(screenWidth) / float(screenHeight), 0.1f, 100.0f);
 
 	// зарегистрировать все объекты
