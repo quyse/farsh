@@ -50,28 +50,7 @@ void Game::Run()
 {
 	try
 	{
-		ptr<Graphics::System> system;
-#ifdef ___INANITY_WINDOWS
-		try
-		{
-			system = Inanity::Platform::Game::CreateDx11System();
-		}
-		catch(Exception* exception)
-		{
-			MakePointer(exception)->PrintStack(std::cout);
-		}
-#endif
-		if(!system)
-			try
-			{
-				system = Inanity::Platform::Game::CreateGlSystem();
-			}
-			catch(Exception* exception)
-			{
-				MakePointer(exception)->PrintStack(std::cout);
-			}
-		if(!system)
-			THROW_PRIMARY_EXCEPTION("Can't create graphics system");
+		ptr<Graphics::System> system = Inanity::Platform::Game::CreateDefaultGraphicsSystem();
 
 		ptr<Graphics::Adapter> adapter = system->GetAdapters()[0];
 		device = system->CreateDevice(adapter);
