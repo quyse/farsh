@@ -13,15 +13,15 @@ var staticLibraries = [
 	'libinanity-graphics',
 	'libinanity-platform',
 	'libinanity-shaders',
-	'libinanity-meta',
-	'libinanity-lua',
 	'libinanity-input',
 	'libinanity-bullet',
 	'libinanity-physics',
 	'libinanity-crypto',
 	'libinanity-sqlitefs',
 	'libinanity-compress',
-	'libinanity-base'
+	'libinanity-base',
+	'libinanity-meta',
+	'libinanity-lua'
 ];
 var staticDepsLibraries = [
 	{ dir: 'lua', lib: 'liblua' },
@@ -37,7 +37,7 @@ var dynamicLibraries = {
 		'user32.lib', 'gdi32.lib', 'opengl32.lib'
 	],
 	linux: [
-		'pthread', 'GL', 'X11', 'dl', 'z'
+		'pthread', 'GL', 'X11', 'dl', 'z', 'xcb', 'X11-xcb'
 	]
 };
 
