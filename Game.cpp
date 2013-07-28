@@ -54,15 +54,9 @@ void Game::Run()
 		device = system->CreateDevice(adapter);
 		ptr<Graphics::Monitor> monitor = adapter->GetMonitors()[0];
 
-#if defined(_DEBUG) && 1
 		screenWidth = 800;
 		screenHeight = 600;
 		bool fullscreen = false;
-#else
-		screenWidth = GetSystemMetrics(SM_CXSCREEN);
-		screenHeight = GetSystemMetrics(SM_CYSCREEN);
-		bool fullscreen = true;
-#endif
 
 		ptr<Platform::Window> window = monitor->CreateDefaultWindow(
 			"F.A.R.S.H.", screenWidth, screenHeight);
@@ -122,9 +116,7 @@ void Game::Run()
 
 		try
 		{
-#ifdef ___INANITY_WINDOWS
-			win32Window->Run(Handler::Bind(MakePointer(this), &Game::Tick));
-#endif
+			window->Run(Handler::Bind(MakePointer(this), &Game::Tick));
 
 			scriptState = 0;
 		}

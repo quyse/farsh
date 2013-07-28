@@ -322,11 +322,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 				{ vec4(1, 1, 0, 1), vec2(1, 0) },
 				{ vec4(-1, 1, 0, 1), vec2(0, 0) }
 			};
-#ifdef FARSH_USE_OPENGL
-			unsigned short indices[] = { 0, 1, 2, 0, 2, 3 };
-#else
 			unsigned short indices[] = { 0, 2, 1, 0, 3, 2 };
-#endif
 
 			vb = device->CreateStaticVertexBuffer(MemoryFile::CreateViaCopy(vertices, sizeof(vertices)), vl);
 			ib = device->CreateStaticIndexBuffer(MemoryFile::CreateViaCopy(indices, sizeof(indices)), sizeof(unsigned short));
