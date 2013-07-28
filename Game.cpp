@@ -156,7 +156,7 @@ void Game::Tick()
 	{
 		const Input::Event& inputEvent = inputFrame->GetCurrentEvent();
 
-		//PrintInputEvent(inputEvent);
+		//std::cout << inputEvent;
 
 		switch(inputEvent.device)
 		{
