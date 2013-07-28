@@ -35,7 +35,7 @@ ptr<BoneAnimation> BoneAnimation::Deserialize(ptr<InputStream> inputStream, ptr<
 		size_t bonesCount = reader.ReadShortly();
 		// проверить, что совпадает с количеством в скелете
 		if(bonesCount != skeleton->GetBones().size())
-			THROW_PRIMARY_EXCEPTION("Bones count is not equal to skeleton bones count");
+			THROW("Bones count is not equal to skeleton bones count");
 
 		std::vector<std::vector<Key> > keys(bonesCount);
 
@@ -100,7 +100,7 @@ ptr<BoneAnimation> BoneAnimation::Deserialize(ptr<InputStream> inputStream, ptr<
 	}
 	catch(Exception* exception)
 	{
-		THROW_SECONDARY_EXCEPTION("Can't deserialize bone animation", exception);
+		THROW_SECONDARY("Can't deserialize bone animation", exception);
 	}
 }
 
@@ -186,7 +186,7 @@ void BoneAnimationFrame::Setup(const vec3& originOffset, const quat& originOrien
 			int parent = bone.parent;
 #ifdef _DEBUG
 			if(!f[parent])
-				THROW_PRIMARY_EXCEPTION("Parent is not calculated");
+				THROW("Parent is not calculated");
 #endif
 			animationWorldOrientations[boneNumber] = fromEigen(toEigenQuat(animationWorldOrientations[parent]) * toEigenQuat(animationRelativeOrientations[boneNumber]));
 			animationWorldPositions[boneNumber] = fromEigen((toEigen(animationWorldPositions[parent]) + toEigenQuat(animationWorldOrientations[parent]) * toEigen(bone.originalRelativePosition)).eval());

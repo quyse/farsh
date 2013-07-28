@@ -82,6 +82,6 @@ ptr<Skeleton> Skeleton::Deserialize(ptr<InputStream> inputStream)
 	}
 	catch(Exception* exception)
 	{
-		THROW_SECONDARY_EXCEPTION("Can't deserialize skeleton", exception);
+		THROW_SECONDARY("Can't deserialize skeleton", exception);
 	}
 }

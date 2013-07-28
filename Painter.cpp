@@ -1174,7 +1174,7 @@ void Painter::Draw()
 				int bonesCount = (int)orientations.size();
 #ifdef _DEBUG
 				if(bonesCount > maxBonesCount)
-					THROW_PRIMARY_EXCEPTION("Too many bones");
+					THROW("Too many bones");
 #endif
 				for(int k = 0; k < bonesCount; ++k)
 				{
@@ -1392,7 +1392,7 @@ void Painter::Draw()
 		int bonesCount = (int)orientations.size();
 #ifdef _DEBUG
 		if(bonesCount > maxBonesCount)
-			THROW_PRIMARY_EXCEPTION("Too many bones");
+			THROW("Too many bones");
 #endif
 		for(int k = 0; k < bonesCount; ++k)
 		{

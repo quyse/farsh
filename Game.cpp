@@ -123,12 +123,12 @@ void Game::Run()
 		catch(Exception* exception)
 		{
 			scriptState = 0;
-			THROW_SECONDARY_EXCEPTION("Error while running game", exception);
+			THROW_SECONDARY("Error while running game", exception);
 		}
 	}
 	catch(Exception* exception)
 	{
-		THROW_SECONDARY_EXCEPTION("Can't initialize game", exception);
+		THROW_SECONDARY("Can't initialize game", exception);
 	}
 }
 
