@@ -37,13 +37,11 @@ const float Game::hzAFBattle1 = 400.0f / 30;
 const float Game::hzAFBattle2 = 450.0f / 30;
 
 Game::Game() :
-	lastTick(0), cameraAlpha(0), cameraBeta(0),
+	cameraAlpha(0), cameraBeta(0),
 	bloomLimit(10.0f), toneLuminanceKey(0.12f), toneMaxLuminance(3.1f),
 	heroAnimationTime(hzAFBattle1)
 {
 	singleGame = this;
-
-	tickCoef = 1.0f / Time::GetTicksPerSecond();
 }
 
 void Game::Run()
@@ -144,9 +142,7 @@ void Game::Run()
 
 void Game::Tick()
 {
-	long long tick = Time::GetTicks();
-	float frameTime = lastTick ? (tick - lastTick) * tickCoef : 0;
-	lastTick = tick;
+	float frameTime = ticker.Tick();
 
 	static float theTime = 0;
 	static bool theTimePaused = false;

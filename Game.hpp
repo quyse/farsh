@@ -115,8 +115,7 @@ private:
 
 	int screenWidth, screenHeight;
 
-	long long lastTick;
-	float tickCoef;
+	Ticker ticker;
 
 	float cameraAlpha, cameraBeta;
 
