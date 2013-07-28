@@ -69,7 +69,7 @@ void Game::Run()
 			monitorMode = monitor->TryCreateMode(screenWidth, screenHeight);
 		presenter = device->CreatePresenter(window->CreateOutput(), monitorMode);
 
-		context = device->GetContext();
+		context = system->CreateContext(device);
 
 		const char* shadersCacheFileName =
 #ifdef _DEBUG
