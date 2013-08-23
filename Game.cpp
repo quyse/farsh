@@ -379,24 +379,6 @@ void Game::Tick()
 		).matrix().eval())
 	);
 
-	// тестовая декаль
-#if 0
-	if(0)
-	{
-		mat4x4 transform = CreateLookAtMatrix(vec3(9, 10, 1), vec3(10, 10, 0), vec3(0, 0, 1))
-			* CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 2, 1.0f, 0.1f, 10.0f);
-		// полный отстой, но инвертирования матрицы пока нет
-		D3DXMATRIX mxA((const float*)transform.t), mxB;
-		D3DXMatrixInverse(&mxB, NULL, &mxA);
-		mat4x4 c;
-		c(0, 0) = mxB._11; c(0, 1) = mxB._12; c(0, 2) = mxB._13; c(0, 3) = mxB._14;
-		c(1, 0) = mxB._21; c(1, 1) = mxB._22; c(1, 2) = mxB._23; c(1, 3) = mxB._24;
-		c(2, 0) = mxB._31; c(2, 1) = mxB._32; c(2, 2) = mxB._33; c(2, 3) = mxB._34;
-		c(3, 0) = mxB._41; c(3, 1) = mxB._42; c(3, 2) = mxB._43; c(3, 3) = mxB._44;
-		painter->AddDecal(decalMaterial, transform, c);
-	}
-#endif
-
 	painter->SetupPostprocess(bloomLimit, toneLuminanceKey, toneMaxLuminance);
 
 	painter->Draw();
