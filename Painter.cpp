@@ -364,7 +364,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		// вершинный шейдер - общий для всех постпроцессингов
 		ptr<VertexShader> vertexShader = shaderCache->GetVertexShader((
 			setPosition(quad.aPosition),
-			iTexcoord = quad.aTexcoord
+			iTexcoord = screenToTexture(quad.aPosition["xy"])
 			));
 
 		csFilter.vertexShader = vertexShader;
@@ -971,9 +971,7 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 			//lighted = lighted * (linearShadowZ > Value<float>(0)),
 			shadowCoords = shadowCoords / shadowCoords["w"],
 			lighted = lighted * (abs(shadowCoords["x"]) < Value<float>(1)).Cast<float>() * (abs(shadowCoords["y"]) < Value<float>(1)).Cast<float>(),
-			shadowCoordsXY = newvec2(
-				(shadowCoords["x"] + Value<float>(1.0f)) * Value<float>(0.5f),
-				(Value<float>(1.0f) - shadowCoords["y"]) * Value<float>(0.5f)),
+			shadowCoordsXY = screenToTexture(shadowCoords["xy"]),
 			shadowMultiplier = lighted * saturate(exp(Value<float>(4) * (shadowLight.uShadowSampler.Sample(shadowCoordsXY) - linearShadowZ))),
 			
 			ApplyMaterialLighting(shadowLight.uLightPosition, shadowLight.uLightColor * shadowMultiplier)
