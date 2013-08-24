@@ -249,6 +249,8 @@ void Game::Tick()
 		}
 	}
 
+	cameraBeta = clamp(cameraBeta, -1.5f, 1.5f);
+
 	vec3 cameraDirection = vec3(cos(cameraAlpha) * cos(cameraBeta), sin(cameraAlpha) * cos(cameraBeta), sin(cameraBeta));
 	vec3 cameraRightDirection = normalize(cross(cameraDirection, vec3(0, 0, 1)));
 	vec3 cameraUpDirection = cross(cameraRightDirection, cameraDirection);
