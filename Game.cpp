@@ -8,27 +8,6 @@
 #include "../inanity/inanity-sqlitefs.hpp"
 #include <iostream>
 
-META_CLASS(Game, Farsh.Game);
-	META_STATIC_METHOD(Get);
-	META_METHOD(LoadTexture);
-	META_METHOD(LoadGeometry);
-	META_METHOD(LoadSkinnedGeometry);
-	META_METHOD(LoadSkeleton);
-	META_METHOD(LoadBoneAnimation);
-	META_METHOD(CreatePhysicsBoxShape);
-	META_METHOD(CreatePhysicsRigidBody);
-	META_METHOD(AddStaticModel);
-	META_METHOD(AddRigidModel);
-	META_METHOD(AddStaticLight);
-	META_METHOD(SetDecalMaterial);
-	META_METHOD(SetAmbient);
-	META_METHOD(SetZombieParams);
-	META_METHOD(SetHeroParams);
-	META_METHOD(SetAxeParams);
-	META_METHOD(SetCircularParams);
-	META_METHOD(PlaceHero);
-META_CLASS_END();
-
 Game* Game::singleGame = 0;
 
 const float Game::hzAFRun1 = 50.0f / 30;
@@ -548,14 +527,6 @@ void Game::PlaceHero(float x, float y, float z)
 }
 
 //******* Game::StaticLight
-
-META_CLASS(StaticLight, Farsh.StaticLight);
-	META_METHOD(SetPosition);
-	META_METHOD(SetTarget);
-	META_METHOD(SetProjection);
-	META_METHOD(SetColor);
-	META_METHOD(SetShadow);
-META_CLASS_END();
 
 StaticLight::StaticLight() :
 	position(-1, 0, 0), target(0, 0, 0), angle(3.1415926535897932f / 4), nearPlane(0.1f), farPlane(100.0f), color(1, 1, 1), shadow(false)

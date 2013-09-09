@@ -1,9 +1,6 @@
 #include "Skeleton.hpp"
 #include <stack>
 
-META_CLASS(Skeleton, Farsh.Skeleton);
-META_CLASS_END();
-
 /*
 Формат файла скелета:
 

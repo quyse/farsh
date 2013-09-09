@@ -1,16 +1,5 @@
 #include "Material.hpp"
 
-META_CLASS(Material, Farsh.Material);
-	META_CONSTRUCTOR();
-	META_METHOD(SetDiffuseTexture);
-	META_METHOD(SetSpecularTexture);
-	META_METHOD(SetNormalTexture);
-	META_METHOD(SetDiffuse);
-	META_METHOD(SetSpecular);
-	META_METHOD(SetNormalCoordTransform);
-	META_METHOD(SetEnvironmentCoef);
-META_CLASS_END();
-
 //*** MaterialKey
 
 MaterialKey::MaterialKey(bool hasDiffuseTexture, bool hasSpecularTexture, bool hasNormalTexture, bool useEnvironment) :

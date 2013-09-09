@@ -11,7 +11,6 @@
 #include "../inanity/inanity-crypto.hpp"
 #include "../inanity/inanity-lua.hpp"
 #include "../inanity/meta/decl.hpp"
-#include "../inanity/meta/impl.hpp"
 
 #ifndef _DEBUG
 //#define PRODUCTION

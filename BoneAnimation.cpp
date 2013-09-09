@@ -2,9 +2,6 @@
 #include "Skeleton.hpp"
 #include <iostream>
 
-META_CLASS(BoneAnimation, Farsh.BoneAnimation);
-META_CLASS_END();
-
 /*
 Формат файла костной анимации:
 
