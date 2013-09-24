@@ -252,11 +252,20 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	this->screenHeight = screenHeight;
 
 	//** создать ресурсы
-	rbBack = presenter->GetBackBuffer();
 	dsbDepth = device->CreateDepthStencilBuffer(screenWidth, screenHeight, true);
 	dsbShadow = device->CreateDepthStencilBuffer(shadowMapSize, shadowMapSize, false);
 	for(int i = 0; i < maxShadowLightsCount; ++i)
-		rbShadows[i] = device->CreateRenderBuffer(shadowMapSize, shadowMapSize, PixelFormats::floatR16);
+	{
+		ptr<RenderBuffer> rb = device->CreateRenderBuffer(shadowMapSize, shadowMapSize, PixelFormats::floatR16);
+		ptr<FrameBuffer> fb = device->CreateFrameBuffer();
+		fb->SetColorBuffer(0, rb);
+		fb->SetDepthStencilBuffer(dsbShadow);
+		ptr<FrameBuffer> fbBlur = device->CreateFrameBuffer();
+		fbBlur->SetColorBuffer(0, rb);
+		rbShadows[i] = rb;
+		fbShadows[i] = fb;
+		fbShadowBlurs[i] = fbBlur;
+	}
 	rbShadowBlur = device->CreateRenderBuffer(shadowMapSize, shadowMapSize, PixelFormats::floatR16);
 
 	// экранный буфер
@@ -270,6 +279,14 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	// буферы для Bloom
 	rbBloom1 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatRGB32);
 	rbBloom2 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatRGB32);
+
+	// framebuffers
+	fbOpaque = device->CreateFrameBuffer();
+	fbOpaque->SetColorBuffer(0, rbScreen);
+	fbOpaque->SetColorBuffer(1, rbScreenNormal);
+	fbOpaque->SetDepthStencilBuffer(dsbDepth);
+	fbDecal = device->CreateFrameBuffer();
+	fbDecal->SetColorBuffer(0, rbScreen);
 
 	shadowSamplerState = device->CreateSamplerState();
 	shadowSamplerState->SetWrap(SamplerState::wrapBorder, SamplerState::wrapBorder, SamplerState::wrapBorder);
@@ -336,7 +353,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	// shadow pass
 	csShadow.viewportWidth = shadowMapSize;
 	csShadow.viewportHeight = shadowMapSize;
-	csShadow.depthStencilBuffer = dsbShadow;
 	ugCamera->Apply(csShadow);
 
 	// пиксельный шейдер для теней
@@ -541,6 +557,9 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		uShadowBlurSourceSampler.Apply(csShadowBlur);
 		ugShadowBlur->Apply(csShadowBlur);
 		csShadowBlur.pixelShader = psShadowBlur;
+		// фреймбуферы для размытия тени
+		fbShadowBlur1 = device->CreateFrameBuffer();
+		fbShadowBlur1->SetColorBuffer(0, rbShadowBlur);
 
 		// проходы даунсемплинга
 		for(int i = 0; i < downsamplingPassesCount; ++i)
@@ -548,7 +567,9 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			ContextState& cs = csDownsamples[i];
 			cs = csFilter;
 
-			cs.renderBuffers[0] = rbDownsamples[i];
+			ptr<FrameBuffer> fb = device->CreateFrameBuffer();
+			fb->SetColorBuffer(0, rbDownsamples[i]);
+			cs.frameBuffer = fb;
 			cs.viewportWidth = 1 << (downsamplingPassesCount - 1 - i);
 			cs.viewportHeight = 1 << (downsamplingPassesCount - 1 - i);
 			ugDownsample->Apply(cs);
@@ -579,10 +600,15 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			csDownsamples[downsamplingPassesCount - 1].blendState = bs;
 		}
 
+		// фреймбуферы для downsample
+		ptr<FrameBuffer> fbDownsample1 = device->CreateFrameBuffer();
+		fbDownsample1->SetColorBuffer(0, rbBloom1);
+		ptr<FrameBuffer> fbDownsample2 = device->CreateFrameBuffer();
+		fbDownsample2->SetColorBuffer(0, rbBloom2);
 		// самый первый проход bloom (из rbDownsamples[downsamplingStepForBloom] в rbBloom2)
 		csBloomLimit.viewportWidth = bloomMapSize;
 		csBloomLimit.viewportHeight = bloomMapSize;
-		csBloomLimit.renderBuffers[0] = rbBloom2;
+		csBloomLimit.frameBuffer = fbDownsample2;
 		uBloomSourceSampler.SetTexture(rbDownsamples[downsamplingStepForBloom]->GetTexture());
 		uBloomSourceSampler.SetSamplerState(linearSampler);
 		uBloomSourceSampler.Apply(csBloomLimit);
@@ -591,7 +617,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		// первый проход bloom (из rbBloom1 в rbBloom2)
 		csBloom1.viewportWidth = bloomMapSize;
 		csBloom1.viewportHeight = bloomMapSize;
-		csBloom1.renderBuffers[0] = rbBloom2;
+		csBloom1.frameBuffer = fbDownsample2;
 		uBloomSourceSampler.SetTexture(rbBloom1->GetTexture());
 		uBloomSourceSampler.SetSamplerState(linearSampler);
 		uBloomSourceSampler.Apply(csBloom1);
@@ -600,7 +626,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		// второй проход bloom (из rbBloom2 в rbBloom1)
 		csBloom2.viewportWidth = bloomMapSize;
 		csBloom2.viewportHeight = bloomMapSize;
-		csBloom2.renderBuffers[0] = rbBloom1;
+		csBloom2.frameBuffer = fbDownsample1;
 		uBloomSourceSampler.SetTexture(rbBloom2->GetTexture());
 		uBloomSourceSampler.SetSamplerState(linearSampler);
 		uBloomSourceSampler.Apply(csBloom2);
@@ -609,7 +635,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		// tone mapping
 		csTone.viewportWidth = screenWidth;
 		csTone.viewportHeight = screenHeight;
-		csTone.renderBuffers[0] = rbBack;
+		csTone.frameBuffer = presenter->GetFrameBuffer();
 		uToneBloomSampler.SetTexture(rbBloom1->GetTexture());
 		uToneBloomSampler.SetSamplerState(linearSampler);
 		uToneBloomSampler.Apply(csTone);
@@ -652,9 +678,7 @@ Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)
 	ContextState& cs = lightVariant.csOpaque;
 	cs.viewportWidth = screenWidth;
 	cs.viewportHeight = screenHeight;
-	cs.renderBuffers[0] = rbScreen;
-	cs.renderBuffers[1] = rbScreenNormal;
-	cs.depthStencilBuffer = dsbDepth;
+	cs.frameBuffer = fbOpaque;
 	cs.depthTestFunc = ContextState::depthTestFuncLess;
 	cs.depthWrite = true;
 	ugCamera->Apply(cs);
@@ -1080,15 +1104,15 @@ void Painter::Draw()
 			cs = csShadow;
 
 			ptr<RenderBuffer> rb = rbShadows[shadowPassNumber];
-			cs.renderBuffers[0] = rb;
+			cs.frameBuffer = fbShadows[shadowPassNumber];
 
 			// указать трансформацию
 			uViewProj.SetValue(lights[i].transform);
 			ugCamera->Upload(context);
 
 			// очистить карту теней
-			context->ClearDepthStencilBuffer(dsbShadow, 1.0f);
-			context->ClearRenderBuffer(rb, farColor);
+			context->ClearColor(0, farColor);
+			context->ClearDepth(1.0f);
 
 			// сортировщик моделей по геометрии
 			struct GeometrySorter
@@ -1189,34 +1213,37 @@ void Painter::Draw()
 			// выполнить размытие тени
 			// первый проход
 			cs = csShadowBlur;
-			cs.renderBuffers[0] = rbShadowBlur;
+			cs.frameBuffer = fbShadowBlur1;
 			uShadowBlurSourceSampler.SetTexture(rb->GetTexture());
 			uShadowBlurSourceSampler.Apply(cs);
 			uShadowBlurDirection.SetValue(vec2(1.0f / shadowMapSize, 0));
 			ugShadowBlur->Upload(context);
-			context->ClearRenderBuffer(rbShadowBlur, zeroColor);
+			context->ClearColor(0, zeroColor);
 			context->Draw();
 			// второй проход
 			cs = csShadowBlur;
-			cs.renderBuffers[0] = rb;
+			cs.frameBuffer = fbShadowBlurs[i];
 			uShadowBlurSourceSampler.SetTexture(rbShadowBlur->GetTexture());
 			uShadowBlurSourceSampler.Apply(cs);
 			uShadowBlurDirection.SetValue(vec2(0, 1.0f / shadowMapSize));
 			ugShadowBlur->Upload(context);
-			context->ClearRenderBuffer(rb, zeroColor);
+			context->ClearColor(0, zeroColor);
 			context->Draw();
 
 			shadowPassNumber++;
 		}
 
-	// очистить рендербуферы
-	float color[4] = { 0, 0, 0, 1 };
-	float colorDepth[4] = { 1, 1, 1, 1 };
-	context->ClearRenderBuffer(rbScreen, color);
-	context->ClearRenderBuffer(rbScreenNormal, color);
-	context->ClearDepthStencilBuffer(dsbDepth, 1.0f);
+	// основное рисование
 
 	ContextState& cs = context->GetTargetState();
+
+	// очистить рендербуферы
+	cs.frameBuffer = fbOpaque;
+	float color[4] = { 0, 0, 0, 1 };
+	float colorDepth[4] = { 1, 1, 1, 1 };
+	context->ClearColor(0, color); // color
+	context->ClearColor(1, color); // normal
+	context->ClearDepth(1.0f);
 
 	// установить uniform'ы камеры
 	uViewProj.SetValue(cameraViewProj);
@@ -1418,8 +1445,7 @@ void Painter::Draw()
 	// состояние смешивания
 	cs.blendState = decalStuff.bs;
 	// убрать карту нормалей и буфер глубины
-	cs.renderBuffers[1] = 0;
-	cs.depthStencilBuffer = 0;
+	cs.frameBuffer = fbDecal;
 	// семплеры
 	uScreenNormalSampler.Apply(cs);
 	uScreenDepthSampler.Apply(cs);
@@ -1485,11 +1511,10 @@ void Painter::Draw()
 		ugDownsample->Upload(context);
 		cs = csDownsamples[i];
 		if(veryFirstDownsampling || i < downsamplingPassesCount - 1)
-			context->ClearRenderBuffer(rbDownsamples[i], clearColor);
+			context->ClearColor(0, clearColor);
 		context->Draw();
 	}
 	veryFirstDownsampling = false;
-
 	// bloom
 	uBloomLimit.SetValue(bloomLimit);
 	ugBloom->Upload(context);
@@ -1501,24 +1526,25 @@ void Painter::Draw()
 	if(enableBloom)
 	{
 		cs = csBloomLimit;
-		context->ClearRenderBuffer(rbBloom2, clearColor);
+		context->ClearColor(0, clearColor);
 		context->Draw();
 		cs = csBloom2;
-		context->ClearRenderBuffer(rbBloom1, clearColor);
+		context->ClearColor(0, clearColor);
 		context->Draw();
 		for(int i = 1; i < bloomPassesCount; ++i)
 		{
 			cs = csBloom1;
-			context->ClearRenderBuffer(rbBloom2, clearColor);
+			context->ClearColor(0, clearColor);
 			context->Draw();
 			cs = csBloom2;
-			context->ClearRenderBuffer(rbBloom1, clearColor);
+			context->ClearColor(0, clearColor);
 			context->Draw();
 		}
 	}
 	else
 	{
-		context->ClearRenderBuffer(rbBloom1, clearColor);
+		cs = csBloom2;
+		context->ClearColor(0, clearColor);
 	}
 
 	// tone mapping
@@ -1526,6 +1552,6 @@ void Painter::Draw()
 	uToneMaxLuminance.SetValue(toneMaxLuminance);
 	ugTone->Upload(context);
 	cs = csTone;
-	context->ClearRenderBuffer(rbBack, zeroColor);
+	context->ClearColor(0, zeroColor);
 	context->Draw();
 }

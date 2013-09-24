@@ -325,8 +325,18 @@ private:
 	ptr<DepthStencilBuffer> dsbShadow;
 	/// Карты теней.
 	ptr<RenderBuffer> rbShadows[maxShadowLightsCount];
+	/// Фреймбуферы для карт теней.
+	ptr<FrameBuffer> fbShadows[maxShadowLightsCount];
+	/// Фреймбуферы для размытия карт теней.
+	ptr<FrameBuffer> fbShadowBlurs[maxShadowLightsCount];
+	/// Фреймбуфер для первого шага размытия карт теней.
+	ptr<FrameBuffer> fbShadowBlur1;
 	/// Вспомогательная карта для размытия.
 	ptr<RenderBuffer> rbShadowBlur;
+	/// Основной фреймбуфер.
+	ptr<FrameBuffer> fbOpaque;
+	/// Фреймбуфер для декалей.
+	ptr<FrameBuffer> fbDecal;
 
 private:
 	/// Кэш вершинных шейдеров.
