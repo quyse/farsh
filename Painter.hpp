@@ -55,8 +55,6 @@ private:
 		std::vector<BasicLight> basicLights;
 		/// Источники света с тенями.
 		std::vector<ShadowLight> shadowLights;
-		/// Состояние контекста для opaque pass.
-		ContextState csOpaque;
 
 		LightVariant();
 	};
@@ -281,11 +279,25 @@ private:
 	};
 	DecalStuff decalStuff;
 
-	//** Состояния конвейера.
-	/// Состояние для shadow pass.
-	ContextState csShadow;
-	/// Состояние для прохода размытия.
-	ContextState csShadowBlur;
+	//***
+	ptr<AttributeBinding> abFilter;
+	ptr<VertexBuffer> vbFilter;
+	ptr<IndexBuffer> ibFilter;
+	ptr<VertexShader> vsFilter;
+	ptr<PixelShader> psShadowBlur;
+	ptr<PixelShader> psDownsample;
+	ptr<PixelShader> psDownsampleLuminanceFirst;
+	ptr<PixelShader> psDownsampleLuminance;
+	ptr<PixelShader> psBloomLimit, psBloom1, psBloom2, psTone;
+
+	ptr<SamplerState> ssPoint;
+	ptr<SamplerState> ssLinear;
+	ptr<SamplerState> ssPointBorder;
+	ptr<SamplerState> ssColorTexture;
+
+	ptr<BlendState> bsLastDownsample;
+
+	ptr<PixelShader> psShadow;
 
 	/// Размер карты теней.
 	static const int shadowMapSize;
@@ -296,23 +308,14 @@ private:
 	/// Размер карты для bloom.
 	static const int bloomMapSize;
 
-	//** Постпроцессинг.
-	/// Состояния для downsampling.
-	ContextState csDownsamples[downsamplingPassesCount];
-	/// Самый первый проход bloom.
-	ContextState csBloomLimit;
-	/// Первый проход bloom.
-	ContextState csBloom1;
-	/// Второй проход bloom.
-	ContextState csBloom2;
-	/// Tone mapping.
-	ContextState csTone;
-
 	//** Рендербуферы.
 	/// HDR-текстура для изначального рисования.
 	ptr<RenderBuffer> rbScreen;
 	/// Экранная карта нормалей.
 	ptr<RenderBuffer> rbScreenNormal;
+	/// Фреймбуферы для downsampling.
+	ptr<FrameBuffer> fbDownsamples[downsamplingPassesCount];
+	ptr<FrameBuffer> fbDownsample1, fbDownsample2;
 	/// HDR-буферы для downsampling.
 	ptr<RenderBuffer> rbDownsamples[downsamplingPassesCount];
 	/// HDR-буферы для Bloom.

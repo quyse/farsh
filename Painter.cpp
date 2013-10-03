@@ -274,8 +274,14 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	rbScreenNormal = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatRGB32);
 	// буферы для downsample
 	for(int i = 0; i < downsamplingPassesCount; ++i)
-		rbDownsamples[i] = device->CreateRenderBuffer(1 << (downsamplingPassesCount - 1 - i), 1 << (downsamplingPassesCount - 1 - i),
+	{
+		ptr<RenderBuffer> rb = device->CreateRenderBuffer(1 << (downsamplingPassesCount - 1 - i), 1 << (downsamplingPassesCount - 1 - i),
 			i <= downsamplingStepForBloom ? PixelFormats::floatRGB32 : PixelFormats::floatR16);
+		rbDownsamples[i] = rb;
+		ptr<FrameBuffer> fb = device->CreateFrameBuffer();
+		fb->SetColorBuffer(0, rb);
+		fbDownsamples[i] = fb;
+	}
 	// буферы для Bloom
 	rbBloom1 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatRGB32);
 	rbBloom2 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatRGB32);
@@ -288,6 +294,9 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	fbDecal = device->CreateFrameBuffer();
 	fbDecal->SetColorBuffer(0, rbScreen);
 
+	fbOpaque = presenter->GetFrameBuffer();
+	fbDecal = fbOpaque;
+
 	shadowSamplerState = device->CreateSamplerState();
 	shadowSamplerState->SetWrap(SamplerState::wrapBorder, SamplerState::wrapBorder, SamplerState::wrapBorder);
 	shadowSamplerState->SetFilter(SamplerState::filterLinear, SamplerState::filterLinear, SamplerState::filterLinear);
@@ -295,11 +304,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		float borderColor[] = { 0, 0, 0, 0 };
 		shadowSamplerState->SetBorderColor(borderColor);
 	}
-
-	uScreenNormalSampler.SetTexture(rbScreenNormal->GetTexture());
-	uScreenNormalSampler.SetSamplerState(shadowSamplerState);
-	uScreenDepthSampler.SetTexture(dsbDepth->GetTexture());
-	uScreenDepthSampler.SetSamplerState(shadowSamplerState);
 
 	// геометрия полноэкранного прохода
 	struct Quad
@@ -350,43 +354,30 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 
 	//** инициализировать состояния конвейера
 
-	// shadow pass
-	csShadow.viewportWidth = shadowMapSize;
-	csShadow.viewportHeight = shadowMapSize;
-	ugCamera->Apply(csShadow);
-
 	// пиксельный шейдер для теней
-	csShadow.pixelShader = shaderCache->GetPixelShader(Expression((
+	psShadow = shaderCache->GetPixelShader(Expression((
 		iDepth,
 		fTarget = newvec4(iDepth, 0, 0, 0)
 		)));
 
 	//** шейдеры и состояния постпроцессинга и размытия теней
-	{
-		ContextState csFilter;
-		csFilter.viewportWidth = screenWidth;
-		csFilter.viewportHeight = screenHeight;
-		csFilter.attributeBinding = quad.ab;
-		csFilter.vertexBuffers[0] = quad.vb;
-		csFilter.indexBuffer = quad.ib;
-		csFilter.depthTestFunc = ContextState::depthTestFuncAlways;
-		csFilter.depthWrite = false;
+	abFilter = quad.ab;
+	vbFilter = quad.vb;
+	ibFilter = quad.ib;
 
+	{
 		// промежуточные
 		Interpolant<vec2> iTexcoord(0);
 		// результат
 		Fragment<vec4> fTarget(0);
 
 		// вершинный шейдер - общий для всех постпроцессингов
-		ptr<VertexShader> vertexShader = shaderCache->GetVertexShader((
+		vsFilter = shaderCache->GetVertexShader((
 			setPosition(quad.aPosition),
 			iTexcoord = screenToTexture(quad.aPosition["xy"])
 			));
 
-		csFilter.vertexShader = vertexShader;
-
 		// пиксельный шейдер для размытия тени
-		ptr<PixelShader> psShadowBlur;
 		{
 			Temp<float> sum;
 			Expression shader = (
@@ -405,7 +396,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		}
 
 		// пиксельный шейдер для downsample
-		ptr<PixelShader> psDownsample;
 		{
 			Expression shader = (
 				iTexcoord,
@@ -419,7 +409,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			psDownsample = shaderCache->GetPixelShader(shader);
 		}
 		// пиксельный шейдер для первого downsample luminance
-		ptr<PixelShader> psDownsampleLuminanceFirst;
 		{
 			Temp<vec3> luminanceCoef;
 			Expression shader = (
@@ -435,7 +424,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			psDownsampleLuminanceFirst = shaderCache->GetPixelShader(shader);
 		}
 		// пиксельный шейдер для downsample luminance
-		ptr<PixelShader> psDownsampleLuminance;
 		{
 			Expression shader = (
 				iTexcoord,
@@ -454,7 +442,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		const float offsets[] = { -7, -5.9f, -3.2f, -2.1f, -1.1f, -0.5f, 0, 0.5f, 1.1f, 2.1f, 3.2f, 5.9f, 7 };
 		const float offsetScaleX = 1.0f / bloomMapSize, offsetScaleY = 1.0f / bloomMapSize;
 		// пиксельный шейдер для самого первого прохода (с ограничением по освещённости)
-		ptr<PixelShader> psBloomLimit;
 		{
 			Temp<vec3> sum;
 			Expression shader = (
@@ -473,7 +460,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			psBloomLimit = shaderCache->GetPixelShader(shader);
 		}
 		// пиксельный шейдер для первого прохода
-		ptr<PixelShader> psBloom1;
 		{
 			Temp<vec3> sum;
 			Expression shader = (
@@ -492,7 +478,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			psBloom1 = shaderCache->GetPixelShader(shader);
 		}
 		// пиксельный шейдер для второго прохода
-		ptr<PixelShader> psBloom2;
 		{
 			Temp<vec3> sum;
 			Expression shader = (
@@ -511,7 +496,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			psBloom2 = shaderCache->GetPixelShader(shader);
 		}
 		// шейдер tone mapping
-		ptr<PixelShader> psTone;
 		{
 			Temp<vec3> color;
 			Temp<float> luminance, relativeLuminance, intensity;
@@ -529,124 +513,39 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			psTone = shaderCache->GetPixelShader(shader);
 		}
 
-		csShadowBlur = csFilter;
-		csBloomLimit = csFilter;
-		csBloom1 = csFilter;
-		csBloom2 = csFilter;
-		csTone = csFilter;
-
+		// color texture sampler
+		ssColorTexture = device->CreateSamplerState();
+		ssColorTexture->SetFilter(SamplerState::filterLinear, SamplerState::filterLinear, SamplerState::filterLinear);
+		ssColorTexture->SetWrap(SamplerState::wrapRepeat, SamplerState::wrapRepeat, SamplerState::wrapRepeat);
+		ssColorTexture->SetMipMapping(true);
 		// point sampler
-		ptr<SamplerState> pointSampler = device->CreateSamplerState();
-		pointSampler->SetFilter(SamplerState::filterPoint, SamplerState::filterPoint, SamplerState::filterPoint);
-		pointSampler->SetWrap(SamplerState::wrapClamp, SamplerState::wrapClamp, SamplerState::wrapClamp);
+		ssPoint = device->CreateSamplerState();
+		ssPoint->SetFilter(SamplerState::filterPoint, SamplerState::filterPoint, SamplerState::filterPoint);
+		ssPoint->SetWrap(SamplerState::wrapClamp, SamplerState::wrapClamp, SamplerState::wrapClamp);
 		// linear sampler
-		ptr<SamplerState> linearSampler = device->CreateSamplerState();
-		linearSampler->SetFilter(SamplerState::filterLinear, SamplerState::filterLinear, SamplerState::filterLinear);
-		linearSampler->SetWrap(SamplerState::wrapClamp, SamplerState::wrapClamp, SamplerState::wrapClamp);
+		ssLinear = device->CreateSamplerState();
+		ssLinear->SetFilter(SamplerState::filterLinear, SamplerState::filterLinear, SamplerState::filterLinear);
+		ssLinear->SetWrap(SamplerState::wrapClamp, SamplerState::wrapClamp, SamplerState::wrapClamp);
 		// point sampler with border=0
-		ptr<SamplerState> pointBorderSampler = device->CreateSamplerState();
-		pointBorderSampler->SetFilter(SamplerState::filterPoint, SamplerState::filterPoint, SamplerState::filterPoint);
-		pointBorderSampler->SetWrap(SamplerState::wrapBorder, SamplerState::wrapBorder, SamplerState::wrapBorder);
+		ssPointBorder = device->CreateSamplerState();
+		ssPointBorder->SetFilter(SamplerState::filterPoint, SamplerState::filterPoint, SamplerState::filterPoint);
+		ssPointBorder->SetWrap(SamplerState::wrapBorder, SamplerState::wrapBorder, SamplerState::wrapBorder);
 		float borderColor[] = { 0, 0, 0, 0 };
-		pointBorderSampler->SetBorderColor(borderColor);
+		ssPointBorder->SetBorderColor(borderColor);
 
-		// состояние для размытия тени
-		csShadowBlur.viewportWidth = shadowMapSize;
-		csShadowBlur.viewportHeight = shadowMapSize;
-		uShadowBlurSourceSampler.SetSamplerState(pointBorderSampler);
-		uShadowBlurSourceSampler.Apply(csShadowBlur);
-		ugShadowBlur->Apply(csShadowBlur);
-		csShadowBlur.pixelShader = psShadowBlur;
 		// фреймбуферы для размытия тени
 		fbShadowBlur1 = device->CreateFrameBuffer();
 		fbShadowBlur1->SetColorBuffer(0, rbShadowBlur);
 
-		// проходы даунсемплинга
-		for(int i = 0; i < downsamplingPassesCount; ++i)
-		{
-			ContextState& cs = csDownsamples[i];
-			cs = csFilter;
-
-			ptr<FrameBuffer> fb = device->CreateFrameBuffer();
-			fb->SetColorBuffer(0, rbDownsamples[i]);
-			cs.frameBuffer = fb;
-			cs.viewportWidth = 1 << (downsamplingPassesCount - 1 - i);
-			cs.viewportHeight = 1 << (downsamplingPassesCount - 1 - i);
-			ugDownsample->Apply(cs);
-			if(i <= downsamplingStepForBloom + 1)
-			{
-				uDownsampleSourceSampler.SetTexture(i == 0 ? rbScreen->GetTexture() : rbDownsamples[i - 1]->GetTexture());
-				uDownsampleSourceSampler.SetSamplerState(i == 0 ? linearSampler : pointSampler);
-				uDownsampleSourceSampler.Apply(cs);
-			}
-			else
-			{
-				uDownsampleLuminanceSourceSampler.SetTexture(rbDownsamples[i - 1]->GetTexture());
-				uDownsampleLuminanceSourceSampler.SetSamplerState(pointSampler);
-				uDownsampleLuminanceSourceSampler.Apply(cs);
-			}
-
-			if(i <= downsamplingStepForBloom)
-				cs.pixelShader = psDownsample;
-			else if(i == downsamplingStepForBloom + 1)
-				cs.pixelShader = psDownsampleLuminanceFirst;
-			else
-				cs.pixelShader = psDownsampleLuminance;
-		}
 		// для последнего прохода - специальный blend state
-		{
-			ptr<BlendState> bs = device->CreateBlendState();
-			bs->SetColor(BlendState::colorSourceSrcAlpha, BlendState::colorSourceInvSrcAlpha, BlendState::operationAdd);
-			csDownsamples[downsamplingPassesCount - 1].blendState = bs;
-		}
+		bsLastDownsample = device->CreateBlendState();
+		bsLastDownsample->SetColor(BlendState::colorSourceSrcAlpha, BlendState::colorSourceInvSrcAlpha, BlendState::operationAdd);
 
 		// фреймбуферы для downsample
-		ptr<FrameBuffer> fbDownsample1 = device->CreateFrameBuffer();
+		fbDownsample1 = device->CreateFrameBuffer();
 		fbDownsample1->SetColorBuffer(0, rbBloom1);
-		ptr<FrameBuffer> fbDownsample2 = device->CreateFrameBuffer();
+		fbDownsample2 = device->CreateFrameBuffer();
 		fbDownsample2->SetColorBuffer(0, rbBloom2);
-		// самый первый проход bloom (из rbDownsamples[downsamplingStepForBloom] в rbBloom2)
-		csBloomLimit.viewportWidth = bloomMapSize;
-		csBloomLimit.viewportHeight = bloomMapSize;
-		csBloomLimit.frameBuffer = fbDownsample2;
-		uBloomSourceSampler.SetTexture(rbDownsamples[downsamplingStepForBloom]->GetTexture());
-		uBloomSourceSampler.SetSamplerState(linearSampler);
-		uBloomSourceSampler.Apply(csBloomLimit);
-		ugBloom->Apply(csBloomLimit);
-		csBloomLimit.pixelShader = psBloomLimit;
-		// первый проход bloom (из rbBloom1 в rbBloom2)
-		csBloom1.viewportWidth = bloomMapSize;
-		csBloom1.viewportHeight = bloomMapSize;
-		csBloom1.frameBuffer = fbDownsample2;
-		uBloomSourceSampler.SetTexture(rbBloom1->GetTexture());
-		uBloomSourceSampler.SetSamplerState(linearSampler);
-		uBloomSourceSampler.Apply(csBloom1);
-		ugBloom->Apply(csBloom1);
-		csBloom1.pixelShader = psBloom1;
-		// второй проход bloom (из rbBloom2 в rbBloom1)
-		csBloom2.viewportWidth = bloomMapSize;
-		csBloom2.viewportHeight = bloomMapSize;
-		csBloom2.frameBuffer = fbDownsample1;
-		uBloomSourceSampler.SetTexture(rbBloom2->GetTexture());
-		uBloomSourceSampler.SetSamplerState(linearSampler);
-		uBloomSourceSampler.Apply(csBloom2);
-		ugBloom->Apply(csBloom2);
-		csBloom2.pixelShader = psBloom2;
-		// tone mapping
-		csTone.viewportWidth = screenWidth;
-		csTone.viewportHeight = screenHeight;
-		csTone.frameBuffer = presenter->GetFrameBuffer();
-		uToneBloomSampler.SetTexture(rbBloom1->GetTexture());
-		uToneBloomSampler.SetSamplerState(linearSampler);
-		uToneBloomSampler.Apply(csTone);
-		uToneScreenSampler.SetTexture(rbScreen->GetTexture());
-		uToneScreenSampler.SetSamplerState(pointSampler);
-		uToneScreenSampler.Apply(csTone);
-		uToneAverageSampler.SetTexture(rbDownsamples[downsamplingPassesCount - 1]->GetTexture());
-		uToneAverageSampler.SetSamplerState(pointSampler);
-		uToneAverageSampler.Apply(csTone);
-		ugTone->Apply(csTone);
-		csTone.pixelShader = psTone;
 	}
 }
 
@@ -673,26 +572,6 @@ Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)
 		lightVariant.shadowLights.push_back(ShadowLight(lightVariant.ugLight, i + 5));
 
 	lightVariant.ugLight->Finalize(device);
-
-	// инициализировать состояние контекста
-	ContextState& cs = lightVariant.csOpaque;
-	cs.viewportWidth = screenWidth;
-	cs.viewportHeight = screenHeight;
-	cs.frameBuffer = fbOpaque;
-	cs.depthTestFunc = ContextState::depthTestFuncLess;
-	cs.depthWrite = true;
-	ugCamera->Apply(cs);
-	lightVariant.ugLight->Apply(cs);
-	ugMaterial->Apply(cs);
-
-	// применить семплеры карт теней
-	for(int i = 0; i < shadowLightsCount; ++i)
-	{
-		ShadowLight& shadowLight = lightVariant.shadowLights[i];
-		shadowLight.uShadowSampler.SetTexture(rbShadows[i]->GetTexture());
-		shadowLight.uShadowSampler.SetSamplerState(shadowSamplerState);
-		shadowLight.uShadowSampler.Apply(cs);
-	}
 
 	// добавить вариант
 	lightVariantsCache.insert(std::make_pair(key, lightVariant));
@@ -1096,15 +975,15 @@ void Painter::Draw()
 
 	// выполнить теневые проходы
 	int shadowPassNumber = 0;
-	for(size_t i = 0; i < lights.size(); ++i)
+	for(size_t i = 0; false && i < lights.size(); ++i)
 		if(lights[i].shadow)
 		{
-			ContextState& cs = context->GetTargetState();
-
-			cs = csShadow;
+			Context::LetViewport lv(context, shadowMapSize, shadowMapSize);
+			Context::LetFrameBuffer lfb(context, fbShadows[shadowPassNumber]);
+			Context::LetUniformBuffer lubCamera(context, ugCamera);
+			Context::LetPixelShader lps(context, psShadow);
 
 			ptr<RenderBuffer> rb = rbShadows[shadowPassNumber];
-			cs.frameBuffer = fbShadows[shadowPassNumber];
 
 			// указать трансформацию
 			uViewProj.SetValue(lights[i].transform);
@@ -1132,37 +1011,39 @@ void Painter::Draw()
 			// отсортировать объекты по геометрии
 			std::sort(models.begin(), models.end(), GeometrySorter());
 
-			// установить привязку атрибутов
-			cs.attributeBinding = ab;
-			// установить вершинный шейдер
-			cs.vertexShader = GetVertexShadowShader(VertexShaderKey(true, false, false));
-			// установить константный буфер
-			ugInstancedModel->Apply(cs);
-
-			// нарисовать инстансингом с группировкой по геометрии
-			for(size_t j = 0; j < models.size(); )
 			{
-				// количество рисуемых объектов
-				int batchCount;
-				for(batchCount = 1;
-					batchCount < maxInstancesCount &&
-					j + batchCount < models.size() &&
-					models[j].geometry == models[j + batchCount].geometry;
-					++batchCount);
+				// установить привязку атрибутов
+				Context::LetAttributeBinding lab(context, ab);
+				// установить вершинный шейдер
+				Context::LetVertexShader lvs(context, GetVertexShadowShader(VertexShaderKey(true, false, false)));
+				// установить константный буфер
+				Context::LetUniformBuffer lubModel(context, ugInstancedModel);
 
-				// установить геометрию
-				cs.vertexBuffers[0] = models[j].geometry->GetVertexBuffer();
-				cs.indexBuffer = models[j].geometry->GetIndexBuffer();
-				// установить uniform'ы
-				for(int k = 0; k < batchCount; ++k)
-					uWorlds.SetValue(k, models[j + k].worldTransform);
-				// и залить в GPU
-				ugInstancedModel->Upload(context);
+				// нарисовать инстансингом с группировкой по геометрии
+				for(size_t j = 0; j < models.size(); )
+				{
+					// количество рисуемых объектов
+					int batchCount;
+					for(batchCount = 1;
+						batchCount < maxInstancesCount &&
+						j + batchCount < models.size() &&
+						models[j].geometry == models[j + batchCount].geometry;
+						++batchCount);
 
-				// нарисовать
-				context->DrawInstanced(batchCount);
+					// установить геометрию
+					Context::LetVertexBuffer lvb(context, 0, models[j].geometry->GetVertexBuffer());
+					Context::LetIndexBuffer lib(context, models[j].geometry->GetIndexBuffer());
+					// установить uniform'ы
+					for(int k = 0; k < batchCount; ++k)
+						uWorlds.SetValue(k, models[j + k].worldTransform);
+					// и залить в GPU
+					ugInstancedModel->Upload(context);
 
-				j += batchCount;
+					// нарисовать
+					context->DrawInstanced(batchCount);
+
+					j += batchCount;
+				}
 			}
 
 			//** рисуем skinned-модели
@@ -1170,108 +1051,84 @@ void Painter::Draw()
 			// отсортировать объекты по геометрии
 			std::sort(skinnedModels.begin(), skinnedModels.end(), GeometrySorter());
 
-			// установить привязку атрибутов
-			cs.attributeBinding = abSkinned;
-			// установить вершинный шейдер
-			cs.vertexShader = GetVertexShadowShader(VertexShaderKey(false, true, false));
-			// установить константный буфер
-			ugSkinnedModel->Apply(cs);
-
-			// нарисовать с группировкой по геометрии
-			ptr<Geometry> lastGeometry;
-			for(size_t j = 0; j < skinnedModels.size(); ++j)
 			{
-				const SkinnedModel& skinnedModel = skinnedModels[j];
-				// установить геометрию, если отличается
-				if(lastGeometry != skinnedModel.shadowGeometry)
-				{
-					cs.vertexBuffers[0] = skinnedModel.shadowGeometry->GetVertexBuffer();
-					cs.indexBuffer = skinnedModel.shadowGeometry->GetIndexBuffer();
-					lastGeometry = skinnedModel.shadowGeometry;
-				}
-				// установить uniform'ы костей
-				ptr<BoneAnimationFrame> animationFrame = skinnedModel.animationFrame;
-				const std::vector<quat>& orientations = animationFrame->orientations;
-				const std::vector<vec3>& offsets = animationFrame->offsets;
-				int bonesCount = (int)orientations.size();
-#ifdef _DEBUG
-				if(bonesCount > maxBonesCount)
-					THROW("Too many bones");
-#endif
-				for(int k = 0; k < bonesCount; ++k)
-				{
-					uBoneOrientations.SetValue(k, orientations[k]);
-					uBoneOffsets.SetValue(k, vec4(offsets[k].x, offsets[k].y, offsets[k].z, 0));
-				}
-				// и залить в GPU
-				ugSkinnedModel->Upload(context);
+				// установить привязку атрибутов
+				Context::LetAttributeBinding lab(context, abSkinned);
+				// установить вершинный шейдер
+				Context::LetVertexShader lvs(context, GetVertexShadowShader(VertexShaderKey(false, true, false)));
+				// установить константный буфер
+				Context::LetUniformBuffer lubModel(context, ugSkinnedModel);
 
-				// нарисовать
-				context->Draw();
+				// нарисовать с группировкой по геометрии
+				for(size_t j = 0; j < skinnedModels.size(); ++j)
+				{
+					const SkinnedModel& skinnedModel = skinnedModels[j];
+					// установить геометрию
+					Context::LetVertexBuffer lvb(context, 0, skinnedModel.shadowGeometry->GetVertexBuffer());
+					Context::LetIndexBuffer lib(context, skinnedModel.shadowGeometry->GetIndexBuffer());
+					// установить uniform'ы костей
+					ptr<BoneAnimationFrame> animationFrame = skinnedModel.animationFrame;
+					const std::vector<quat>& orientations = animationFrame->orientations;
+					const std::vector<vec3>& offsets = animationFrame->offsets;
+					int bonesCount = (int)orientations.size();
+#ifdef _DEBUG
+					if(bonesCount > maxBonesCount)
+						THROW("Too many bones");
+#endif
+					for(int k = 0; k < bonesCount; ++k)
+					{
+						uBoneOrientations.SetValue(k, orientations[k]);
+						uBoneOffsets.SetValue(k, vec4(offsets[k].x, offsets[k].y, offsets[k].z, 0));
+					}
+					// и залить в GPU
+					ugSkinnedModel->Upload(context);
+
+					// нарисовать
+					context->Draw();
+				}
 			}
 
 			// выполнить размытие тени
-			// первый проход
-			cs = csShadowBlur;
-			cs.frameBuffer = fbShadowBlur1;
-			uShadowBlurSourceSampler.SetTexture(rb->GetTexture());
-			uShadowBlurSourceSampler.Apply(cs);
-			uShadowBlurDirection.SetValue(vec2(1.0f / shadowMapSize, 0));
-			ugShadowBlur->Upload(context);
-			context->ClearColor(0, zeroColor);
-			context->Draw();
-			// второй проход
-			cs = csShadowBlur;
-			cs.frameBuffer = fbShadowBlurs[i];
-			uShadowBlurSourceSampler.SetTexture(rbShadowBlur->GetTexture());
-			uShadowBlurSourceSampler.Apply(cs);
-			uShadowBlurDirection.SetValue(vec2(0, 1.0f / shadowMapSize));
-			ugShadowBlur->Upload(context);
-			context->ClearColor(0, zeroColor);
-			context->Draw();
+			{
+				Context::LetViewport lv(context, shadowMapSize, shadowMapSize);
+				Context::LetAttributeBinding lab(context, abFilter);
+				Context::LetVertexBuffer lvb(context, 0, vbFilter);
+				Context::LetIndexBuffer lib(context, ibFilter);
+				Context::LetVertexShader lvs(context, vsFilter);
+				Context::LetPixelShader lps(context, psShadowBlur);
+				Context::LetDepthTestFunc ldtf(context, Context::depthTestFuncAlways);
+				Context::LetDepthWrite ldw(context, false);
+
+				// первый проход
+
+				{
+					Context::LetFrameBuffer lfb(context, fbShadowBlur1);
+					Context::LetSampler ls(context, uShadowBlurSourceSampler, rb->GetTexture(), ssPointBorder);
+
+					uShadowBlurDirection.SetValue(vec2(1.0f / shadowMapSize, 0));
+					ugShadowBlur->Upload(context);
+
+					context->ClearColor(0, zeroColor);
+					context->Draw();
+				}
+
+				// второй проход
+				{
+					Context::LetFrameBuffer lfb(context, fbShadowBlurs[i]);
+					Context::LetSampler ls(context, uShadowBlurSourceSampler, rbShadowBlur->GetTexture(), ssPointBorder);
+
+					uShadowBlurDirection.SetValue(vec2(0, 1.0f / shadowMapSize));
+					ugShadowBlur->Upload(context);
+
+					context->ClearColor(0, zeroColor);
+					context->Draw();
+				}
+			}
 
 			shadowPassNumber++;
 		}
 
 	// основное рисование
-
-	ContextState& cs = context->GetTargetState();
-
-	// очистить рендербуферы
-	cs.frameBuffer = fbOpaque;
-	float color[4] = { 0, 0, 0, 1 };
-	float colorDepth[4] = { 1, 1, 1, 1 };
-	context->ClearColor(0, color); // color
-	context->ClearColor(1, color); // normal
-	context->ClearDepth(1.0f);
-
-	// установить uniform'ы камеры
-	uViewProj.SetValue(cameraViewProj);
-	uInvViewProj.SetValue(cameraInvViewProj);
-	uCameraPosition.SetValue(cameraPosition);
-	ugCamera->Upload(context);
-
-	// установить параметры источников света
-	LightVariant& lightVariant = GetLightVariant(LightVariantKey(basicLightsCount, shadowLightsCount));
-	cs = lightVariant.csOpaque;
-	lightVariant.uAmbientColor.SetValue(ambientColor);
-	int basicLightNumber = 0;
-	int shadowLightNumber = 0;
-	for(size_t i = 0; i < lights.size(); ++i)
-		if(lights[i].shadow)
-		{
-			ShadowLight& shadowLight = lightVariant.shadowLights[shadowLightNumber++];
-			shadowLight.uLightPosition.SetValue(lights[i].position);
-			shadowLight.uLightColor.SetValue(lights[i].color);
-			shadowLight.uLightTransform.SetValue(lights[i].transform);
-		}
-		else
-		{
-			BasicLight& basicLight = lightVariant.basicLights[basicLightNumber++];
-			basicLight.uLightPosition.SetValue(lights[i].position);
-			basicLight.uLightColor.SetValue(lights[i].color);
-		}
-	lightVariant.ugLight->Upload(context);
 
 	// сортировщик моделей по материалу, а затем по геометрии
 	struct Sorter
@@ -1291,267 +1148,368 @@ void Painter::Draw()
 		}
 	};
 
-	//** нарисовать простые модели
-
-	std::sort(models.begin(), models.end(), Sorter());
-
-	// установить привязку атрибутов
-	cs.attributeBinding = ab;
-	// установить вершинный шейдер
-	cs.vertexShader = GetVertexShader(VertexShaderKey(true, false, false));
-	// установить константный буфер
-	ugInstancedModel->Apply(cs);
-
-	// нарисовать
-	for(size_t i = 0; i < models.size(); )
 	{
-		// выяснить размер батча по материалу
-		ptr<Material> material = models[i].material;
-		int materialBatchCount;
-		for(materialBatchCount = 1;
-			i + materialBatchCount < models.size() &&
-			material == models[i + materialBatchCount].material;
-			++materialBatchCount);
+		Context::LetFrameBuffer lfb(context, fbOpaque);
+		Context::LetViewport lv(context, screenWidth, screenHeight);
+		Context::LetDepthTestFunc ldtf(context, Context::depthTestFuncLess);
+		Context::LetDepthWrite ldw(context, true);
+		Context::LetUniformBuffer lubCamera(context, ugCamera);
 
-		// установить параметры материала
-		uDiffuseSampler.SetTexture(material->diffuseTexture);
-		uDiffuseSampler.Apply(cs);
-		uSpecularSampler.SetTexture(material->specularTexture);
-		uSpecularSampler.Apply(cs);
-		uNormalSampler.SetTexture(material->normalTexture);
-		uNormalSampler.Apply(cs);
-		uEnvironmentSampler.SetTexture(environmentTexture);
-		uEnvironmentSampler.Apply(cs);
-		uDiffuse.SetValue(material->diffuse);
-		uSpecular.SetValue(material->specular);
-		uNormalCoordTransform.SetValue(material->normalCoordTransform);
-		ugMaterial->Upload(context);
+		// установить uniform'ы камеры
+		uViewProj.SetValue(cameraViewProj);
+		uInvViewProj.SetValue(cameraInvViewProj);
+		uCameraPosition.SetValue(cameraPosition);
+		ugCamera->Upload(context);
 
-		// рисуем инстансингом обычные модели
-		// установить пиксельный шейдер
-		cs.pixelShader = GetPixelShader(PixelShaderKey(basicLightsCount, shadowLightsCount, false, material->GetKey()));
-		// цикл по батчам по геометрии
-		for(int j = 0; j < materialBatchCount; )
+		// установить параметры источников света
+		LightVariant& lightVariant = GetLightVariant(LightVariantKey(basicLightsCount, shadowLightsCount));
+		Context::LetUniformBuffer lubLight(context, lightVariant.ugLight);
+
+		lightVariant.uAmbientColor.SetValue(ambientColor);
+		int basicLightNumber = 0;
+		int shadowLightNumber = 0;
+		Context::LetSampler ls[maxShadowLightsCount];
+		for(size_t i = 0; i < lights.size(); ++i)
+			if(lights[i].shadow)
+			{
+				ShadowLight& shadowLight = lightVariant.shadowLights[shadowLightNumber];
+				shadowLight.uLightPosition.SetValue(lights[i].position);
+				shadowLight.uLightColor.SetValue(lights[i].color);
+				shadowLight.uLightTransform.SetValue(lights[i].transform);
+
+				ls[shadowLightNumber](context, shadowLight.uShadowSampler, rbShadows[shadowLightNumber]->GetTexture(), shadowSamplerState);
+
+				shadowLightNumber++;
+			}
+			else
+			{
+				BasicLight& basicLight = lightVariant.basicLights[basicLightNumber++];
+				basicLight.uLightPosition.SetValue(lights[i].position);
+				basicLight.uLightColor.SetValue(lights[i].color);
+			}
+		lightVariant.ugLight->Upload(context);
+
+		// очистить рендербуферы
+		float color[4] = { 0, 0, 0, 1 };
+		float colorDepth[4] = { 1, 1, 1, 1 };
+		context->ClearColor(0, color); // color
+		//context->ClearColor(1, color); // normal
+		//context->ClearDepth(1.0f);
+
+		//** нарисовать простые модели
 		{
-			// выяснить размер батча по геометрии
-			ptr<Geometry> geometry = models[i + j].geometry;
-			int geometryBatchCount;
-			for(geometryBatchCount = 1;
-				geometryBatchCount < maxInstancesCount &&
-				j + geometryBatchCount < materialBatchCount &&
-				geometry == models[i + j + geometryBatchCount].geometry;
-				++geometryBatchCount);
+			std::sort(models.begin(), models.end(), Sorter());
 
-			// установить геометрию
-			cs.vertexBuffers[0] = geometry->GetVertexBuffer();
-			cs.indexBuffer = geometry->GetIndexBuffer();
-
-			// установить uniform'ы
-			for(int k = 0; k < geometryBatchCount; ++k)
-				uWorlds.SetValue(k, models[i + j + k].worldTransform);
-			ugInstancedModel->Upload(context);
+			// установить привязку атрибутов
+			Context::LetAttributeBinding lab(context, ab);
+			// установить вершинный шейдер
+			Context::LetVertexShader lvs(context, GetVertexShader(VertexShaderKey(true, false, false)));
+			// установить константный буфер
+			Context::LetUniformBuffer lubModel(context, ugInstancedModel);
 
 			// нарисовать
-			context->DrawInstanced(geometryBatchCount);
+			for(size_t i = 0; i < models.size(); )
+			{
+				// выяснить размер батча по материалу
+				ptr<Material> material = models[i].material;
+				int materialBatchCount;
+				for(materialBatchCount = 1;
+					i + materialBatchCount < models.size() &&
+					material == models[i + materialBatchCount].material;
+					++materialBatchCount);
 
-			j += geometryBatchCount;
+				// установить параметры материала
+				Context::LetSampler lsDiffuse(context, uDiffuseSampler, material->diffuseTexture, ssColorTexture);
+				Context::LetSampler lsSpecular(context, uSpecularSampler, material->specularTexture, ssColorTexture);
+				Context::LetSampler lsNormal(context, uNormalSampler, material->normalTexture, ssColorTexture);
+				Context::LetSampler lsEnvironment(context, uEnvironmentSampler, environmentTexture, ssColorTexture);
+				uDiffuse.SetValue(material->diffuse);
+				uSpecular.SetValue(material->specular);
+				uNormalCoordTransform.SetValue(material->normalCoordTransform);
+				ugMaterial->Upload(context);
+
+				// рисуем инстансингом обычные модели
+				// установить пиксельный шейдер
+				Context::LetPixelShader lps(context, GetPixelShader(PixelShaderKey(basicLightsCount, shadowLightsCount, false, material->GetKey())));
+				// цикл по батчам по геометрии
+				for(int j = 0; j < materialBatchCount; )
+				{
+					// выяснить размер батча по геометрии
+					ptr<Geometry> geometry = models[i + j].geometry;
+					int geometryBatchCount;
+					for(geometryBatchCount = 1;
+						geometryBatchCount < maxInstancesCount &&
+						j + geometryBatchCount < materialBatchCount &&
+						geometry == models[i + j + geometryBatchCount].geometry;
+						++geometryBatchCount);
+
+					// установить геометрию
+					Context::LetVertexBuffer lvb(context, 0, geometry->GetVertexBuffer());
+					Context::LetIndexBuffer lib(context, geometry->GetIndexBuffer());
+
+					// установить uniform'ы
+					for(int k = 0; k < geometryBatchCount; ++k)
+						uWorlds.SetValue(k, models[i + j + k].worldTransform);
+					ugInstancedModel->Upload(context);
+
+					// нарисовать
+					context->DrawInstanced(geometryBatchCount);
+
+					j += geometryBatchCount;
+				}
+
+				i += materialBatchCount;
+			}
 		}
 
-		i += materialBatchCount;
+		//** нарисовать skinned-модели
+		{
+			std::sort(skinnedModels.begin(), skinnedModels.end(), Sorter());
+
+			// установить привязку атрибутов
+			Context::LetAttributeBinding lab(context, abSkinned);
+			// установить вершинный шейдер
+			Context::LetVertexShader lvs(context, GetVertexShader(VertexShaderKey(false, true, false)));
+			// установить константный буфер
+			Context::LetUniformBuffer lubModel(context, ugSkinnedModel);
+
+			// нарисовать
+			for(size_t i = 0; i < skinnedModels.size(); ++i)
+			{
+				const SkinnedModel& skinnedModel = skinnedModels[i];
+
+				// установить параметры материала
+				ptr<Material> material = skinnedModel.material;
+				Context::LetSampler lsDiffuse(context, uDiffuseSampler, material->diffuseTexture, ssColorTexture);
+				Context::LetSampler lsSpecular(context, uSpecularSampler, material->specularTexture, ssColorTexture);
+				Context::LetSampler lsNormal(context, uNormalSampler, material->normalTexture, ssColorTexture);
+				Context::LetSampler lsEnvironment(context, uEnvironmentSampler, environmentTexture, ssColorTexture);
+				uDiffuse.SetValue(material->diffuse);
+				uSpecular.SetValue(material->specular);
+				uNormalCoordTransform.SetValue(material->normalCoordTransform);
+				ugMaterial->Upload(context);
+
+				// установить пиксельный шейдер
+				Context::LetPixelShader lps(context, GetPixelShader(PixelShaderKey(basicLightsCount, shadowLightsCount, false, material->GetKey())));
+
+				// установить геометрию
+				ptr<Geometry> geometry = skinnedModel.geometry;
+				Context::LetVertexBuffer lvb(context, 0, geometry->GetVertexBuffer());
+				Context::LetIndexBuffer lib(context, geometry->GetIndexBuffer());
+
+				// установить uniform'ы костей
+				ptr<BoneAnimationFrame> animationFrame = skinnedModel.animationFrame;
+				const std::vector<quat>& orientations = animationFrame->orientations;
+				const std::vector<vec3>& offsets = animationFrame->offsets;
+				int bonesCount = (int)orientations.size();
+#ifdef _DEBUG
+				if(bonesCount > maxBonesCount)
+					THROW("Too many bones");
+#endif
+				for(int k = 0; k < bonesCount; ++k)
+				{
+					uBoneOrientations.SetValue(k, orientations[k]);
+					uBoneOffsets.SetValue(k, vec4(offsets[k].x, offsets[k].y, offsets[k].z, 0));
+				}
+				ugSkinnedModel->Upload(context);
+
+				// нарисовать
+				context->Draw();
+			}
+		}
 	}
 
-	//** нарисовать skinned-модели
-
-	std::sort(skinnedModels.begin(), skinnedModels.end(), Sorter());
-
-	// установить привязку атрибутов
-	cs.attributeBinding = abSkinned;
-	// установить вершинный шейдер
-	cs.vertexShader = GetVertexShader(VertexShaderKey(false, true, false));
-	// установить константный буфер
-	ugSkinnedModel->Apply(cs);
-
-	// нарисовать
-	ptr<Material> lastMaterial;
-	ptr<Geometry> lastGeometry;
-	for(size_t i = 0; i < skinnedModels.size(); ++i)
+	//** нарисовать декали
 	{
-		const SkinnedModel& skinnedModel = skinnedModels[i];
+		std::stable_sort(decals.begin(), decals.end(), Sorter());
 
-		// установить параметры материала, если изменился
-		ptr<Material> material = skinnedModel.material;
-		if(lastMaterial != material)
+		// установить вершинный шейдер
+		Context::LetVertexShader lvs(context, GetVertexShader(VertexShaderKey(true, false, true)));
+		// установить константный буфер
+		Context::LetUniformBuffer lubDecal(context, ugDecal);
+		// установить геометрию
+		Context::LetAttributeBinding lab(context, decalStuff.ab);
+		Context::LetVertexBuffer lvb(context, 0, decalStuff.vb);
+		Context::LetIndexBuffer lib(context, decalStuff.ib);
+		// состояние смешивания
+		Context::LetBlendState lbs(context, decalStuff.bs);
+		// убрать карту нормалей и буфер глубины
+		Context::LetFrameBuffer lfb(context, fbDecal);
+		// семплеры
+		Context::LetSampler lsScreenNormal(context, uScreenNormalSampler, rbScreenNormal->GetTexture(), shadowSamplerState);
+		Context::LetSampler lsScreenDepth(context, uScreenDepthSampler, dsbDepth->GetTexture(), shadowSamplerState);
+
+		// нарисовать
+		for(size_t i = 0; i < decals.size(); )
 		{
-			uDiffuseSampler.SetTexture(material->diffuseTexture);
-			uDiffuseSampler.Apply(cs);
-			uSpecularSampler.SetTexture(material->specularTexture);
-			uSpecularSampler.Apply(cs);
-			uNormalSampler.SetTexture(material->normalTexture);
-			uNormalSampler.Apply(cs);
-			uEnvironmentSampler.SetTexture(environmentTexture);
-			uEnvironmentSampler.Apply(cs);
+			// выяснить размер батча по материалу
+			ptr<Material> material = decals[i].material;
+			int materialBatchCount;
+			for(materialBatchCount = 1;
+				materialBatchCount < maxDecalsCount &&
+				i + materialBatchCount < decals.size() &&
+				material == decals[i + materialBatchCount].material;
+				++materialBatchCount);
+
+			// установить параметры материала
+			Context::LetSampler lsDiffuse(context, uDiffuseSampler, material->diffuseTexture, ssColorTexture);
+			Context::LetSampler lsSpecular(context, uSpecularSampler, material->specularTexture, ssColorTexture);
+			Context::LetSampler lsNormal(context, uNormalSampler, material->normalTexture, ssColorTexture);
 			uDiffuse.SetValue(material->diffuse);
 			uSpecular.SetValue(material->specular);
 			uNormalCoordTransform.SetValue(material->normalCoordTransform);
 			ugMaterial->Upload(context);
 
-			lastMaterial = material;
+			// рисуем инстансингом декали
+			// установить пиксельный шейдер
+			Context::LetPixelShader lps(context, GetPixelShader(PixelShaderKey(basicLightsCount, shadowLightsCount, true, material->GetKey())));
+
+			// установить uniform'ы
+			for(int j = 0; j < materialBatchCount; ++j)
+			{
+				uDecalTransforms.SetValue(j, decals[i + j].transform);
+				uDecalInvTransforms.SetValue(j, decals[i + j].invTransform);
+			}
+			ugDecal->Upload(context);
+
+			// нарисовать
+			context->DrawInstanced(materialBatchCount);
+
+			i += materialBatchCount;
 		}
-
-		// установить пиксельный шейдер
-		cs.pixelShader = GetPixelShader(PixelShaderKey(basicLightsCount, shadowLightsCount, false, material->GetKey()));
-
-		// установить геометрию, если изменилась
-		ptr<Geometry> geometry = skinnedModel.geometry;
-		if(lastGeometry != geometry)
-		{
-			cs.vertexBuffers[0] = geometry->GetVertexBuffer();
-			cs.indexBuffer = geometry->GetIndexBuffer();
-			lastGeometry = geometry;
-		}
-
-		// установить uniform'ы костей
-		ptr<BoneAnimationFrame> animationFrame = skinnedModel.animationFrame;
-		const std::vector<quat>& orientations = animationFrame->orientations;
-		const std::vector<vec3>& offsets = animationFrame->offsets;
-		int bonesCount = (int)orientations.size();
-#ifdef _DEBUG
-		if(bonesCount > maxBonesCount)
-			THROW("Too many bones");
-#endif
-		for(int k = 0; k < bonesCount; ++k)
-		{
-			uBoneOrientations.SetValue(k, orientations[k]);
-			uBoneOffsets.SetValue(k, vec4(offsets[k].x, offsets[k].y, offsets[k].z, 0));
-		}
-		ugSkinnedModel->Upload(context);
-
-		// нарисовать
-		context->Draw();
-	}
-
-	//** нарисовать декали
-
-	std::stable_sort(decals.begin(), decals.end(), Sorter());
-
-	// установить вершинный шейдер
-	cs.vertexShader = GetVertexShader(VertexShaderKey(true, false, true));
-	// установить константный буфер
-	ugDecal->Apply(cs);
-	// установить геометрию
-	cs.attributeBinding = decalStuff.ab;
-	cs.vertexBuffers[0] = decalStuff.vb;
-	cs.indexBuffer = decalStuff.ib;
-	// состояние смешивания
-	cs.blendState = decalStuff.bs;
-	// убрать карту нормалей и буфер глубины
-	cs.frameBuffer = fbDecal;
-	// семплеры
-	uScreenNormalSampler.Apply(cs);
-	uScreenDepthSampler.Apply(cs);
-
-	// нарисовать
-	for(size_t i = 0; i < decals.size(); )
-	{
-		// выяснить размер батча по материалу
-		ptr<Material> material = decals[i].material;
-		int materialBatchCount;
-		for(materialBatchCount = 1;
-			materialBatchCount < maxDecalsCount &&
-			i + materialBatchCount < decals.size() &&
-			material == decals[i + materialBatchCount].material;
-			++materialBatchCount);
-
-		// установить параметры материала
-		uDiffuseSampler.SetTexture(material->diffuseTexture);
-		uDiffuseSampler.Apply(cs);
-		uSpecularSampler.SetTexture(material->specularTexture);
-		uSpecularSampler.Apply(cs);
-		uNormalSampler.SetTexture(material->normalTexture);
-		uNormalSampler.Apply(cs);
-		uDiffuse.SetValue(material->diffuse);
-		uSpecular.SetValue(material->specular);
-		uNormalCoordTransform.SetValue(material->normalCoordTransform);
-		ugMaterial->Upload(context);
-
-		// рисуем инстансингом декали
-		// установить пиксельный шейдер
-		cs.pixelShader = GetPixelShader(PixelShaderKey(basicLightsCount, shadowLightsCount, true, material->GetKey()));
-
-		// установить uniform'ы
-		for(int j = 0; j < materialBatchCount; ++j)
-		{
-			uDecalTransforms.SetValue(j, decals[i + j].transform);
-			uDecalInvTransforms.SetValue(j, decals[i + j].invTransform);
-		}
-		ugDecal->Upload(context);
-
-		// нарисовать
-		context->DrawInstanced(materialBatchCount);
-
-		i += materialBatchCount;
 	}
 
 	// всё, теперь постпроцессинг
-	float clearColor[] = { 0, 0, 0, 0 };
-
-	// downsampling
-	/*
-	за секунду - остаётся K
-	за 2 секунды - остаётся K^2
-	за t секунд - pow(K, t) = exp(t * log(K))
-	*/
-	static bool veryFirstDownsampling = true;
-	uDownsampleBlend.SetValue(1.0f - exp(frameTime * (-0.79f)));
-	for(int i = 0; i < downsamplingPassesCount; ++i)
+	if(0)
 	{
-		float halfSourcePixelWidth = 0.5f / (i == 0 ? screenWidth : (1 << (downsamplingPassesCount - i)));
-		float halfSourcePixelHeight = 0.5f / (i == 0 ? screenHeight : (1 << (downsamplingPassesCount - i)));
-		uDownsampleOffsets.SetValue(vec4(-halfSourcePixelWidth, halfSourcePixelWidth, -halfSourcePixelHeight, halfSourcePixelHeight));
-		ugDownsample->Upload(context);
-		cs = csDownsamples[i];
-		if(veryFirstDownsampling || i < downsamplingPassesCount - 1)
-			context->ClearColor(0, clearColor);
-		context->Draw();
-	}
-	veryFirstDownsampling = false;
-	// bloom
-	uBloomLimit.SetValue(bloomLimit);
-	ugBloom->Upload(context);
+		float clearColor[] = { 0, 0, 0, 0 };
 
-	const int bloomPassesCount = 5;
+		// общие для фильтров настройки
+		Context::LetAttributeBinding lab(context, abFilter);
+		Context::LetVertexBuffer lvb(context, 0, vbFilter);
+		Context::LetIndexBuffer lib(context, ibFilter);
+		Context::LetVertexShader lvs(context, vsFilter);
+		Context::LetDepthTestFunc ldtf(context, Context::depthTestFuncAlways);
+		Context::LetDepthWrite ldw(context, false);
 
-	bool enableBloom = true;
-
-	if(enableBloom)
-	{
-		cs = csBloomLimit;
-		context->ClearColor(0, clearColor);
-		context->Draw();
-		cs = csBloom2;
-		context->ClearColor(0, clearColor);
-		context->Draw();
-		for(int i = 1; i < bloomPassesCount; ++i)
+		// downsampling
+		/*
+		за секунду - остаётся K
+		за 2 секунды - остаётся K^2
+		за t секунд - pow(K, t) = exp(t * log(K))
+		*/
+		static bool veryFirstDownsampling = true;
+		uDownsampleBlend.SetValue(1.0f - exp(frameTime * (-0.79f)));
+		for(int i = 0; i < downsamplingPassesCount; ++i)
 		{
-			cs = csBloom1;
-			context->ClearColor(0, clearColor);
-			context->Draw();
-			cs = csBloom2;
-			context->ClearColor(0, clearColor);
+			float halfSourcePixelWidth = 0.5f / (i == 0 ? screenWidth : (1 << (downsamplingPassesCount - i)));
+			float halfSourcePixelHeight = 0.5f / (i == 0 ? screenHeight : (1 << (downsamplingPassesCount - i)));
+			uDownsampleOffsets.SetValue(vec4(-halfSourcePixelWidth, halfSourcePixelWidth, -halfSourcePixelHeight, halfSourcePixelHeight));
+			ugDownsample->Upload(context);
+
+			Context::LetFrameBuffer lfb(context, fbDownsamples[i]);
+			Context::LetViewport lv(context, 1 << (downsamplingPassesCount - 1 - i), 1 << (downsamplingPassesCount - 1 - i));
+			Context::LetUniformBuffer lub(context, ugDownsample);
+			const SamplerBase* sbSampler;
+			if(i <= downsamplingStepForBloom + 1)
+				sbSampler = &uDownsampleSourceSampler;
+			else
+				sbSampler = &uDownsampleLuminanceSourceSampler;
+			Context::LetSampler ls(context,
+				*sbSampler,
+				i <= downsamplingStepForBloom + 1 ? (i == 0 ?
+					rbScreen->GetTexture() : rbDownsamples[i - 1]->GetTexture())
+					:
+					rbDownsamples[i - 1]->GetTexture(),
+				i == 0 ? ssLinear : ssPoint
+			);
+
+			Context::LetPixelShader lps(context,
+				i <= downsamplingStepForBloom ? psDownsample :
+				i == downsamplingStepForBloom + 1 ? psDownsampleLuminanceFirst :
+				psDownsampleLuminance
+			);
+
+			Context::LetBlendState lbs;
+			if(i == downsamplingPassesCount - 1)
+				lbs(context, bsLastDownsample);
+
+			if(veryFirstDownsampling || i < downsamplingPassesCount - 1)
+				context->ClearColor(0, clearColor);
 			context->Draw();
 		}
-	}
-	else
-	{
-		cs = csBloom2;
-		context->ClearColor(0, clearColor);
-	}
+		veryFirstDownsampling = false;
 
-	// tone mapping
-	uToneLuminanceKey.SetValue(toneLuminanceKey);
-	uToneMaxLuminance.SetValue(toneMaxLuminance);
-	ugTone->Upload(context);
-	cs = csTone;
-	context->ClearColor(0, zeroColor);
-	context->Draw();
+		// bloom
+		{
+			uBloomLimit.SetValue(bloomLimit);
+			ugBloom->Upload(context);
+
+			const int bloomPassesCount = 5;
+
+			bool enableBloom = true;
+
+			Context::LetViewport lv(context, bloomMapSize, bloomMapSize);
+			Context::LetUniformBuffer lub(context, ugBloom);
+			if(enableBloom)
+			{
+				{
+					Context::LetFrameBuffer lfb(context, fbDownsample2);
+					Context::LetSampler ls(context, uBloomSourceSampler, rbDownsamples[downsamplingStepForBloom]->GetTexture(), ssLinear);
+					Context::LetPixelShader lps(context, psBloomLimit);
+					context->ClearColor(0, clearColor);
+					context->Draw();
+				}
+				{
+					Context::LetFrameBuffer lfb(context, fbDownsample1);
+					Context::LetSampler ls(context, uBloomSourceSampler, rbBloom2->GetTexture(), ssLinear);
+					Context::LetPixelShader lps(context, psBloom2);
+					context->ClearColor(0, clearColor);
+					context->Draw();
+				}
+				for(int i = 1; i < bloomPassesCount; ++i)
+				{
+					{
+						Context::LetFrameBuffer lfb(context, fbDownsample2);
+						Context::LetSampler ls(context, uBloomSourceSampler, rbBloom1->GetTexture(), ssLinear);
+						Context::LetPixelShader lps(context, psBloom1);
+						context->ClearColor(0, clearColor);
+						context->Draw();
+					}
+					{
+						Context::LetFrameBuffer lfb(context, fbDownsample1);
+						Context::LetSampler ls(context, uBloomSourceSampler, rbBloom2->GetTexture(), ssLinear);
+						Context::LetPixelShader lps(context, psBloom2);
+						context->ClearColor(0, clearColor);
+						context->Draw();
+					}
+				}
+			}
+			else
+			{
+				Context::LetFrameBuffer lfb(context, fbDownsample1);
+				Context::LetSampler ls(context, uBloomSourceSampler, rbBloom2->GetTexture(), ssLinear);
+				Context::LetPixelShader lps(context, psBloom2);
+				context->ClearColor(0, clearColor);
+			}
+		}
+
+		// tone mapping
+		{
+			Context::LetFrameBuffer lfb(context, presenter->GetFrameBuffer());
+			Context::LetViewport lv(context, screenWidth, screenHeight);
+			Context::LetSampler lsBloom(context, uToneBloomSampler, rbBloom1->GetTexture(), ssLinear);
+			Context::LetSampler lsScreen(context, uToneScreenSampler, rbScreen->GetTexture(), ssPoint);
+			Context::LetSampler lsAverage(context, uToneAverageSampler, rbDownsamples[downsamplingPassesCount - 1]->GetTexture(), ssPoint);
+
+			uToneLuminanceKey.SetValue(toneLuminanceKey);
+			uToneMaxLuminance.SetValue(toneMaxLuminance);
+			Context::LetUniformBuffer lub(context, ugTone);
+
+			Context::LetPixelShader lps(context, psTone);
+
+			context->ClearColor(0, zeroColor);
+			context->Draw();
+		}
+	} // postprocessing
 }

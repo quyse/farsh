@@ -280,8 +280,6 @@ void Game::Tick()
 		AddRigidModel(rigidModels[0].geometry, rigidModels[0].material, rigidBody);
 	}
 
-	context->Reset();
-
 	alpha += frameTime;
 
 	mat4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, vec3(0, 0, 1));
@@ -364,11 +362,14 @@ void Game::Tick()
 
 	painter->Draw();
 
-	textDrawer->Prepare(context);
+	textDrawer->Prepare(context, screenWidth, screenHeight);
 	textDrawer->SetFont(font);
 
 	// fps
 	{
+		Context::LetFrameBuffer lfb(context, presenter->GetFrameBuffer());
+		Context::LetViewport lv(context, screenWidth, screenHeight);
+
 		static int tickCount = 0;
 		static const int needTickCount = 100;
 		static float allTicksTime = 0;
@@ -382,11 +383,10 @@ void Game::Tick()
 		}
 		char fpsString[64];
 		sprintf(fpsString, "frameTime: %.6f sec, FPS: %.6f\n", lastAllTicksTime / needTickCount, needTickCount / lastAllTicksTime);
-		textDrawer->DrawTextLine(fpsString, -0.95f - 2.0f / context->GetTargetState().viewportWidth, -0.95f - 2.0f / context->GetTargetState().viewportHeight, vec4(1, 1, 1, 1), FontAlignments::Left | FontAlignments::Bottom);
+		textDrawer->DrawTextLine(fpsString, -0.95f - 2.0f / screenWidth, -0.95f - 2.0f / screenHeight, vec4(1, 1, 1, 1), FontAlignments::Left | FontAlignments::Bottom);
 		textDrawer->DrawTextLine(fpsString, -0.95f, -0.95f, vec4(1, 0, 0, 1), FontAlignments::Left | FontAlignments::Bottom);
+		textDrawer->Flush();
 	}
-
-	textDrawer->Flush();
 
 	presenter->Present();
 }
