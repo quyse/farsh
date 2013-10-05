@@ -1,5 +1,4 @@
-#define ___INANITY_META_LUA___
-#include "../inanity/meta/impl.hpp"
+#include "../inanity/script/lua/impl.ipp"
 #include "../inanity/inanity-base-meta.ipp"
 #include "../inanity/inanity-graphics-meta.ipp"
 #include "../inanity/inanity-physics-meta.ipp"

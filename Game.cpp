@@ -80,9 +80,10 @@ void Game::Run()
 		physicsWorld = NEW(Physics::BtWorld());
 
 		// запустить стартовый скрипт
-		scriptState = NEW(Script::Lua::State());
-		scriptState->Register<Game>();
-		scriptState->Register<Material>();
+		ptr<Script::Lua::State> luaState = NEW(Script::Lua::State());
+		luaState->Register<Game>();
+		luaState->Register<Material>();
+		scriptState = luaState;
 
 		ptr<Script::Function> mainScript = scriptState->LoadScript(fileSystem->LoadFile(
 #ifdef PRODUCTION
