@@ -19,8 +19,8 @@ var staticLibraries = [
 	'libinanity-crypto',
 	'libinanity-sqlitefs',
 	'libinanity-compress',
-	'libinanity-base',
-	'libinanity-lua'
+	'libinanity-lua',
+	'libinanity-base'
 ];
 var staticDepsLibraries = [
 	{ dir: 'lua', lib: 'liblua' },
