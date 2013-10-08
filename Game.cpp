@@ -62,9 +62,9 @@ void Game::Run()
 
 		fileSystem =
 #ifdef PRODUCTION
-			NEW(BlobFileSystem(FolderFileSystem::GetNativeFileSystem()->LoadFile("data")))
+			NEW(BlobFileSystem(Platform::FileSystem::GetNativeFileSystem()->LoadFile("data")))
 #else
-			NEW(BufferedFileSystem(FolderFileSystem::GetNativeFileSystem()))
+			NEW(BufferedFileSystem(Platform::FileSystem::GetNativeFileSystem()))
 #endif
 		;
 
@@ -80,9 +80,10 @@ void Game::Run()
 		physicsWorld = NEW(Physics::BtWorld());
 
 		// запустить стартовый скрипт
-		scriptState = NEW(Script::Lua::State());
-		scriptState->Register<Game>();
-		scriptState->Register<Material>();
+		ptr<Script::Lua::State> luaState = NEW(Script::Lua::State());
+		luaState->Register<Game>();
+		luaState->Register<Material>();
+		scriptState = luaState;
 
 		ptr<Script::Function> mainScript = scriptState->LoadScript(fileSystem->LoadFile(
 #ifdef PRODUCTION
