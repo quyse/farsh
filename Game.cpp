@@ -62,9 +62,9 @@ void Game::Run()
 
 		fileSystem =
 #ifdef PRODUCTION
-			NEW(BlobFileSystem(FolderFileSystem::GetNativeFileSystem()->LoadFile("data")))
+			NEW(BlobFileSystem(Platform::FileSystem::GetNativeFileSystem()->LoadFile("data")))
 #else
-			NEW(BufferedFileSystem(FolderFileSystem::GetNativeFileSystem()))
+			NEW(BufferedFileSystem(Platform::FileSystem::GetNativeFileSystem()))
 #endif
 		;
 
