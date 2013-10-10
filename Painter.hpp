@@ -315,7 +315,8 @@ private:
 	ptr<RenderBuffer> rbScreenNormal;
 	/// Фреймбуферы для downsampling.
 	ptr<FrameBuffer> fbDownsamples[downsamplingPassesCount];
-	ptr<FrameBuffer> fbDownsample1, fbDownsample2;
+	/// Фреймбуферы для bloom.
+	ptr<FrameBuffer> fbBloom1, fbBloom2;
 	/// HDR-буферы для downsampling.
 	ptr<RenderBuffer> rbDownsamples[downsamplingPassesCount];
 	/// HDR-буферы для Bloom.

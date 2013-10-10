@@ -541,11 +541,11 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		bsLastDownsample = device->CreateBlendState();
 		bsLastDownsample->SetColor(BlendState::colorSourceSrcAlpha, BlendState::colorSourceInvSrcAlpha, BlendState::operationAdd);
 
-		// фреймбуферы для downsample
-		fbDownsample1 = device->CreateFrameBuffer();
-		fbDownsample1->SetColorBuffer(0, rbBloom1);
-		fbDownsample2 = device->CreateFrameBuffer();
-		fbDownsample2->SetColorBuffer(0, rbBloom2);
+		// фреймбуферы для bloom
+		fbBloom1 = device->CreateFrameBuffer();
+		fbBloom1->SetColorBuffer(0, rbBloom1);
+		fbBloom2 = device->CreateFrameBuffer();
+		fbBloom2->SetColorBuffer(0, rbBloom2);
 	}
 }
 
@@ -1454,14 +1454,14 @@ void Painter::Draw()
 			if(enableBloom)
 			{
 				{
-					Context::LetFrameBuffer lfb(context, fbDownsample2);
+					Context::LetFrameBuffer lfb(context, fbBloom2);
 					Context::LetSampler ls(context, uBloomSourceSampler, rbDownsamples[downsamplingStepForBloom]->GetTexture(), ssLinear);
 					Context::LetPixelShader lps(context, psBloomLimit);
 					context->ClearColor(0, clearColor);
 					context->Draw();
 				}
 				{
-					Context::LetFrameBuffer lfb(context, fbDownsample1);
+					Context::LetFrameBuffer lfb(context, fbBloom1);
 					Context::LetSampler ls(context, uBloomSourceSampler, rbBloom2->GetTexture(), ssLinear);
 					Context::LetPixelShader lps(context, psBloom2);
 					context->ClearColor(0, clearColor);
@@ -1470,14 +1470,14 @@ void Painter::Draw()
 				for(int i = 1; i < bloomPassesCount; ++i)
 				{
 					{
-						Context::LetFrameBuffer lfb(context, fbDownsample2);
+						Context::LetFrameBuffer lfb(context, fbBloom2);
 						Context::LetSampler ls(context, uBloomSourceSampler, rbBloom1->GetTexture(), ssLinear);
 						Context::LetPixelShader lps(context, psBloom1);
 						context->ClearColor(0, clearColor);
 						context->Draw();
 					}
 					{
-						Context::LetFrameBuffer lfb(context, fbDownsample1);
+						Context::LetFrameBuffer lfb(context, fbBloom1);
 						Context::LetSampler ls(context, uBloomSourceSampler, rbBloom2->GetTexture(), ssLinear);
 						Context::LetPixelShader lps(context, psBloom2);
 						context->ClearColor(0, clearColor);
@@ -1487,7 +1487,7 @@ void Painter::Draw()
 			}
 			else
 			{
-				Context::LetFrameBuffer lfb(context, fbDownsample1);
+				Context::LetFrameBuffer lfb(context, fbBloom1);
 				Context::LetSampler ls(context, uBloomSourceSampler, rbBloom2->GetTexture(), ssLinear);
 				Context::LetPixelShader lps(context, psBloom2);
 				context->ClearColor(0, clearColor);
