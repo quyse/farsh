@@ -26,10 +26,10 @@ struct StaticLight : public Object
 	void UpdateTransform();
 
 	//*** Методы для скрипта.
-	void SetPosition(float x, float y, float z);
-	void SetTarget(float x, float y, float z);
+	void SetPosition(const vec3& position);
+	void SetTarget(const vec3& target);
 	void SetProjection(float angle, float nearPlane, float farPlane);
-	void SetColor(float r, float g, float b);
+	void SetColor(const vec3& color);
 	void SetShadow(bool shadow);
 
 	META_DECLARE_CLASS(StaticLight);

@@ -542,15 +542,15 @@ void StaticLight::UpdateTransform()
 		CreateLookAtMatrix(position, target, vec3(0, 0, 1));
 }
 
-void StaticLight::SetPosition(float x, float y, float z)
+void StaticLight::SetPosition(const vec3& position)
 {
-	position = vec3(x, y, z);
+	this->position = position;
 	UpdateTransform();
 }
 
-void StaticLight::SetTarget(float x, float y, float z)
+void StaticLight::SetTarget(const vec3& target)
 {
-	target = vec3(x, y, z);
+	this->target = target;
 	UpdateTransform();
 }
 
@@ -562,9 +562,9 @@ void StaticLight::SetProjection(float angle, float nearPlane, float farPlane)
 	UpdateTransform();
 }
 
-void StaticLight::SetColor(float r, float g, float b)
+void StaticLight::SetColor(const vec3& color)
 {
-	color = vec3(r, g, b);
+	this->color = color;
 }
 
 void StaticLight::SetShadow(bool shadow)

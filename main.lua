@@ -8,17 +8,17 @@ game:SetAmbient(0.02, 0.02, 0.02)
 -- материал кровищи
 local matBlood = Farsh.Material()
 --matBlood:SetDiffuseTexture(game:LoadTexture("blood.png"))
-matBlood:SetDiffuse(1, 0, 0, 1)
-matBlood:SetSpecular(0.2, 0, 0, 0)
+matBlood:SetDiffuse({1, 0, 0, 1})
+matBlood:SetSpecular({0.2, 0, 0, 0})
 game:SetDecalMaterial(matBlood)
 
 -- материал кубика
 local matCube = Farsh.Material()
 t.matCube = matCube
 --matCube:SetDiffuseTexture(game:LoadTexture("blood.png"))
-matCube:SetDiffuse(1, 1, 1, 1)
+matCube:SetDiffuse({1, 1, 1, 1})
 --matCube:SetSpecularTexture(game:LoadTexture("specular.jpg"))
-matCube:SetSpecular(0.2, 0, 0, 0)
+matCube:SetSpecular({0.2, 0, 0, 0})
 
 local CreateStaticRigidModel = function(geometry, material, physicsShape, x, y, z)
 	game:AddStaticModel(geometry, material, x, y, z)
@@ -27,8 +27,8 @@ end
 
 local matBench = Farsh.Material()
 t.matBench = matBench
-matBench:SetDiffuse(1, 1, 1, 1)
-matBench:SetSpecular(0.1, 0.1, 0.1, 0.2)
+matBench:SetDiffuse({1, 1, 1, 1})
+matBench:SetSpecular({0.1, 0.1, 0.1, 0.2})
 game:AddStaticModel(game:LoadGeometry("bench.geo"), matBench, 0, 2, 0)
 
 local matNescafe = Farsh.Material()
@@ -63,8 +63,8 @@ light1:SetTarget(9, 9, 1)
 light1:SetShadow(true)
 --]]
 local light2 = game:AddStaticLight()
-light2:SetPosition(30, -10, 20)
-light2:SetTarget(11, 11, 0)
+light2:SetPosition({30, -10, 20})
+light2:SetTarget({11, 11, 0})
 light2:SetProjection(45, 0.1, 100)
 light2:SetShadow(true)
 
@@ -85,7 +85,7 @@ game:SetHeroParams(zombieMaterial, zombieGeometry, zombieSkeleton, game:LoadBone
 local axeMaterial = Farsh.Material()
 axeMaterial:SetDiffuseTexture(game:LoadTexture("axe_d.png"))
 --axeMaterial:SetSpecularTexture(game:LoadTexture("axe_s.png"))
-axeMaterial:SetSpecular(0.5, 0, 0, 0)
+axeMaterial:SetSpecular({0.5, 0, 0, 0})
 game:SetAxeParams(axeMaterial, game:LoadGeometry("axe.geo"), game:LoadBoneAnimation("axe.ba", nil))
 
 local circularMaterial = Farsh.Material()

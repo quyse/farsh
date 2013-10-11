@@ -36,9 +36,9 @@ struct Material : public Object
 	void SetDiffuseTexture(ptr<Texture> diffuseTexture);
 	void SetSpecularTexture(ptr<Texture> specularTexture);
 	void SetNormalTexture(ptr<Texture> normalTexture);
-	void SetDiffuse(float red, float green, float blue, float alpha);
-	void SetSpecular(float red, float green, float blue, float glossiness);
-	void SetNormalCoordTransform(float scaleX, float scaleY, float offsetX, float offsetY);
+	void SetDiffuse(const vec4& diffuse);
+	void SetSpecular(const vec4& specular);
+	void SetNormalCoordTransform(const vec4& normalCoordTransform);
 	void SetEnvironmentCoef(float environmentCoef);
 
 	META_DECLARE_CLASS(Material);

@@ -40,19 +40,19 @@ void Material::SetNormalTexture(ptr<Texture> normalTexture)
 	this->normalTexture = normalTexture;
 }
 
-void Material::SetDiffuse(float red, float green, float blue, float alpha)
+void Material::SetDiffuse(const vec4& diffuse)
 {
-	this->diffuse = vec4(red, green, blue, alpha);
+	this->diffuse = diffuse;
 }
 
-void Material::SetSpecular(float red, float green, float blue, float glossiness)
+void Material::SetSpecular(const vec4& specular)
 {
-	this->specular = vec4(red, green, blue, glossiness);
+	this->specular = specular;
 }
 
-void Material::SetNormalCoordTransform(float scaleX, float scaleY, float offsetX, float offsetY)
+void Material::SetNormalCoordTransform(const vec4& normalCoordTransform)
 {
-	this->normalCoordTransform = vec4(scaleX, scaleY, offsetX, offsetY);
+	this->normalCoordTransform = normalCoordTransform;
 }
 
 void Material::SetEnvironmentCoef(float environmentCoef)
