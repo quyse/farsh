@@ -294,9 +294,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	fbDecal = device->CreateFrameBuffer();
 	fbDecal->SetColorBuffer(0, rbScreen);
 
-	fbOpaque = presenter->GetFrameBuffer();
-	fbDecal = fbOpaque;
-
 	shadowSamplerState = device->CreateSamplerState();
 	shadowSamplerState->SetWrap(SamplerState::wrapBorder, SamplerState::wrapBorder, SamplerState::wrapBorder);
 	shadowSamplerState->SetFilter(SamplerState::filterLinear, SamplerState::filterLinear, SamplerState::filterLinear);
@@ -975,7 +972,7 @@ void Painter::Draw()
 
 	// выполнить теневые проходы
 	int shadowPassNumber = 0;
-	for(size_t i = 0; false && i < lights.size(); ++i)
+	for(size_t i = 0; i < lights.size(); ++i)
 		if(lights[i].shadow)
 		{
 			Context::LetViewport lv(context, shadowMapSize, shadowMapSize);
@@ -1104,6 +1101,7 @@ void Painter::Draw()
 				{
 					Context::LetFrameBuffer lfb(context, fbShadowBlur1);
 					Context::LetSampler ls(context, uShadowBlurSourceSampler, rb->GetTexture(), ssPointBorder);
+					Context::LetUniformBuffer lub(context, ugShadowBlur);
 
 					uShadowBlurDirection.SetValue(vec2(1.0f / shadowMapSize, 0));
 					ugShadowBlur->Upload(context);
@@ -1116,6 +1114,7 @@ void Painter::Draw()
 				{
 					Context::LetFrameBuffer lfb(context, fbShadowBlurs[i]);
 					Context::LetSampler ls(context, uShadowBlurSourceSampler, rbShadowBlur->GetTexture(), ssPointBorder);
+					Context::LetUniformBuffer lub(context, ugShadowBlur);
 
 					uShadowBlurDirection.SetValue(vec2(0, 1.0f / shadowMapSize));
 					ugShadowBlur->Upload(context);
@@ -1190,11 +1189,11 @@ void Painter::Draw()
 		lightVariant.ugLight->Upload(context);
 
 		// очистить рендербуферы
-		float color[4] = { 0, 0, 0, 1 };
-		float colorDepth[4] = { 1, 1, 1, 1 };
+		float color[] = { 0, 0, 0, 1 };
+		float colorDepth[] = { 1, 1, 1, 1 };
 		context->ClearColor(0, color); // color
-		//context->ClearColor(1, color); // normal
-		//context->ClearDepth(1.0f);
+		context->ClearColor(1, color); // normal
+		context->ClearDepth(1.0f);
 
 		//** нарисовать простые модели
 		{
@@ -1206,6 +1205,8 @@ void Painter::Draw()
 			Context::LetVertexShader lvs(context, GetVertexShader(VertexShaderKey(true, false, false)));
 			// установить константный буфер
 			Context::LetUniformBuffer lubModel(context, ugInstancedModel);
+			// установить материал
+			Context::LetUniformBuffer lubMaterial(context, ugMaterial);
 
 			// нарисовать
 			for(size_t i = 0; i < models.size(); )
@@ -1272,6 +1273,8 @@ void Painter::Draw()
 			Context::LetVertexShader lvs(context, GetVertexShader(VertexShaderKey(false, true, false)));
 			// установить константный буфер
 			Context::LetUniformBuffer lubModel(context, ugSkinnedModel);
+			// установить материал
+			Context::LetUniformBuffer lubMaterial(context, ugMaterial);
 
 			// нарисовать
 			for(size_t i = 0; i < skinnedModels.size(); ++i)
@@ -1327,6 +1330,8 @@ void Painter::Draw()
 		Context::LetVertexShader lvs(context, GetVertexShader(VertexShaderKey(true, false, true)));
 		// установить константный буфер
 		Context::LetUniformBuffer lubDecal(context, ugDecal);
+		// установить материал
+		Context::LetUniformBuffer lubMaterial(context, ugMaterial);
 		// установить геометрию
 		Context::LetAttributeBinding lab(context, decalStuff.ab);
 		Context::LetVertexBuffer lvb(context, 0, decalStuff.vb);
@@ -1380,7 +1385,6 @@ void Painter::Draw()
 	}
 
 	// всё, теперь постпроцессинг
-	if(0)
 	{
 		float clearColor[] = { 0, 0, 0, 0 };
 
@@ -1417,10 +1421,7 @@ void Painter::Draw()
 				sbSampler = &uDownsampleLuminanceSourceSampler;
 			Context::LetSampler ls(context,
 				*sbSampler,
-				i <= downsamplingStepForBloom + 1 ? (i == 0 ?
-					rbScreen->GetTexture() : rbDownsamples[i - 1]->GetTexture())
-					:
-					rbDownsamples[i - 1]->GetTexture(),
+				i == 0 ? rbScreen->GetTexture() : rbDownsamples[i - 1]->GetTexture(),
 				i == 0 ? ssLinear : ssPoint
 			);
 
@@ -1504,6 +1505,7 @@ void Painter::Draw()
 
 			uToneLuminanceKey.SetValue(toneLuminanceKey);
 			uToneMaxLuminance.SetValue(toneMaxLuminance);
+			ugTone->Upload(context);
 			Context::LetUniformBuffer lub(context, ugTone);
 
 			Context::LetPixelShader lps(context, psTone);
