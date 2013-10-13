@@ -1,5 +1,11 @@
 #include "general.hpp"
 #include "Game.hpp"
+#include "GeometryFormats.hpp"
+#include "Painter.hpp"
+#include "Material.hpp"
+#include "Geometry.hpp"
+#include "Skeleton.hpp"
+#include "BoneAnimation.hpp"
 #include <sstream>
 #include <iostream>
 #include <fstream>

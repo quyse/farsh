@@ -3,7 +3,7 @@ exports.configureCompiler = function(objectFile, compiler) {
 	var a = /^([^\/]+)\/([^\/]+)$/.exec(objectFile);
 	compiler.configuration = a[1];
 	compiler.setSourceFile(a[2].replace(/\./g, '/') + '.cpp');
-	compiler.addIncludeDir('../inanity/deps/bullet/src');
+	compiler.addIncludeDir('../inanity/deps/bullet/repo/src');
 };
 
 var staticLibraries = [
@@ -28,7 +28,8 @@ var staticDepsLibraries = [
 	{ dir: 'bullet', lib: 'libbullet-collision' },
 	{ dir: 'bullet', lib: 'libbullet-linearmath' },
 	{ dir: 'libpng', lib: 'libpng' },
-	{ dir: 'glew', lib: 'libglew' },
+	{ dir: 'glew', lib: 'libglew', platform: 'win32' },
+	{ dir: 'glew', lib: 'libglew', platform: 'linux' },
 	{ dir: 'sqlite', lib: 'libsqlite' }
 ];
 var dynamicLibraries = {
@@ -37,6 +38,9 @@ var dynamicLibraries = {
 	],
 	linux: [
 		'pthread', 'GL', 'X11', 'dl', 'z', 'xcb', 'X11-xcb'
+	],
+	emscripten: [
+		'GL'
 	]
 };
 
@@ -58,7 +62,8 @@ exports.configureLinker = function(executableFile, linker) {
 			linker.addStaticLibrary('../inanity/' + a[1] + lib);
 	}
 	for(var i = 0; i < staticDepsLibraries.length; ++i)
-		linker.addStaticLibrary('../inanity/deps/' + staticDepsLibraries[i].dir + '/' + a[1] + staticDepsLibraries[i].lib);
+		if(linker.platform == (staticDepsLibraries[i].platform || linker.platform))
+			linker.addStaticLibrary('../inanity/deps/' + staticDepsLibraries[i].dir + '/' + a[1] + staticDepsLibraries[i].lib);
 
 	var dl = dynamicLibraries[linker.platform];
 

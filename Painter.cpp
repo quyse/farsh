@@ -154,10 +154,10 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	device(device),
 	context(context),
 	presenter(presenter),
-	geometryFormats(geometryFormats),
 	screenWidth(screenWidth),
 	screenHeight(screenHeight),
 	shaderCache(shaderCache),
+	geometryFormats(geometryFormats),
 
 	ab(device->CreateAttributeBinding(geometryFormats->al)),
 	aPosition(geometryFormats->alePosition),
@@ -191,8 +191,8 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	uWorlds(ugInstancedModel->AddUniformArray<mat4x4>(maxInstancesCount)),
 
 	ugSkinnedModel(NEW(UniformGroup(3))),
-	uBoneOffsets(ugSkinnedModel->AddUniformArray<vec4>(maxBonesCount)),
 	uBoneOrientations(ugSkinnedModel->AddUniformArray<vec4>(maxBonesCount)),
+	uBoneOffsets(ugSkinnedModel->AddUniformArray<vec4>(maxBonesCount)),
 
 	ugDecal(NEW(UniformGroup(3))),
 	uDecalTransforms(ugDecal->AddUniformArray<mat4x4>(maxDecalsCount)),
@@ -1134,11 +1134,11 @@ void Painter::Draw()
 	{
 		bool operator()(const Model& a, const Model& b) const
 		{
-			return a.material < b.material || a.material == b.material && a.geometry < b.geometry;
+			return a.material < b.material || (a.material == b.material && a.geometry < b.geometry);
 		}
 		bool operator()(const SkinnedModel& a, const SkinnedModel& b) const
 		{
-			return a.material < b.material || a.material == b.material && a.geometry < b.geometry;
+			return a.material < b.material || (a.material == b.material && a.geometry < b.geometry);
 		}
 		// для декалей - только по материалу
 		bool operator()(const Decal& a, const Decal& b) const
@@ -1190,7 +1190,6 @@ void Painter::Draw()
 
 		// очистить рендербуферы
 		float color[] = { 0, 0, 0, 1 };
-		float colorDepth[] = { 1, 1, 1, 1 };
 		context->ClearColor(0, color); // color
 		context->ClearColor(1, color); // normal
 		context->ClearDepth(1.0f);

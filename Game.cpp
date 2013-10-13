@@ -16,9 +16,9 @@ const float Game::hzAFBattle1 = 400.0f / 30;
 const float Game::hzAFBattle2 = 450.0f / 30;
 
 Game::Game() :
+	heroAnimationTime(hzAFBattle1),
 	cameraAlpha(0), cameraBeta(0),
-	bloomLimit(10.0f), toneLuminanceKey(0.12f), toneMaxLuminance(3.1f),
-	heroAnimationTime(hzAFBattle1)
+	bloomLimit(10.0f), toneLuminanceKey(0.12f), toneMaxLuminance(3.1f)
 {
 	singleGame = this;
 }
@@ -116,7 +116,6 @@ void Game::Tick()
 {
 	float frameTime = ticker.Tick();
 
-	static float theTime = 0;
 	static bool theTimePaused = false;
 
 	const float maxAngleChange = frameTime * 50;
@@ -209,6 +208,7 @@ void Game::Tick()
 					zombieMaterial->specular.w += 0.01f;
 					printf("glossiness: %f\n", zombieMaterial->specular.w);
 					break;
+				default: break;
 #endif
 				}
 			}
@@ -232,8 +232,8 @@ void Game::Tick()
 	cameraBeta = clamp(cameraBeta, -1.5f, 1.5f);
 
 	vec3 cameraDirection = vec3(cos(cameraAlpha) * cos(cameraBeta), sin(cameraAlpha) * cos(cameraBeta), sin(cameraBeta));
-	vec3 cameraRightDirection = normalize(cross(cameraDirection, vec3(0, 0, 1)));
-	vec3 cameraUpDirection = cross(cameraRightDirection, cameraDirection);
+	//vec3 cameraRightDirection = normalize(cross(cameraDirection, vec3(0, 0, 1)));
+	//vec3 cameraUpDirection = cross(cameraRightDirection, cameraDirection);
 
 	const Input::State& inputState = inputFrame->GetCurrentState();
 	/*
