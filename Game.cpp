@@ -127,7 +127,7 @@ void Game::Tick()
 	{
 		const Input::Event& inputEvent = inputFrame->GetCurrentEvent();
 
-		//std::cout << inputEvent;
+		//std::cout << inputEvent << "[" << inputFrame->GetCurrentState().cursorX << ' ' << inputFrame->GetCurrentState().cursorY << "] ";
 
 		switch(inputEvent.device)
 		{
@@ -208,6 +208,20 @@ void Game::Tick()
 					zombieMaterial->specular.w += 0.01f;
 					printf("glossiness: %f\n", zombieMaterial->specular.w);
 					break;
+				case 'L':
+					{
+						static bool mouseLock = false;
+						mouseLock = !mouseLock;
+						window->SetMouseLock(mouseLock);
+					}
+					break;
+				case 'V':
+					{
+						static bool cursorVisible = true;
+						cursorVisible = !cursorVisible;
+						window->SetCursorVisible(cursorVisible);
+					}
+					break;
 				default: break;
 #endif
 				}
@@ -220,9 +234,10 @@ void Game::Tick()
 				break;
 			case Input::Event::Mouse::typeButtonUp:
 				break;
-			case Input::Event::Mouse::typeMove:
-				cameraAlpha -= std::max(std::min(inputEvent.mouse.offsetX * 0.005f, maxAngleChange), -maxAngleChange);
-				cameraBeta -= std::max(std::min(inputEvent.mouse.offsetY * 0.005f, maxAngleChange), -maxAngleChange);
+			case Input::Event::Mouse::typeRawMove:
+				cameraAlpha -= std::max(std::min(inputEvent.mouse.rawMoveX * 0.005f, maxAngleChange), -maxAngleChange);
+				cameraBeta -= std::max(std::min(inputEvent.mouse.rawMoveY * 0.005f, maxAngleChange), -maxAngleChange);
+				cameraAlpha -= std::max(std::min(inputEvent.mouse.rawMoveZ * 0.005f, maxAngleChange), -maxAngleChange);
 				break;
 			}
 			break;
