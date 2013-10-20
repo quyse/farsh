@@ -228,9 +228,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	iScreen(4),
 	iInstance(5),
 
-	fTarget(0),
-	fNormal(1),
-
 	decalStuff(device)
 
 {
@@ -354,7 +351,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	// пиксельный шейдер для теней
 	psShadow = shaderCache->GetPixelShader(Expression((
 		iDepth,
-		fTarget = newvec4(iDepth, 0, 0, 0)
+		fragment(0, newvec4(iDepth, 0, 0, 0))
 		)));
 
 	//** шейдеры и состояния постпроцессинга и размытия теней
@@ -365,8 +362,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	{
 		// промежуточные
 		Interpolant<vec2> iTexcoord(0);
-		// результат
-		Fragment<vec4> fTarget(0);
 
 		// вершинный шейдер - общий для всех постпроцессингов
 		vsFilter = shaderCache->GetVertexShader((
@@ -387,7 +382,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 					sum = sum + exp(uShadowBlurSourceSampler.Sample(iTexcoord + uShadowBlurDirection * Value<float>((float)i - 3))) * Value<float>(taps[i])
 					));
 			shader.Append((
-				fTarget = newvec4(log(sum), 0, 0, 1)
+				fragment(0, newvec4(log(sum), 0, 0, 1))
 				));
 			psShadowBlur = shaderCache->GetPixelShader(shader);
 		}
@@ -396,12 +391,12 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		{
 			Expression shader = (
 				iTexcoord,
-				fTarget = newvec4((
+				fragment(0, newvec4((
 					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xz"]) +
 					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xw"]) +
 					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["yz"]) +
 					uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["yw"])
-					) * Value<float>(0.25f), 1.0f)
+					) * Value<float>(0.25f), 1.0f))
 				);
 			psDownsample = shaderCache->GetPixelShader(shader);
 		}
@@ -411,12 +406,12 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			Expression shader = (
 				iTexcoord,
 				luminanceCoef = newvec3(0.2126f, 0.7152f, 0.0722f),
-				fTarget = newvec4((
+				fragment(0, newvec4((
 					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xz"]), luminanceCoef) + Value<float>(0.0001f)) +
 					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xw"]), luminanceCoef) + Value<float>(0.0001f)) +
 					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["yz"]), luminanceCoef) + Value<float>(0.0001f)) +
 					log(dot(uDownsampleSourceSampler.Sample(iTexcoord + uDownsampleOffsets["yw"]), luminanceCoef) + Value<float>(0.0001f))
-					) * Value<float>(0.25f), 0.0f, 0.0f, 1.0f)
+					) * Value<float>(0.25f), 0.0f, 0.0f, 1.0f))
 				);
 			psDownsampleLuminanceFirst = shaderCache->GetPixelShader(shader);
 		}
@@ -424,12 +419,12 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		{
 			Expression shader = (
 				iTexcoord,
-				fTarget = newvec4((
+				fragment(0, newvec4((
 					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xz"]) +
 					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets["xw"]) +
 					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets["yz"]) +
 					uDownsampleLuminanceSourceSampler.Sample(iTexcoord + uDownsampleOffsets["yw"])
-					) * Value<float>(0.25f), 0.0f, 0.0f, uDownsampleBlend)
+					) * Value<float>(0.25f), 0.0f, 0.0f, uDownsampleBlend))
 				);
 			psDownsampleLuminance = shaderCache->GetPixelShader(shader);
 		}
@@ -452,7 +447,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 					));
 			}
 			shader.Append((
-				fTarget = newvec4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f)
+				fragment(0, newvec4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f))
 				));
 			psBloomLimit = shaderCache->GetPixelShader(shader);
 		}
@@ -470,7 +465,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 					));
 			}
 			shader.Append((
-				fTarget = newvec4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f)
+				fragment(0, newvec4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f))
 				));
 			psBloom1 = shaderCache->GetPixelShader(shader);
 		}
@@ -488,7 +483,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 					));
 			}
 			shader.Append((
-				fTarget = newvec4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f)
+				fragment(0, newvec4(sum * Value<float>(1.0f / (sizeof(offsets) / sizeof(offsets[0]))), 1.0f))
 				));
 			psBloom2 = shaderCache->GetPixelShader(shader);
 		}
@@ -505,7 +500,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 				color = saturate(color * (intensity / luminance)),
 				// гамма-коррекция
 				color = pow(color, newvec3(0.45f, 0.45f, 0.45f)),
-				fTarget = newvec4(color, 1.0f)
+				fragment(0, newvec4(color, 1.0f))
 			);
 			psTone = shaderCache->GetPixelShader(shader);
 		}
@@ -880,12 +875,12 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 
 	// вернуть цвет
 	shader.Append((
-		fTarget = newvec4(tmpColor, tmpDiffuse["w"])
+		fragment(0, newvec4(tmpColor, tmpDiffuse["w"]))
 	));
 	// если не декали, вернуть нормаль
 	if(!key.decal)
 		shader.Append((
-			fNormal = newvec4((tmpNormal + Value<float>(1)) * Value<float>(0.5f), 1)
+			fragment(1, newvec4((tmpNormal + Value<float>(1)) * Value<float>(0.5f), 1))
 		));
 
 	ptr<PixelShader> pixelShader = shaderCache->GetPixelShader(shader);

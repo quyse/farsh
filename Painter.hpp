@@ -247,10 +247,6 @@ private:
 	Interpolant<vec4> iScreen;
 	Interpolant<uint> iInstance;
 
-	//*** Выходные переменные.
-	Fragment<vec4> fTarget;
-	Fragment<vec4> fNormal;
-
 	//*** Декали.
 	struct DecalStuff
 	{
