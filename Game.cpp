@@ -5,7 +5,9 @@
 #include "Material.hpp"
 #include "Skeleton.hpp"
 #include "BoneAnimation.hpp"
+#ifndef ___INANITY_PLATFORM_EMSCRIPTEN
 #include "../inanity/inanity-sqlitefs.hpp"
+#endif
 #include <iostream>
 
 Game* Game::singleGame = 0;
@@ -50,6 +52,9 @@ void Game::Run()
 
 		context = system->CreateContext(device);
 
+#ifdef ___INANITY_PLATFORM_EMSCRIPTEN
+		ptr<FileSystem> shaderCacheFileSystem = NEW(TempFileSystem());
+#else
 		const char* shadersCacheFileName =
 #ifdef _DEBUG
 			"shaders_debug"
@@ -57,8 +62,12 @@ void Game::Run()
 			"shaders"
 #endif
 			;
-		ptr<ShaderCache> shaderCache = NEW(ShaderCache(NEW(SQLiteFileSystem(shadersCacheFileName)), device,
-			system->CreateShaderCompiler(), system->CreateShaderGenerator(), NEW(Crypto::WhirlpoolStream())));
+		ptr<FileSystem> shaderCacheFileSystem = NEW(SQLiteFileSystem(shadersCacheFileName));
+#endif
+			;
+
+		ptr<ShaderCache> shaderCache = NEW(ShaderCache(shaderCacheFileSystem, device,
+			device->CreateShaderCompiler(), device->CreateShaderGenerator(), NEW(Crypto::WhirlpoolStream())));
 
 		fileSystem =
 #ifdef PRODUCTION
@@ -239,6 +248,7 @@ void Game::Tick()
 				cameraBeta -= std::max(std::min(inputEvent.mouse.rawMoveY * 0.005f, maxAngleChange), -maxAngleChange);
 				cameraAlpha -= std::max(std::min(inputEvent.mouse.rawMoveZ * 0.005f, maxAngleChange), -maxAngleChange);
 				break;
+			default: break;
 			}
 			break;
 		}

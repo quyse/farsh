@@ -30,7 +30,8 @@ var staticDepsLibraries = [
 	{ dir: 'libpng', lib: 'libpng' },
 	{ dir: 'glew', lib: 'libglew', platform: 'win32' },
 	{ dir: 'glew', lib: 'libglew', platform: 'linux' },
-	{ dir: 'sqlite', lib: 'libsqlite' }
+	{ dir: 'sqlite', lib: 'libsqlite', platform: 'win32' },
+	{ dir: 'sqlite', lib: 'libsqlite', platform: 'linux' }
 ];
 var dynamicLibraries = {
 	win32: [
