@@ -160,6 +160,8 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	geometryFormats(geometryFormats),
 
 	ab(device->CreateAttributeBinding(geometryFormats->al)),
+	instancer(NEW(Instancer(device, maxInstancesCount, geometryFormats->al))),
+	abInstanced(device->CreateAttributeBinding(geometryFormats->al)),
 	aPosition(geometryFormats->alePosition),
 	aNormal(geometryFormats->aleNormal),
 	aTexcoord(geometryFormats->aleTexcoord),
@@ -623,7 +625,7 @@ Expression Painter::GetWorldPositionAndNormal(const VertexShaderKey& key)
 		Expression e((
 			key.instanced ?
 			(
-				tmpInstance = getInstanceID(),
+				tmpInstance = instancer->GetInstanceID(),
 				(
 					key.decal ?
 					(
@@ -1005,7 +1007,7 @@ void Painter::Draw()
 
 			{
 				// установить привязку атрибутов
-				Context::LetAttributeBinding lab(context, ab);
+				Context::LetAttributeBinding lab(context, abInstanced);
 				// установить вершинный шейдер
 				Context::LetVertexShader lvs(context, GetVertexShadowShader(VertexShaderKey(true, false, false)));
 				// установить константный буфер
@@ -1032,7 +1034,7 @@ void Painter::Draw()
 					ugInstancedModel->Upload(context);
 
 					// нарисовать
-					context->DrawInstanced(batchCount);
+					instancer->Draw(context, batchCount);
 
 					j += batchCount;
 				}
@@ -1194,7 +1196,7 @@ void Painter::Draw()
 			std::sort(models.begin(), models.end(), Sorter());
 
 			// установить привязку атрибутов
-			Context::LetAttributeBinding lab(context, ab);
+			Context::LetAttributeBinding lab(context, abInstanced);
 			// установить вершинный шейдер
 			Context::LetVertexShader lvs(context, GetVertexShader(VertexShaderKey(true, false, false)));
 			// установить константный буфер
@@ -1248,7 +1250,7 @@ void Painter::Draw()
 					ugInstancedModel->Upload(context);
 
 					// нарисовать
-					context->DrawInstanced(geometryBatchCount);
+					instancer->Draw(context, geometryBatchCount);
 
 					j += geometryBatchCount;
 				}

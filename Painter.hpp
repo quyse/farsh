@@ -128,6 +128,8 @@ private:
 
 	//*** Атрибуты.
 	ptr<AttributeBinding> ab;
+	ptr<Instancer> instancer;
+	ptr<AttributeBinding> abInstanced;
 	Value<vec3> aPosition;
 	Value<vec3> aNormal;
 	Value<vec2> aTexcoord;
