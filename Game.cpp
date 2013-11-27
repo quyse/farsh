@@ -73,7 +73,7 @@ void Game::Run()
 #ifdef PRODUCTION
 			NEW(BlobFileSystem(Platform::FileSystem::GetNativeFileSystem()->LoadFile("data")))
 #else
-			NEW(BufferedFileSystem(Platform::FileSystem::GetNativeFileSystem()))
+			NEW(BufferedFileSystem(NEW(Platform::FileSystem("assets"))))
 #endif
 		;
 
@@ -84,7 +84,7 @@ void Game::Run()
 		textureManager = NEW(TextureManager(fileSystem, device));
 		fontManager = NEW(FontManager(fileSystem, textureManager));
 		textDrawer = TextDrawer::Create(device, shaderCache);
-		font = fontManager->Get("mnogobukov.font");
+		font = fontManager->Get("/mnogobukov.font");
 
 		physicsWorld = NEW(Physics::BtWorld());
 
@@ -96,9 +96,9 @@ void Game::Run()
 
 		ptr<Script::Function> mainScript = scriptState->LoadScript(fileSystem->LoadFile(
 #ifdef PRODUCTION
-			"main.luab"
+			"/main.luab"
 #else
-			"main.lua"
+			"/main.lua"
 #endif
 		));
 		mainScript->Run();
@@ -155,7 +155,7 @@ void Game::Tick()
 				case 'M':
 					try
 					{
-						scriptState->LoadScript(fileSystem->LoadFile("console.lua"))->Run();
+						scriptState->LoadScript(fileSystem->LoadFile("/console.lua"))->Run();
 						std::cout << "console.lua successfully executed.\n";
 					}
 					catch(Exception* exception)
