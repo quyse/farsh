@@ -1,0 +1,9 @@
+{
+    "name": "farsh-ems-server"
+  , "version": "0.0.1"
+  , "private": true
+  , "main": "server.js"
+  , "dependencies": {
+      "express": ">= 2.4.0"
+  }
+}
