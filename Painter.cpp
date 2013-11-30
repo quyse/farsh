@@ -629,7 +629,7 @@ Expression Painter::GetWorldPositionAndNormal(const VertexShaderKey& key)
 				(
 					key.decal ?
 					(
-						iInstance = tmpInstance,
+						iInstance = tmpInstance.Cast<float>(),
 						tmpWorld = uDecalInvTransforms[tmpInstance],
 						tmpPosition = mul(tmpWorld, decalStuff.aPosition),
 						tmpPosition = tmpPosition / tmpPosition["w"]
@@ -676,7 +676,7 @@ Expression Painter::BeginMaterialLighting(const PixelShaderKey& key, Value<vec3>
 			tmpProjectedPosition = mul(uInvViewProj, newvec4(tmpScreen["xy"], tmpScreenDepth, 1)),
 			tmpProjectedPosition = tmpProjectedPosition / tmpProjectedPosition["w"],
 			// преобразовать эту позицию в пространство декали
-			tmpProjectedPosition = mul(uDecalTransforms[iInstance], tmpProjectedPosition),
+			tmpProjectedPosition = mul(uDecalTransforms[iInstance.Cast<uint>()], tmpProjectedPosition),
 			tmpProjectedPosition = tmpProjectedPosition / tmpProjectedPosition["w"],
 			//clip(tmpProjectedPosition["z"]),
 			//clip(Value<float>(1) - tmpProjectedPosition["z"]),
@@ -870,7 +870,7 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 			lighted = lighted * (abs(shadowCoords["x"]) < Value<float>(1)).Cast<float>() * (abs(shadowCoords["y"]) < Value<float>(1)).Cast<float>(),
 			shadowCoordsXY = screenToTexture(shadowCoords["xy"]),
 			shadowMultiplier = lighted * saturate(exp(Value<float>(4) * (shadowLight.uShadowSampler.Sample(shadowCoordsXY) - linearShadowZ))),
-			
+
 			ApplyMaterialLighting(shadowLight.uLightPosition, shadowLight.uLightColor * shadowMultiplier)
 			));
 	}
@@ -879,11 +879,13 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 	shader.Append((
 		fragment(0, newvec4(tmpColor, tmpDiffuse["w"]))
 	));
+#if 0
 	// если не декали, вернуть нормаль
 	if(!key.decal)
 		shader.Append((
 			fragment(1, newvec4((tmpNormal + Value<float>(1)) * Value<float>(0.5f), 1))
 		));
+#endif
 
 	ptr<PixelShader> pixelShader = shaderCache->GetPixelShader(shader);
 

@@ -120,11 +120,11 @@ private:
 	/// Максимальное количество источников света с тенями.
 	static const int maxShadowLightsCount = 4;
 	/// Количество для instancing'а.
-	static const int maxInstancesCount = 64;
+	static const int maxInstancesCount = 32;
 	/// Количество костей для skinning.
 	static const int maxBonesCount = 64;
 	/// Количество декалей.
-	static const int maxDecalsCount = 64;
+	static const int maxDecalsCount = 32;
 
 	//*** Атрибуты.
 	ptr<AttributeBinding> ab;
@@ -247,7 +247,7 @@ private:
 	Interpolant<vec3> iWorldPosition;
 	Interpolant<float> iDepth;
 	Interpolant<vec4> iScreen;
-	Interpolant<uint> iInstance;
+	Interpolant<float> iInstance;
 
 	//*** Декали.
 	struct DecalStuff
