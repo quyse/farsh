@@ -48,7 +48,11 @@ void Game::Run()
 		ptr<Graphics::MonitorMode> monitorMode;
 		if(fullscreen)
 			monitorMode = monitor->TryCreateMode(screenWidth, screenHeight);
-		presenter = device->CreatePresenter(window->CreateOutput(), monitorMode);
+		ptr<Output> output = window->CreateOutput();
+		presenter = device->CreatePresenter(output, monitorMode);
+
+		screenWidth = output->GetWidth();
+		screenHeight = output->GetHeight();
 
 		context = system->CreateContext(device);
 
