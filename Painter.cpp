@@ -584,12 +584,13 @@ Expression Painter::GetWorldPositionAndNormal(const VertexShaderKey& key)
 	if(key.skinned)
 	{
 		Value<vec3> position = aSkinnedPosition;
+		Temp<uvec4> tmpBoneNumbers;
 		Value<uint> boneNumbers[] =
 		{
-			aSkinnedBoneNumbers["x"],
-			aSkinnedBoneNumbers["y"],
-			aSkinnedBoneNumbers["z"],
-			aSkinnedBoneNumbers["w"]
+			tmpBoneNumbers["x"],
+			tmpBoneNumbers["y"],
+			tmpBoneNumbers["z"],
+			tmpBoneNumbers["w"]
 		};
 		Value<float> boneWeights[] =
 		{
@@ -601,6 +602,7 @@ Expression Painter::GetWorldPositionAndNormal(const VertexShaderKey& key)
 		Temp<vec3> tmpBoneOffsets[4];
 
 		return
+			tmpBoneNumbers = aSkinnedBoneNumbers,
 			tmpBoneOffsets[0] = uBoneOffsets[boneNumbers[0]]["xyz"],
 			tmpBoneOffsets[1] = uBoneOffsets[boneNumbers[1]]["xyz"],
 			tmpBoneOffsets[2] = uBoneOffsets[boneNumbers[2]]["xyz"],
