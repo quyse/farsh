@@ -85,7 +85,12 @@ void Game::Run()
 
 		painter = NEW(Painter(device, context, presenter, screenWidth, screenHeight, shaderCache, geometryFormats));
 
-		textureManager = NEW(TextureManager(fileSystem, device));
+		{
+			SamplerSettings samplerSettings;
+			samplerSettings.SetFilter(SamplerSettings::filterLinear);
+			samplerSettings.SetWrap(SamplerSettings::wrapRepeat);
+			textureManager = NEW(TextureManager(fileSystem, device, samplerSettings));
+		}
 		fontManager = NEW(FontManager(fileSystem, textureManager));
 		textDrawer = TextDrawer::Create(device, shaderCache);
 		font = fontManager->Get("/mnogobukov.font");

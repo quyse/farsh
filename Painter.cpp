@@ -250,12 +250,20 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	this->screenWidth = screenWidth;
 	this->screenHeight = screenHeight;
 
+	// создать настройки семплирования
+	SamplerSettings shadowSamplerSettings;
+	shadowSamplerSettings.SetWrap(SamplerSettings::wrapBorder);
+	shadowSamplerSettings.SetFilter(SamplerSettings::filterLinear);
+	SamplerSettings pointSamplerSettings;
+	pointSamplerSettings.SetFilter(SamplerSettings::filterPoint);
+	pointSamplerSettings.SetWrap(SamplerSettings::wrapClamp);
+
 	//** создать ресурсы
 	dsbDepth = device->CreateDepthStencilBuffer(screenWidth, screenHeight, true);
 	dsbShadow = device->CreateDepthStencilBuffer(shadowMapSize, shadowMapSize, false);
 	for(int i = 0; i < maxShadowLightsCount; ++i)
 	{
-		ptr<RenderBuffer> rb = device->CreateRenderBuffer(shadowMapSize, shadowMapSize, PixelFormats::floatR16);
+		ptr<RenderBuffer> rb = device->CreateRenderBuffer(shadowMapSize, shadowMapSize, PixelFormats::floatR16, shadowSamplerSettings);
 		ptr<FrameBuffer> fb = device->CreateFrameBuffer();
 		fb->SetColorBuffer(0, rb);
 		fb->SetDepthStencilBuffer(dsbShadow);
@@ -265,25 +273,25 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		fbShadows[i] = fb;
 		fbShadowBlurs[i] = fbBlur;
 	}
-	rbShadowBlur = device->CreateRenderBuffer(shadowMapSize, shadowMapSize, PixelFormats::floatR16);
+	rbShadowBlur = device->CreateRenderBuffer(shadowMapSize, shadowMapSize, PixelFormats::floatR16, shadowSamplerSettings);
 
 	// экранный буфер
-	rbScreen = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatRGB32);
+	rbScreen = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatRGB32, pointSamplerSettings);
 	// экранный буфер нормалей
-	rbScreenNormal = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatRGB32);
+	rbScreenNormal = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatRGB32, pointSamplerSettings);
 	// буферы для downsample
 	for(int i = 0; i < downsamplingPassesCount; ++i)
 	{
 		ptr<RenderBuffer> rb = device->CreateRenderBuffer(1 << (downsamplingPassesCount - 1 - i), 1 << (downsamplingPassesCount - 1 - i),
-			i <= downsamplingStepForBloom ? PixelFormats::floatRGB32 : PixelFormats::floatR16);
+			i <= downsamplingStepForBloom ? PixelFormats::floatRGB32 : PixelFormats::floatR16, pointSamplerSettings);
 		rbDownsamples[i] = rb;
 		ptr<FrameBuffer> fb = device->CreateFrameBuffer();
 		fb->SetColorBuffer(0, rb);
 		fbDownsamples[i] = fb;
 	}
 	// буферы для Bloom
-	rbBloom1 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatRGB32);
-	rbBloom2 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatRGB32);
+	rbBloom1 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatRGB32, pointSamplerSettings);
+	rbBloom2 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatRGB32, pointSamplerSettings);
 
 	// framebuffers
 	fbOpaque = device->CreateFrameBuffer();
@@ -293,13 +301,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	fbDecal = device->CreateFrameBuffer();
 	fbDecal->SetColorBuffer(0, rbScreen);
 
-	shadowSamplerState = device->CreateSamplerState();
-	shadowSamplerState->SetWrap(SamplerState::wrapBorder, SamplerState::wrapBorder, SamplerState::wrapBorder);
-	shadowSamplerState->SetFilter(SamplerState::filterLinear, SamplerState::filterLinear, SamplerState::filterLinear);
-	{
-		float borderColor[] = { 0, 0, 0, 0 };
-		shadowSamplerState->SetBorderColor(borderColor);
-	}
+	shadowSamplerState = device->CreateSamplerState(shadowSamplerSettings);
 
 	// геометрия полноэкранного прохода
 	struct Quad
@@ -508,24 +510,29 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		}
 
 		// color texture sampler
-		ssColorTexture = device->CreateSamplerState();
-		ssColorTexture->SetFilter(SamplerState::filterLinear, SamplerState::filterLinear, SamplerState::filterLinear);
-		ssColorTexture->SetWrap(SamplerState::wrapRepeat, SamplerState::wrapRepeat, SamplerState::wrapRepeat);
-		ssColorTexture->SetMipMapping(true);
+		{
+			SamplerSettings s;
+			s.minFilter = s.mipFilter = s.magFilter = SamplerSettings::filterLinear;
+			s.wrapU = s.wrapV = s.wrapW = SamplerSettings::wrapRepeat;
+			s.mipMapping = true;
+			ssColorTexture = device->CreateSamplerState(s);
+		}
 		// point sampler
-		ssPoint = device->CreateSamplerState();
-		ssPoint->SetFilter(SamplerState::filterPoint, SamplerState::filterPoint, SamplerState::filterPoint);
-		ssPoint->SetWrap(SamplerState::wrapClamp, SamplerState::wrapClamp, SamplerState::wrapClamp);
+		ssPoint = device->CreateSamplerState(pointSamplerSettings);
 		// linear sampler
-		ssLinear = device->CreateSamplerState();
-		ssLinear->SetFilter(SamplerState::filterLinear, SamplerState::filterLinear, SamplerState::filterLinear);
-		ssLinear->SetWrap(SamplerState::wrapClamp, SamplerState::wrapClamp, SamplerState::wrapClamp);
+		{
+			SamplerSettings s;
+			s.minFilter = s.mipFilter = s.magFilter = SamplerSettings::filterLinear;
+			s.wrapU = s.wrapV = s.wrapW = SamplerSettings::wrapClamp;
+			ssLinear = device->CreateSamplerState(s);
+		}
 		// point sampler with border=0
-		ssPointBorder = device->CreateSamplerState();
-		ssPointBorder->SetFilter(SamplerState::filterPoint, SamplerState::filterPoint, SamplerState::filterPoint);
-		ssPointBorder->SetWrap(SamplerState::wrapBorder, SamplerState::wrapBorder, SamplerState::wrapBorder);
-		float borderColor[] = { 0, 0, 0, 0 };
-		ssPointBorder->SetBorderColor(borderColor);
+		{
+			SamplerSettings s;
+			s.minFilter = s.mipFilter = s.magFilter = SamplerSettings::filterPoint;
+			s.wrapU = s.wrapV = s.wrapW = SamplerSettings::wrapBorder;
+			ssPointBorder = device->CreateSamplerState(s);
+		}
 
 		// фреймбуферы для размытия тени
 		fbShadowBlur1 = device->CreateFrameBuffer();
@@ -1101,7 +1108,7 @@ void Painter::Draw()
 
 				{
 					Context::LetFrameBuffer lfb(context, fbShadowBlur1);
-					Context::LetSampler ls(context, uShadowBlurSourceSampler, rb->GetTexture(), ssPointBorder);
+					Context::LetSampler ls(context, uShadowBlurSourceSampler, rb->GetTexture(), ssPoint);
 					Context::LetUniformBuffer lub(context, ugShadowBlur);
 
 					uShadowBlurDirection.SetValue(vec2(1.0f / shadowMapSize, 0));
@@ -1114,7 +1121,7 @@ void Painter::Draw()
 				// второй проход
 				{
 					Context::LetFrameBuffer lfb(context, fbShadowBlurs[i]);
-					Context::LetSampler ls(context, uShadowBlurSourceSampler, rbShadowBlur->GetTexture(), ssPointBorder);
+					Context::LetSampler ls(context, uShadowBlurSourceSampler, rbShadowBlur->GetTexture(), ssPoint);
 					Context::LetUniformBuffer lub(context, ugShadowBlur);
 
 					uShadowBlurDirection.SetValue(vec2(0, 1.0f / shadowMapSize));
@@ -1341,8 +1348,8 @@ void Painter::Draw()
 		// убрать карту нормалей и буфер глубины
 		Context::LetFrameBuffer lfb(context, fbDecal);
 		// семплеры
-		Context::LetSampler lsScreenNormal(context, uScreenNormalSampler, rbScreenNormal->GetTexture(), shadowSamplerState);
-		Context::LetSampler lsScreenDepth(context, uScreenDepthSampler, dsbDepth->GetTexture(), shadowSamplerState);
+		Context::LetSampler lsScreenNormal(context, uScreenNormalSampler, rbScreenNormal->GetTexture(), nullptr);
+		Context::LetSampler lsScreenDepth(context, uScreenDepthSampler, dsbDepth->GetTexture(), nullptr);
 
 		// нарисовать
 		for(size_t i = 0; i < decals.size(); )
