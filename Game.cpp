@@ -91,9 +91,17 @@ void Game::Run()
 			samplerSettings.SetWrap(SamplerSettings::wrapRepeat);
 			textureManager = NEW(TextureManager(fileSystem, device, samplerSettings));
 		}
-		fontManager = NEW(FontManager(fileSystem, textureManager));
-		textDrawer = TextDrawer::Create(device, shaderCache);
-		font = fontManager->Get("/mnogobukov.font");
+
+		// GUI canvas and fonts
+		canvas = Gui::GrCanvas::Create(device, shaderCache);
+		{
+			ptr<Gui::FontEngine> fontEngine = NEW(Gui::FtEngine());
+			ptr<Gui::FontFace> fontFace = fontEngine->LoadFontFace(fileSystem->LoadFile("/DejaVuSans.ttf"));
+			const int fontSize = 13;
+			ptr<Gui::FontShape> fontShape = fontFace->CreateShape(fontSize);
+			ptr<Gui::FontGlyphs> fontGlyphs = fontFace->CreateGlyphs(canvas, fontSize);
+			font = NEW(Gui::Font(fontShape, fontGlyphs));
+		}
 
 		physicsWorld = NEW(Physics::BtWorld());
 
@@ -395,8 +403,7 @@ void Game::Tick()
 
 	painter->Draw();
 
-	textDrawer->Prepare(context, screenWidth, screenHeight);
-	textDrawer->SetFont(font);
+	canvas->SetContext(context);
 
 	// fps
 	{
@@ -415,10 +422,10 @@ void Game::Tick()
 			tickCount = 0;
 		}
 		char fpsString[64];
-		sprintf(fpsString, "frameTime: %.6f sec, FPS: %.6f\n", lastAllTicksTime / needTickCount, needTickCount / lastAllTicksTime);
-		textDrawer->DrawTextLine(fpsString, -0.95f - 2.0f / screenWidth, -0.95f - 2.0f / screenHeight, vec4(1, 1, 1, 1), FontAlignments::Left | FontAlignments::Bottom);
-		textDrawer->DrawTextLine(fpsString, -0.95f, -0.95f, vec4(1, 0, 0, 1), FontAlignments::Left | FontAlignments::Bottom);
-		textDrawer->Flush();
+		sprintf(fpsString, "frameTime: %.6f sec, FPS: %.6f", lastAllTicksTime / needTickCount, needTickCount / lastAllTicksTime);
+		font->DrawString(canvas, fpsString, vec2(19.0f, (float)screenHeight - 21.0f), vec4(1, 1, 1, 1));
+		font->DrawString(canvas, fpsString, vec2(20.0f, (float)screenHeight - 20.0f), vec4(1, 0, 0, 1));
+		canvas->Flush();
 	}
 
 	presenter->Present();

@@ -7,6 +7,7 @@
 #include "../inanity/inanity-input.hpp"
 #include "../inanity/inanity-physics.hpp"
 #include "../inanity/inanity-bullet.hpp"
+#include "../inanity/inanity-gui.hpp"
 #include "../inanity/inanity-platform.hpp"
 #include "../inanity/inanity-crypto.hpp"
 #include "../inanity/inanity-lua.hpp"

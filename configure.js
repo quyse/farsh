@@ -4,6 +4,8 @@ exports.configureCompiler = function(objectFile, compiler) {
 	compiler.configuration = a[1];
 	compiler.setSourceFile(a[2].replace(/\./g, '/') + '.cpp');
 	compiler.addIncludeDir('../inanity/deps/bullet/repo/src');
+	compiler.addIncludeDir('../inanity/deps/freetype/repo/include');
+	compiler.addIncludeDir('../inanity/deps/harfbuzz/generated');
 };
 
 var staticLibraries = [
@@ -16,6 +18,7 @@ var staticLibraries = [
 	'libinanity-input',
 	'libinanity-bullet',
 	'libinanity-physics',
+	'libinanity-gui',
 	'libinanity-crypto',
 	'libinanity-sqlitefs',
 	'libinanity-compress',
@@ -31,7 +34,9 @@ var staticDepsLibraries = [
 	{ dir: 'glew', lib: 'libglew', platform: 'win32' },
 	{ dir: 'glew', lib: 'libglew', platform: 'linux' },
 	{ dir: 'sqlite', lib: 'libsqlite', platform: 'win32' },
-	{ dir: 'sqlite', lib: 'libsqlite', platform: 'linux' }
+	{ dir: 'sqlite', lib: 'libsqlite', platform: 'linux' },
+	{ dir: 'freetype', lib: 'libfreetype' },
+	{ dir: 'harfbuzz', lib: 'libharfbuzz' }
 ];
 var dynamicLibraries = {
 	win32: [

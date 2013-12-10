@@ -53,9 +53,8 @@ private:
 	ptr<Input::Manager> inputManager;
 
 	ptr<TextureManager> textureManager;
-	ptr<FontManager> fontManager;
-	ptr<TextDrawer> textDrawer;
-	ptr<Font> font;
+	ptr<Gui::GrCanvas> canvas;
+	ptr<Gui::Font> font;
 
 	float alpha;
 
