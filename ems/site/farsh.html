@@ -37,8 +37,9 @@
     <script type='text/javascript'>
       // connect to canvas
       var Module = {
+	TOTAL_MEMORY: 33554432,
         preRun: function() {
-          var files = 'axe.ba axe.geo.indices axe.geo.vertices axe_d.png bench.obj bench.geo.indices bench.geo.vertices box.geo.indices box.geo.vertices chamferBox.obj circular.ba circular.obj circular.geo.indices circular.geo.vertices circular_d.png circular_s.png hero.ba knot.obj knot.geo.indices knot.geo.vertices labyrint.txt main.lua mnogobukov.font mnogobukov.png nescafe.obj nescafe.png nescafe.geo.indices nescafe.geo.vertices specular.jpg z6.obj zombi.obj zombie.ba zombie.png zombie.skeleton zombie.geo.indices zombie.geo.vertices zombie_d.png zombie_s.png';
+          var files = 'axe.ba axe.geo.indices axe.geo.vertices axe_d.png bench.obj bench.geo.indices bench.geo.vertices box.geo.indices box.geo.vertices chamferBox.obj circular.ba circular.obj circular.geo.indices circular.geo.vertices circular_d.png circular_s.png hero.ba knot.obj knot.geo.indices knot.geo.vertices labyrint.txt main.lua mnogobukov.font mnogobukov.png nescafe.obj nescafe.png nescafe.geo.indices nescafe.geo.vertices specular.jpg z6.obj zombi.obj zombie.ba zombie.png zombie.skeleton zombie.geo.indices zombie.geo.vertices zombie_d.png zombie_s.png DejaVuSans.ttf';
           files = files.split(' ');
           FS.mkdir('/assets');
           for(var i in files)
