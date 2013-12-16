@@ -32,6 +32,7 @@ META_CLASS(Game, Farsh.Game);
 	META_METHOD(SetAxeParams);
 	META_METHOD(SetCircularParams);
 	META_METHOD(PlaceHero);
+	META_METHOD(PlaceCamera);
 META_CLASS_END();
 
 META_CLASS(StaticLight, Farsh.StaticLight);

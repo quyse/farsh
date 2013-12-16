@@ -94,3 +94,4 @@ circularMaterial:SetSpecularTexture(game:LoadTexture("/circular_s.png"))
 game:SetCircularParams(circularMaterial, game:LoadGeometry("/circular.geo"), game:LoadBoneAnimation("/circular.ba", nil))
 
 game:PlaceHero(10, 10, 10)
+game:PlaceCamera({ 20.0, 0.0, 10.0 }, 2.315, -0.625);

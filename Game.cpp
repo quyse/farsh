@@ -19,7 +19,6 @@ const float Game::hzAFBattle2 = 450.0f / 30;
 
 Game::Game() :
 	heroAnimationTime(hzAFBattle1),
-	cameraAlpha(2.315f), cameraBeta(-0.625f),
 	bloomLimit(10.0f), toneLuminanceKey(0.12f), toneMaxLuminance(3.1f)
 {
 	singleGame = this;
@@ -309,8 +308,6 @@ void Game::Tick()
 	vec3 heroPosition(heroTransform(0, 3), heroTransform(1, 3), heroTransform(2, 3));
 	quat heroOrientation = axis_rotation(vec3(0, 0, 1), cameraAlpha);
 
-	static vec3 cameraPosition(20.716f, -2.452f, 8.807f);
-	//vec3 cameraPosition = heroPosition - cameraMoveDirectionFront * 2.0f + cameraMoveDirectionUp * 2.0f;
 	cameraPosition += cameraMove * frameTime;
 
 	if(shoot)
@@ -564,6 +561,13 @@ void Game::PlaceHero(float x, float y, float z)
 	circularAnimationFrame = NEW(BoneAnimationFrame(circularAnimation));
 	zombieAnimationFrame = NEW(BoneAnimationFrame(zombieAnimation));
 	axeAnimationFrame = NEW(BoneAnimationFrame(axeAnimation));
+}
+
+void Game::PlaceCamera(const vec3& position, float alpha, float beta)
+{
+	this->cameraPosition = position;
+	this->cameraAlpha = alpha;
+	this->cameraBeta = beta;
 }
 
 //******* Game::StaticLight

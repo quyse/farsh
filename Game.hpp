@@ -56,6 +56,7 @@ private:
 	ptr<Gui::GrCanvas> canvas;
 	ptr<Gui::Font> font;
 
+	vec3 cameraPosition;
 	float alpha;
 
 	ptr<Material> decalMaterial;
@@ -166,6 +167,7 @@ public:
 	void SetCircularParams(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimation> animation);
 
 	void PlaceHero(float x, float y, float z);
+	void PlaceCamera(const vec3& position, float alpha, float beta);
 
 	META_DECLARE_CLASS(Game);
 };
