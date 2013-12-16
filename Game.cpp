@@ -475,25 +475,25 @@ ptr<BoneAnimation> Game::LoadBoneAnimation(const String& fileName, ptr<Skeleton>
 	return BoneAnimation::Deserialize(fileSystem->LoadStream(fileName), skeleton);
 }
 
-ptr<Physics::Shape> Game::CreatePhysicsBoxShape(float halfSizeX, float halfSizeY, float halfSizeZ)
+ptr<Physics::Shape> Game::CreatePhysicsBoxShape(const vec3& halfSize)
 {
-	return physicsWorld->CreateBoxShape(vec3(halfSizeX, halfSizeY, halfSizeZ));
+	return physicsWorld->CreateBoxShape(halfSize);
 }
 
-ptr<Physics::RigidBody> Game::CreatePhysicsRigidBody(ptr<Physics::Shape> physicsShape, float mass, float x, float y, float z)
+ptr<Physics::RigidBody> Game::CreatePhysicsRigidBody(ptr<Physics::Shape> physicsShape, float mass, const vec3& position)
 {
 	Eigen::Affine3f startTransform = Eigen::Affine3f::Identity();
-	startTransform.translate(Eigen::Vector3f(x, y, z));
+	startTransform.translate(toEigen(position));
 	return physicsWorld->CreateRigidBody(physicsShape, mass, fromEigen(startTransform.matrix()));
 }
 
-void Game::AddStaticModel(ptr<Geometry> geometry, ptr<Material> material, float x, float y, float z)
+void Game::AddStaticModel(ptr<Geometry> geometry, ptr<Material> material, const vec3& position)
 {
 	StaticModel model;
 	model.geometry = geometry;
 	model.material = material;
 	Eigen::Affine3f transform = Eigen::Affine3f::Identity();
-	transform.translate(Eigen::Vector3f(x, y, z));
+	transform.translate(toEigen(position));
 	model.transform = fromEigen(transform.matrix());
 	staticModels.push_back(model);
 }

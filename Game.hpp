@@ -152,9 +152,9 @@ public:
 	ptr<Geometry> LoadSkinnedGeometry(const String& fileName);
 	ptr<Skeleton> LoadSkeleton(const String& fileName);
 	ptr<BoneAnimation> LoadBoneAnimation(const String& fileName, ptr<Skeleton> skeleton);
-	ptr<Physics::Shape> CreatePhysicsBoxShape(float halfSizeX, float halfSizeY, float halfSizeZ);
-	ptr<Physics::RigidBody> CreatePhysicsRigidBody(ptr<Physics::Shape> physicsShape, float mass, float x, float y, float z);
-	void AddStaticModel(ptr<Geometry> geometry, ptr<Material> material, float x, float y, float z);
+	ptr<Physics::Shape> CreatePhysicsBoxShape(const vec3& halfSize);
+	ptr<Physics::RigidBody> CreatePhysicsRigidBody(ptr<Physics::Shape> physicsShape, float mass, const vec3& position);
+	void AddStaticModel(ptr<Geometry> geometry, ptr<Material> material, const vec3& position);
 	void AddRigidModel(ptr<Geometry> geometry, ptr<Material> material, ptr<Physics::RigidBody> physicsRigidBody);
 	ptr<StaticLight> AddStaticLight();
 	void SetDecalMaterial(ptr<Material> decalMaterial);
