@@ -318,6 +318,18 @@ void Game::Tick()
 		AddRigidModel(rigidModels[0].geometry, rigidModels[0].material, rigidBody);
 	}
 
+	static float shootAlpha = 0;
+	shootAlpha += frameTime;
+	if(shootAlpha > 2.0f)
+	{
+		shootAlpha = 0;
+		vec3 dir(cos(alpha), sin(alpha), 0);
+		mat4x4 transform = CreateTranslationMatrix(vec3(10, 10, 5) + dir * 10.0f);
+		ptr<Physics::RigidBody> rigidBody = physicsWorld->CreateRigidBody(rigidModels[0].rigidBody->GetShape(), 100, transform);
+		rigidBody->ApplyImpulse(dir * -1000.0f);
+		AddRigidModel(rigidModels[0].geometry, rigidModels[0].material, rigidBody);
+	}
+
 	alpha += frameTime;
 
 	mat4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, vec3(0, 0, 1));
