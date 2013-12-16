@@ -20,11 +20,6 @@ matCube:SetDiffuse({1, 1, 1, 1})
 --matCube:SetSpecularTexture(game:LoadTexture("/specular.jpg"))
 matCube:SetSpecular({0.2, 0, 0, 0})
 
-local CreateStaticRigidModel = function(geometry, material, physicsShape, x, y, z)
-	game:AddStaticModel(geometry, material, { x, y, z })
-	game:CreatePhysicsRigidBody(physicsShape, 0, { x, y, z })
-end
-
 local matBench = Farsh.Material()
 t.matBench = matBench
 matBench:SetDiffuse({1, 1, 1, 1})
@@ -39,7 +34,7 @@ game:AddStaticModel(game:LoadGeometry("/nescafe.geo"), matNescafe, { 2, 0, 0 })
 
 local geoCube = game:LoadGeometry("/box.geo")
 local shapeCube = game:CreatePhysicsBoxShape({ 1, 1, 1 })
-game:CreatePhysicsRigidBody(game:CreatePhysicsBoxShape({ 10, 10, 1 }), 0, { 11, 11, -1 })
+game:AddStaticRigidBody(game:CreatePhysicsRigidBody(game:CreatePhysicsBoxShape({ 10, 10, 1 }), 0, { 11, 11, -1 }))
 for i = 1, 10 do
 	for j = 1, 10 do
 		game:AddStaticModel(geoCube, matCube, { i * 2, j * 2, -1 })

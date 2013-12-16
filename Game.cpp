@@ -504,6 +504,11 @@ void Game::AddRigidModel(ptr<Geometry> geometry, ptr<Material> material, ptr<Phy
 	rigidModels.push_back(model);
 }
 
+void Game::AddStaticRigidBody(ptr<Physics::RigidBody> rigidBody)
+{
+	staticRigidBodies.push_back(rigidBody);
+}
+
 ptr<StaticLight> Game::AddStaticLight()
 {
 	ptr<StaticLight> light = NEW(StaticLight());

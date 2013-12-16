@@ -24,6 +24,7 @@ META_CLASS(Game, Farsh.Game);
 	META_METHOD(CreatePhysicsRigidBody);
 	META_METHOD(AddStaticModel);
 	META_METHOD(AddRigidModel);
+	META_METHOD(AddStaticRigidBody);
 	META_METHOD(AddStaticLight);
 	META_METHOD(SetDecalMaterial);
 	META_METHOD(SetAmbient);

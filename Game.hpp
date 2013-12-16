@@ -111,6 +111,8 @@ private:
 	};
 	std::vector<RigidModel> rigidModels;
 
+	std::vector<ptr<Physics::RigidBody> > staticRigidBodies;
+
 	std::vector<ptr<StaticLight> > staticLights;
 
 	int screenWidth, screenHeight;
@@ -157,6 +159,7 @@ public:
 	ptr<Physics::RigidBody> CreatePhysicsRigidBody(ptr<Physics::Shape> physicsShape, float mass, const vec3& position);
 	void AddStaticModel(ptr<Geometry> geometry, ptr<Material> material, const vec3& position);
 	void AddRigidModel(ptr<Geometry> geometry, ptr<Material> material, ptr<Physics::RigidBody> physicsRigidBody);
+	void AddStaticRigidBody(ptr<Physics::RigidBody> rigidBody);
 	ptr<StaticLight> AddStaticLight();
 	void SetDecalMaterial(ptr<Material> decalMaterial);
 
