@@ -21,7 +21,6 @@ var staticLibraries = [
 	'libinanity-gui',
 	'libinanity-crypto',
 	'libinanity-sqlitefs',
-	'libinanity-compress',
 	'libinanity-data',
 	'libinanity-lua',
 	'libinanity-base'
@@ -32,6 +31,7 @@ var staticDepsLibraries = [
 	{ dir: 'bullet', lib: 'libbullet-collision' },
 	{ dir: 'bullet', lib: 'libbullet-linearmath' },
 	{ dir: 'libpng', lib: 'libpng' },
+	{ dir: 'zlib', lib: 'libz' },
 	{ dir: 'glew', lib: 'libglew', platform: 'win32' },
 	{ dir: 'glew', lib: 'libglew', platform: 'linux' },
 	{ dir: 'sqlite', lib: 'libsqlite', platform: 'win32' },
