@@ -54,7 +54,7 @@ void Game::Run()
 		context = system->CreateContext(device);
 
 #ifdef ___INANITY_PLATFORM_EMSCRIPTEN
-		ptr<FileSystem> shaderCacheFileSystem = NEW(TempFileSystem());
+		ptr<FileSystem> shaderCacheFileSystem = NEW(Data::TempFileSystem());
 #else
 		const char* shadersCacheFileName =
 #ifdef _DEBUG
@@ -63,7 +63,7 @@ void Game::Run()
 			"shaders"
 #endif
 			;
-		ptr<FileSystem> shaderCacheFileSystem = NEW(SQLiteFileSystem(shadersCacheFileName));
+		ptr<FileSystem> shaderCacheFileSystem = NEW(Data::SQLiteFileSystem(shadersCacheFileName));
 #endif
 			;
 
@@ -72,9 +72,9 @@ void Game::Run()
 
 		fileSystem =
 #ifdef PRODUCTION
-			NEW(BlobFileSystem(Platform::FileSystem::GetNativeFileSystem()->LoadFile("data")))
+			NEW(Data::BlobFileSystem(Platform::FileSystem::GetNativeFileSystem()->LoadFile("data")))
 #else
-			NEW(BufferedFileSystem(NEW(Platform::FileSystem("assets"))))
+			NEW(Data::BufferedFileSystem(NEW(Platform::FileSystem("assets"))))
 #endif
 		;
 

@@ -2,6 +2,7 @@
 #define ___FARSH_GENERAL_HPP___
 
 #include "../inanity/inanity-base.hpp"
+#include "../inanity/inanity-data.hpp"
 #include "../inanity/inanity-graphics.hpp"
 #include "../inanity/inanity-shaders.hpp"
 #include "../inanity/inanity-input.hpp"
