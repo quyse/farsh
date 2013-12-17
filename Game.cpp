@@ -256,6 +256,7 @@ void Game::Tick()
 			switch(inputEvent.mouse.type)
 			{
 			case Input::Event::Mouse::typeButtonDown:
+				shoot = true;
 				break;
 			case Input::Event::Mouse::typeButtonUp:
 				break;
