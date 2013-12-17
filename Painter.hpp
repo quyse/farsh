@@ -450,7 +450,9 @@ private:
 	ptr<PixelShader> GeneratePS(Expression expression);
 
 public:
-	Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, int screenWidth, int screenHeight, ptr<ShaderCache> shaderCache, ptr<GeometryFormats> geometryFormats);
+	Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, ptr<ShaderCache> shaderCache, ptr<GeometryFormats> geometryFormats);
+
+	void Resize(int screenWidth, int screenHeight);
 
 	/// Начать кадр.
 	/** Очистить все регистрационные списки. */

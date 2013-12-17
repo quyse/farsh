@@ -43,6 +43,7 @@ private:
 	ptr<Device> device;
 	ptr<Context> context;
 	ptr<Presenter> presenter;
+	ptr<Output> output;
 
 	ptr<GeometryFormats> geometryFormats;
 
@@ -114,8 +115,6 @@ private:
 	std::vector<ptr<Physics::RigidBody> > staticRigidBodies;
 
 	std::vector<ptr<StaticLight> > staticLights;
-
-	int screenWidth, screenHeight;
 
 	Ticker ticker;
 

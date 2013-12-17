@@ -150,12 +150,12 @@ Painter::DecalStuff::DecalStuff(ptr<Device> device) :
 
 //*** Painter
 
-Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, int screenWidth, int screenHeight, ptr<ShaderCache> shaderCache, ptr<GeometryFormats> geometryFormats) :
+Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presenter, ptr<ShaderCache> shaderCache, ptr<GeometryFormats> geometryFormats) :
 	device(device),
 	context(context),
 	presenter(presenter),
-	screenWidth(screenWidth),
-	screenHeight(screenHeight),
+	screenWidth(-1),
+	screenHeight(-1),
 	shaderCache(shaderCache),
 	geometryFormats(geometryFormats),
 
@@ -246,9 +246,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	ugTone->Finalize(device);
 
 	// создать ресурсы
-	// запомнить размеры
-	this->screenWidth = screenWidth;
-	this->screenHeight = screenHeight;
 
 	// создать настройки семплирования
 	SamplerSettings shadowSamplerSettings;
@@ -259,7 +256,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	pointSamplerSettings.SetWrap(SamplerSettings::wrapClamp);
 
 	//** создать ресурсы
-	dsbDepth = device->CreateDepthStencilBuffer(screenWidth, screenHeight, true);
 	dsbShadow = device->CreateDepthStencilBuffer(shadowMapSize, shadowMapSize, false);
 	for(int i = 0; i < maxShadowLightsCount; ++i)
 	{
@@ -275,10 +271,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	}
 	rbShadowBlur = device->CreateRenderBuffer(shadowMapSize, shadowMapSize, PixelFormats::floatR16, shadowSamplerSettings);
 
-	// экранный буфер
-	rbScreen = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatRGB32, pointSamplerSettings);
-	// экранный буфер нормалей
-	rbScreenNormal = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatRGB32, pointSamplerSettings);
 	// буферы для downsample
 	for(int i = 0; i < downsamplingPassesCount; ++i)
 	{
@@ -292,14 +284,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	// буферы для Bloom
 	rbBloom1 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatRGB32, pointSamplerSettings);
 	rbBloom2 = device->CreateRenderBuffer(bloomMapSize, bloomMapSize, PixelFormats::floatRGB32, pointSamplerSettings);
-
-	// framebuffers
-	fbOpaque = device->CreateFrameBuffer();
-	fbOpaque->SetColorBuffer(0, rbScreen);
-	fbOpaque->SetColorBuffer(1, rbScreenNormal);
-	fbOpaque->SetDepthStencilBuffer(dsbDepth);
-	fbDecal = device->CreateFrameBuffer();
-	fbDecal->SetColorBuffer(0, rbScreen);
 
 	shadowSamplerState = device->CreateSamplerState(shadowSamplerSettings);
 
@@ -548,6 +532,34 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		fbBloom2 = device->CreateFrameBuffer();
 		fbBloom2->SetColorBuffer(0, rbBloom2);
 	}
+}
+
+void Painter::Resize(int screenWidth, int screenHeight)
+{
+	if(this->screenWidth == screenWidth && this->screenHeight == screenHeight)
+		return;
+
+	// запомнить размеры
+	this->screenWidth = screenWidth;
+	this->screenHeight = screenHeight;
+
+	SamplerSettings pointSamplerSettings;
+	pointSamplerSettings.SetFilter(SamplerSettings::filterPoint);
+	pointSamplerSettings.SetWrap(SamplerSettings::wrapClamp);
+
+	// main screen
+	rbScreen = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatRGB32, pointSamplerSettings);
+	rbScreenNormal = device->CreateRenderBuffer(screenWidth, screenHeight, PixelFormats::floatRGB32, pointSamplerSettings);
+	dsbDepth = device->CreateDepthStencilBuffer(screenWidth, screenHeight, true);
+
+	// framebuffers
+	fbOpaque = device->CreateFrameBuffer();
+	fbOpaque->SetColorBuffer(0, rbScreen);
+	fbOpaque->SetColorBuffer(1, rbScreenNormal);
+	fbOpaque->SetDepthStencilBuffer(dsbDepth);
+
+	fbDecal = device->CreateFrameBuffer();
+	fbDecal->SetColorBuffer(0, rbScreen);
 }
 
 Painter::LightVariant& Painter::GetLightVariant(const LightVariantKey& key)

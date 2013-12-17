@@ -34,8 +34,8 @@ void Game::Run()
 		device = system->CreateDevice(adapter);
 		ptr<Graphics::Monitor> monitor = adapter->GetMonitors()[0];
 
-		screenWidth = 800;
-		screenHeight = 600;
+		int screenWidth = 800;
+		int screenHeight = 600;
 		bool fullscreen = false;
 
 		ptr<Platform::Window> window = monitor->CreateDefaultWindow(
@@ -47,11 +47,9 @@ void Game::Run()
 		ptr<Graphics::MonitorMode> monitorMode;
 		if(fullscreen)
 			monitorMode = monitor->TryCreateMode(screenWidth, screenHeight);
-		ptr<Output> output = window->CreateOutput();
+		output = window->CreateOutput();
 		presenter = device->CreatePresenter(output, monitorMode);
-
-		screenWidth = output->GetWidth();
-		screenHeight = output->GetHeight();
+		output->SetPresenter(presenter);
 
 		context = system->CreateContext(device);
 
@@ -82,7 +80,7 @@ void Game::Run()
 
 		geometryFormats = NEW(GeometryFormats());
 
-		painter = NEW(Painter(device, context, presenter, screenWidth, screenHeight, shaderCache, geometryFormats));
+		painter = NEW(Painter(device, context, presenter, shaderCache, geometryFormats));
 
 		{
 			SamplerSettings samplerSettings;
@@ -332,6 +330,10 @@ void Game::Tick()
 	}
 
 	alpha += frameTime;
+
+	int screenWidth = output->GetWidth();
+	int screenHeight = output->GetHeight();
+	painter->Resize(screenWidth, screenHeight);
 
 	mat4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, vec3(0, 0, 1));
 	mat4x4 projMatrix = CreateProjectionPerspectiveFovMatrix(3.1415926535897932f / 4, float(screenWidth) / float(screenHeight), 0.1f, 100.0f);
