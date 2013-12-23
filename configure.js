@@ -21,6 +21,7 @@ var staticLibraries = [
 	'libinanity-gui',
 	'libinanity-crypto',
 	'libinanity-sqlitefs',
+	'libinanity-sqlite',
 	'libinanity-data',
 	'libinanity-lua',
 	'libinanity-base'
