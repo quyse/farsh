@@ -43,7 +43,6 @@ private:
 	ptr<Device> device;
 	ptr<Context> context;
 	ptr<Presenter> presenter;
-	ptr<Output> output;
 
 	ptr<GeometryFormats> geometryFormats;
 

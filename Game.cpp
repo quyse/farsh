@@ -47,9 +47,7 @@ void Game::Run()
 		ptr<Graphics::MonitorMode> monitorMode;
 		if(fullscreen)
 			monitorMode = monitor->TryCreateMode(screenWidth, screenHeight);
-		output = window->CreateOutput();
-		presenter = device->CreatePresenter(output, monitorMode);
-		output->SetPresenter(presenter);
+		presenter = device->CreateWindowPresenter(window, monitorMode);
 
 		context = system->CreateContext(device);
 
@@ -331,8 +329,8 @@ void Game::Tick()
 
 	alpha += frameTime;
 
-	int screenWidth = output->GetWidth();
-	int screenHeight = output->GetHeight();
+	int screenWidth = presenter->GetWidth();
+	int screenHeight = presenter->GetHeight();
 	painter->Resize(screenWidth, screenHeight);
 
 	mat4x4 viewMatrix = CreateLookAtMatrix(cameraPosition, cameraPosition + cameraDirection, vec3(0, 0, 1));
