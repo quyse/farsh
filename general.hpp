@@ -11,7 +11,7 @@
 #include "../inanity/inanity-gui.hpp"
 #include "../inanity/inanity-platform.hpp"
 #include "../inanity/inanity-crypto.hpp"
-#include "../inanity/inanity-lua.hpp"
+#include "../inanity/inanity-script.hpp"
 #include "../inanity/meta/decl.hpp"
 
 #ifndef _DEBUG

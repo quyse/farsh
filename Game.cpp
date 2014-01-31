@@ -5,6 +5,7 @@
 #include "Material.hpp"
 #include "Skeleton.hpp"
 #include "BoneAnimation.hpp"
+#include "../inanity/script/lua/State.hpp"
 #ifndef ___INANITY_PLATFORM_EMSCRIPTEN
 #include "../inanity/inanity-sqlitefs.hpp"
 #endif
