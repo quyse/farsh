@@ -35,8 +35,10 @@ var staticDepsLibraries = [
 	{ dir: 'zlib', lib: 'libz' },
 	{ dir: 'glew', lib: 'libglew', platform: 'win32' },
 	{ dir: 'glew', lib: 'libglew', platform: 'linux' },
+	{ dir: 'glew', lib: 'libglew', platform: 'freebsd' },
 	{ dir: 'sqlite', lib: 'libsqlite', platform: 'win32' },
 	{ dir: 'sqlite', lib: 'libsqlite', platform: 'linux' },
+	{ dir: 'sqlite', lib: 'libsqlite', platform: 'freebsd' },
 	{ dir: 'freetype', lib: 'libfreetype' },
 	{ dir: 'harfbuzz', lib: 'libharfbuzz' }
 ];
@@ -46,6 +48,9 @@ var dynamicLibraries = {
 	],
 	linux: [
 		'pthread', 'GL', 'X11', 'dl', 'z', 'xcb', 'X11-xcb'
+	],
+	freebsd: [
+		'pthread', 'GL', 'X11', 'z', 'xcb', 'X11-xcb', 'SDL2'
 	],
 	emscripten: [
 		'GL'
