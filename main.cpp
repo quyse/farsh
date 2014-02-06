@@ -25,7 +25,7 @@ int main()
 		std::ostringstream s;
 		MakePointer(exception)->PrintStack(s);
 #ifdef PRODUCTION
-		MessageBox(NULL, Strings::UTF82Unicode(s.str()).c_str(), L"F.A.R.S.H. Error", MB_ICONSTOP);
+		std::fstream("error.txt", std::ios::out) << s.str() << '\n';
 #else
 		std::cout << s.str() << '\n';
 #endif
