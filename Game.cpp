@@ -116,6 +116,9 @@ void Game::Run()
 		));
 		mainScript->Run();
 
+		window->SetMouseLock(true);
+		window->SetCursorVisible(false);
+
 		try
 		{
 			window->Run(Handler::Bind(MakePointer(this), &Game::Tick));
@@ -232,14 +235,14 @@ void Game::Tick()
 					break;
 				case 'L':
 					{
-						static bool mouseLock = false;
+						static bool mouseLock = true;
 						mouseLock = !mouseLock;
 						window->SetMouseLock(mouseLock);
 					}
 					break;
 				case 'V':
 					{
-						static bool cursorVisible = true;
+						static bool cursorVisible = false;
 						cursorVisible = !cursorVisible;
 						window->SetCursorVisible(cursorVisible);
 					}
