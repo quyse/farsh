@@ -10,11 +10,7 @@
 #include <iostream>
 #include <fstream>
 
-#ifdef PRODUCTION
 int WINAPI wWinMain(HINSTANCE, HINSTANCE, LPWSTR, INT)
-#else
-int main()
-#endif
 {
 	try
 	{
