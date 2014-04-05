@@ -14,6 +14,7 @@ var staticLibraries = [
 	'libinanity-gl',
 	'libinanity-graphics',
 	'libinanity-platform',
+	'libinanity-platform-filesystem',
 	'libinanity-shaders',
 	'libinanity-input',
 	'libinanity-bullet',
