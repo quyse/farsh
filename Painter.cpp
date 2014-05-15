@@ -987,9 +987,6 @@ void Painter::Draw()
 	for(size_t i = 0; i < lights.size(); ++i)
 		++(lights[i].shadow ? shadowLightsCount : basicLightsCount);
 
-	float zeroColor[] = { 0, 0, 0, 0 };
-	float farColor[] = { 1e8, 1e8, 1e8, 1e8 };
-
 	// выполнить теневые проходы
 	int shadowPassNumber = 0;
 	for(size_t i = 0; i < lights.size(); ++i)
@@ -1007,7 +1004,7 @@ void Painter::Draw()
 			ugCamera->Upload(context);
 
 			// очистить карту теней
-			context->ClearColor(0, farColor);
+			context->ClearColor(0, vec4(1e8, 1e8, 1e8, 1e8));
 			context->ClearDepth(1.0f);
 
 			// сортировщик моделей по геометрии
@@ -1126,7 +1123,7 @@ void Painter::Draw()
 					uShadowBlurDirection.SetValue(vec2(1.0f / shadowMapSize, 0));
 					ugShadowBlur->Upload(context);
 
-					context->ClearColor(0, zeroColor);
+					context->ClearColor(0, vec4(0, 0, 0, 0));
 					context->Draw();
 				}
 
@@ -1139,7 +1136,7 @@ void Painter::Draw()
 					uShadowBlurDirection.SetValue(vec2(0, 1.0f / shadowMapSize));
 					ugShadowBlur->Upload(context);
 
-					context->ClearColor(0, zeroColor);
+					context->ClearColor(0, vec4(0, 0, 0, 0));
 					context->Draw();
 				}
 			}
@@ -1209,9 +1206,8 @@ void Painter::Draw()
 		lightVariant.ugLight->Upload(context);
 
 		// очистить рендербуферы
-		float color[] = { 0, 0, 0, 1 };
-		context->ClearColor(0, color); // color
-		context->ClearColor(1, color); // normal
+		context->ClearColor(0, vec4(0, 0, 0, 1)); // color
+		context->ClearColor(1, vec4(0, 0, 0, 1)); // normal
 		context->ClearDepth(1.0f);
 
 		//** нарисовать простые модели
@@ -1405,8 +1401,6 @@ void Painter::Draw()
 
 	// всё, теперь постпроцессинг
 	{
-		float clearColor[] = { 0, 0, 0, 0 };
-
 		// общие для фильтров настройки
 		Context::LetAttributeBinding lab(context, abFilter);
 		Context::LetVertexBuffer lvb(context, 0, vbFilter);
@@ -1455,7 +1449,7 @@ void Painter::Draw()
 				lbs(context, bsLastDownsample);
 
 			if(veryFirstDownsampling || i < downsamplingPassesCount - 1)
-				context->ClearColor(0, clearColor);
+				context->ClearColor(0, vec4(0, 0, 0, 0));
 			context->Draw();
 		}
 		veryFirstDownsampling = false;
@@ -1477,14 +1471,14 @@ void Painter::Draw()
 					Context::LetFrameBuffer lfb(context, fbBloom2);
 					Context::LetSampler ls(context, uBloomSourceSampler, rbDownsamples[downsamplingStepForBloom]->GetTexture(), ssLinear);
 					Context::LetPixelShader lps(context, psBloomLimit);
-					context->ClearColor(0, clearColor);
+					context->ClearColor(0, vec4(0, 0, 0, 0));
 					context->Draw();
 				}
 				{
 					Context::LetFrameBuffer lfb(context, fbBloom1);
 					Context::LetSampler ls(context, uBloomSourceSampler, rbBloom2->GetTexture(), ssLinear);
 					Context::LetPixelShader lps(context, psBloom2);
-					context->ClearColor(0, clearColor);
+					context->ClearColor(0, vec4(0, 0, 0, 0));
 					context->Draw();
 				}
 				for(int i = 1; i < bloomPassesCount; ++i)
@@ -1493,14 +1487,14 @@ void Painter::Draw()
 						Context::LetFrameBuffer lfb(context, fbBloom2);
 						Context::LetSampler ls(context, uBloomSourceSampler, rbBloom1->GetTexture(), ssLinear);
 						Context::LetPixelShader lps(context, psBloom1);
-						context->ClearColor(0, clearColor);
+						context->ClearColor(0, vec4(0, 0, 0, 0));
 						context->Draw();
 					}
 					{
 						Context::LetFrameBuffer lfb(context, fbBloom1);
 						Context::LetSampler ls(context, uBloomSourceSampler, rbBloom2->GetTexture(), ssLinear);
 						Context::LetPixelShader lps(context, psBloom2);
-						context->ClearColor(0, clearColor);
+						context->ClearColor(0, vec4(0, 0, 0, 0));
 						context->Draw();
 					}
 				}
@@ -1510,7 +1504,7 @@ void Painter::Draw()
 				Context::LetFrameBuffer lfb(context, fbBloom1);
 				Context::LetSampler ls(context, uBloomSourceSampler, rbBloom2->GetTexture(), ssLinear);
 				Context::LetPixelShader lps(context, psBloom2);
-				context->ClearColor(0, clearColor);
+				context->ClearColor(0, vec4(0, 0, 0, 0));
 			}
 		}
 
@@ -1529,7 +1523,7 @@ void Painter::Draw()
 
 			Context::LetPixelShader lps(context, psTone);
 
-			context->ClearColor(0, zeroColor);
+			context->ClearColor(0, vec4(0, 0, 0, 0));
 			context->Draw();
 		}
 	} // postprocessing
