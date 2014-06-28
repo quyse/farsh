@@ -48,7 +48,7 @@ var dynamicLibraries = {
 		'user32.lib', 'gdi32.lib', 'opengl32.lib'
 	],
 	linux: [
-		'pthread', 'GL', 'X11', 'dl', 'z', 'xcb', 'X11-xcb'
+		'pthread', 'GL', 'dl', 'z', 'SDL2'
 	],
 	freebsd: [
 		'pthread', 'GL', 'X11', 'z', 'xcb', 'X11-xcb', 'SDL2'

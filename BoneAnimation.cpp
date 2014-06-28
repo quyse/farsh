@@ -142,7 +142,7 @@ void BoneAnimationFrame::Setup(const vec3& originOffset, const quat& originOrien
 		BoneAnimation::Key timeKey;
 		timeKey.time = time;
 		ptrdiff_t frame = std::upper_bound(boneKeys.begin(), boneKeys.end(), timeKey, sorter) - boneKeys.begin();
-		float interframeTime;
+		float interframeTime = 0; // initialize to suppress warning only
 		if(frame <= 0)
 			animationRelativeOrientation = boneKeys.front().orientation;
 		else if(frame >= (int)boneKeys.size())
