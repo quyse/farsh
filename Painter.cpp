@@ -173,8 +173,7 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	iNormal(0),
 	iTexcoord(1),
 	iWorldPosition(2),
-	iDepth(3),
-	iScreen(4)
+	iDepth(3)
 
 {
 	// финализировать uniform группы
@@ -693,9 +692,12 @@ ptr<PixelShader> Painter::GetPixelShader(const PixelShaderKey& key)
 		ApplyMaterialLighting(shadowLight.uLightPosition, shadowLight.uLightColor * shadowMultiplier);
 	}
 
-	ptr<PixelShader> pixelShader = shaderCache->GetPixelShader(
+	ptr<PixelShader> pixelShader = shaderCache->GetPixelShader((
+		iNormal,
+		iTexcoord,
+		iWorldPosition,
 		fragment(0, newvec4(tmpColor, tmpDiffuse["w"]))
-	);
+	));
 
 	// добавить и вернуть
 	pixelShaderCache.insert(std::make_pair(key, pixelShader));

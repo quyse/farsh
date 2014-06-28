@@ -228,7 +228,6 @@ private:
 	Interpolant<vec2> iTexcoord;
 	Interpolant<vec3> iWorldPosition;
 	Interpolant<float> iDepth;
-	Interpolant<vec4> iScreen;
 
 	//***
 	ptr<AttributeBinding> abFilter;
