@@ -67,11 +67,8 @@ private:
 		/// Скиннинг?
 		/** Только при instanced=false. */
 		bool skinned;
-		/// Декаль?
-		/** Только при instanced = true, skinned = false. */
-		bool decal;
 
-		VertexShaderKey(bool instanced, bool skinned, bool decal);
+		VertexShaderKey(bool instanced, bool skinned);
 	};
 
 	/// Ключ пиксельного шейдера в кэше.
@@ -81,12 +78,10 @@ private:
 		int basicLightsCount;
 		/// Количество источников света с тенями.
 		int shadowLightsCount;
-		/// Декаль?
-		bool decal;
 		/// Ключ материала.
 		MaterialKey materialKey;
 
-		PixelShaderKey(int basicLightsCount, int shadowLightsCount, bool decal, const MaterialKey& materialKey);
+		PixelShaderKey(int basicLightsCount, int shadowLightsCount, const MaterialKey& materialKey);
 	};
 
 	struct Hasher
@@ -123,8 +118,6 @@ private:
 	static const int maxInstancesCount = 32;
 	/// Количество костей для skinning.
 	static const int maxBonesCount = 64;
-	/// Количество декалей.
-	static const int maxDecalsCount = 32;
 
 	//*** Атрибуты.
 	ptr<AttributeBinding> ab;
@@ -191,17 +184,6 @@ private:
 	/// Смещения костей.
 	UniformArray<vec4> uBoneOffsets;
 
-	///*** Uniform-группа декалей.
-	ptr<UniformGroup> ugDecal;
-	/// Матрицы декалей.
-	UniformArray<mat4x4> uDecalTransforms;
-	/// Обратные матрицы декалей.
-	UniformArray<mat4x4> uDecalInvTransforms;
-	/// Семплер нормалей.
-	Sampler<vec3, 2> uScreenNormalSampler;
-	/// Семплер глубины.
-	Sampler<float, 2> uScreenDepthSampler;
-
 	///*** Uniform-группа размытия тени.
 	ptr<UniformGroup> ugShadowBlur;
 	/// Вектор направления размытия.
@@ -247,35 +229,6 @@ private:
 	Interpolant<vec3> iWorldPosition;
 	Interpolant<float> iDepth;
 	Interpolant<vec4> iScreen;
-	Interpolant<float> iInstance;
-
-	//*** Декали.
-	struct DecalStuff
-	{
-		struct Vertex
-		{
-			vec4 position;
-			vec3 normal;
-			vec2 texcoord;
-		};
-
-		ptr<VertexLayout> vl;
-		ptr<AttributeLayout> al;
-		ptr<AttributeLayoutSlot> als;
-		Value<vec4> aPosition;
-		Value<vec3> aNormal;
-		Value<vec2> aTexcoord;
-
-		ptr<VertexBuffer> vb;
-		ptr<IndexBuffer> ib;
-
-		ptr<AttributeBinding> ab;
-
-		ptr<BlendState> bs;
-
-		DecalStuff(ptr<Device> device);
-	};
-	DecalStuff decalStuff;
 
 	//***
 	ptr<AttributeBinding> abFilter;
@@ -337,8 +290,6 @@ private:
 	ptr<RenderBuffer> rbShadowBlur;
 	/// Основной фреймбуфер.
 	ptr<FrameBuffer> fbOpaque;
-	/// Фреймбуфер для декалей.
-	ptr<FrameBuffer> fbDecal;
 
 private:
 	/// Кэш вершинных шейдеров.
@@ -351,15 +302,15 @@ private:
 	ptr<VertexShader> GetVertexShadowShader(const VertexShaderKey& key);
 
 	/// Временные переменные вершинного шейдера моделей.
-	Temp<vec4> tmpVertexPosition;
-	Temp<vec3> tmpVertexNormal;
+	Value<vec4> tmpVertexPosition;
+	Value<vec3> tmpVertexNormal;
 
 	/// Повернуть вектор кватернионом.
 	static Value<vec3> ApplyQuaternion(Value<vec4> q, Value<vec3> v);
 	/// Получить положение вершины и нормаль в мире.
 	/** Возвращает выражение, которое записывает положение и нормаль во
 	временные переменные tmpVertexPosition и tmpVertexNormal. */
-	Expression GetWorldPositionAndNormal(const VertexShaderKey& key);
+	void GetWorldPositionAndNormal(const VertexShaderKey& key);
 
 	/// Кэш пиксельных шейдеров.
 	std::unordered_map<PixelShaderKey, ptr<PixelShader>, Hasher> pixelShaderCache;
@@ -367,18 +318,18 @@ private:
 	ptr<PixelShader> GetPixelShader(const PixelShaderKey& key);
 
 	//*** Временные переменные пиксельного шейдера материала.
-	Temp<vec4> tmpWorldPosition;
-	Temp<vec2> tmpTexcoord;
-	Temp<vec3> tmpNormal;
-	Temp<vec3> tmpToCamera;
-	Temp<vec4> tmpDiffuse, tmpSpecular;
-	Temp<float> tmpSpecularExponent;
-	Temp<vec3> tmpColor;
+	Value<vec4> tmpWorldPosition;
+	Value<vec2> tmpTexcoord;
+	Value<vec3> tmpNormal;
+	Value<vec3> tmpToCamera;
+	Value<vec4> tmpDiffuse, tmpSpecular;
+	Value<float> tmpSpecularExponent;
+	Value<vec3> tmpColor;
 
 	/// Получить временные переменные для освещения в пиксельном шейдере.
-	Expression BeginMaterialLighting(const PixelShaderKey& key, Value<vec3> ambientColor);
+	void BeginMaterialLighting(const PixelShaderKey& key, Value<vec3> ambientColor);
 	/// Вычислить добавку к цвету и прибавить её к tmpColor.
-	Expression ApplyMaterialLighting(Value<vec3> lightPosition, Value<vec3> lightColor);
+	void ApplyMaterialLighting(Value<vec3> lightPosition, Value<vec3> lightColor);
 
 	/// Текущее время кадра.
 	float frameTime;
@@ -413,17 +364,6 @@ private:
 		SkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<Geometry> shadowGeometry, ptr<BoneAnimationFrame> animationFrame);
 	};
 	std::vector<SkinnedModel> skinnedModels;
-
-	/// Декаль для рисования.
-	struct Decal
-	{
-		ptr<Material> material;
-		mat4x4 transform;
-		mat4x4 invTransform;
-
-		Decal(ptr<Material> material, const mat4x4& transform, const mat4x4& invTransform);
-	};
-	std::vector<Decal> decals;
 
 	// Источники света.
 	/// Рассеянный свет.
@@ -464,8 +404,6 @@ public:
 	/// Зарегистрировать skinned-модель.
 	void AddSkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<BoneAnimationFrame> animationFrame);
 	void AddSkinnedModel(ptr<Material> material, ptr<Geometry> geometry, ptr<Geometry> shadowGeometry, ptr<BoneAnimationFrame> animationFrame);
-	/// Добавить декаль.
-	void AddDecal(ptr<Material> material, const mat4x4& transform, const mat4x4& invTransform);
 	/// Установить рассеянный свет.
 	void SetAmbientColor(const vec3& ambientColor);
 	/// Установить текстуру окружения.
