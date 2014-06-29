@@ -10,12 +10,13 @@ exports.configureCompiler = function(objectFile, compiler) {
 
 var staticLibraries = [
 	'libinanity-platform',
-	{ lib: 'libinanity-dx11', platform: 'win32' },
-	'libinanity-gl',
-	'libinanity-graphics',
+	{ lib: 'libinanity-graphics-dx11', platform: 'win32' },
+	'libinanity-graphics-gl',
+	'libinanity-graphics-render',
+	'libinanity-graphics-raw',
 	'libinanity-platform',
 	'libinanity-platform-filesystem',
-	'libinanity-shaders',
+	'libinanity-graphics-shaders',
 	'libinanity-input',
 	'libinanity-bullet',
 	'libinanity-physics',
