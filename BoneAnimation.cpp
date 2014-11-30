@@ -52,7 +52,7 @@ ptr<BoneAnimation> BoneAnimation::Deserialize(ptr<InputStream> inputStream, ptr<
 		for(size_t i = 0; i < allKeysCount; ++i)
 		{
 			float keyTime = reader.Read<float>();
-			int keyBone = reader.ReadShortly();
+			size_t keyBone = reader.ReadShortly();
 			quat keyOrientation = reader.Read<quat>();
 
 			Key key;
