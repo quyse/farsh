@@ -17,6 +17,8 @@ var staticLibraries = [
 	'libinanity-platform',
 	'libinanity-platform-filesystem',
 	'libinanity-graphics-shaders',
+	'libinanity-al',
+	'libinanity-audio',
 	'libinanity-input',
 	'libinanity-bullet',
 	'libinanity-physics',
@@ -46,7 +48,7 @@ var staticDepsLibraries = [
 ];
 var dynamicLibraries = {
 	win32: [
-		'user32.lib', 'gdi32.lib', 'opengl32.lib'
+		'user32.lib', 'gdi32.lib', 'opengl32.lib', 'openal32.lib'
 	],
 	linux: [
 		'pthread', 'GL', 'dl', 'z', 'SDL2'
