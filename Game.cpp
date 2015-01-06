@@ -315,7 +315,7 @@ void Game::Tick()
 	{
 		mat4x4 transform = CreateTranslationMatrix(cameraPosition);
 		ptr<Physics::RigidBody> rigidBody = physicsWorld->CreateRigidBody(rigidModels[0].rigidBody->GetShape(), 100, transform);
-		rigidBody->ApplyImpulse(vec3(cos(cameraAlpha) * cos(cameraBeta), sin(cameraAlpha) * cos(cameraBeta), sin(cameraBeta)) * 10000.0f);
+		rigidBody->ApplyImpulse(vec3(cos(cameraAlpha) * cos(cameraBeta), sin(cameraAlpha) * cos(cameraBeta), sin(cameraBeta)) * 10000.0f, cameraPosition);
 		AddRigidModel(rigidModels[0].geometry, rigidModels[0].material, rigidBody);
 	}
 
@@ -325,9 +325,10 @@ void Game::Tick()
 	{
 		shootAlpha = 0;
 		vec3 dir(cos(alpha), sin(alpha), 0);
-		mat4x4 transform = CreateTranslationMatrix(vec3(10, 10, 5) + dir * 10.0f);
+		vec3 pos = vec3(10, 10, 5) + dir * 10.0f;
+		mat4x4 transform = CreateTranslationMatrix(pos);
 		ptr<Physics::RigidBody> rigidBody = physicsWorld->CreateRigidBody(rigidModels[0].rigidBody->GetShape(), 100, transform);
-		rigidBody->ApplyImpulse(dir * -1000.0f);
+		rigidBody->ApplyImpulse(dir * -1000.0f, pos);
 		AddRigidModel(rigidModels[0].geometry, rigidModels[0].material, rigidBody);
 	}
 
