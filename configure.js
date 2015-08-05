@@ -44,14 +44,15 @@ var staticDepsLibraries = [
 	{ dir: 'sqlite', lib: 'libsqlite', platform: 'linux' },
 	{ dir: 'sqlite', lib: 'libsqlite', platform: 'freebsd' },
 	{ dir: 'freetype', lib: 'libfreetype' },
-	{ dir: 'harfbuzz', lib: 'libharfbuzz' }
+	{ dir: 'harfbuzz', lib: 'libharfbuzz' },
+	{ dir: 'ucdn', lib: 'libucdn' }
 ];
 var dynamicLibraries = {
 	win32: [
 		'user32.lib', 'gdi32.lib', 'opengl32.lib', 'openal32.lib'
 	],
 	linux: [
-		'pthread', 'GL', 'dl', 'z', 'SDL2'
+		'pthread', 'GL', 'dl', 'z', 'SDL2', 'openal'
 	],
 	freebsd: [
 		'pthread', 'GL', 'X11', 'z', 'xcb', 'X11-xcb', 'SDL2'
