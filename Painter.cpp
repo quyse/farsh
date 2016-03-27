@@ -236,8 +236,6 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 		struct Vertex
 		{
 			vec4 position;
-			vec2 texcoord;
-			vec2 gap;
 		};
 
 		ptr<VertexLayout> vl;
@@ -255,17 +253,16 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 			vl(NEW(VertexLayout(sizeof(Vertex)))),
 			al(NEW(AttributeLayout())),
 			als(al->AddSlot()),
-			aPosition(al->AddElement(als, vl->AddElement(&Vertex::position))),
-			aTexcoord(al->AddElement(als, vl->AddElement(&Vertex::texcoord)))
+			aPosition(al->AddElement(als, vl->AddElement(&Vertex::position)))
 		{
 			// разметка геометрии
 			// геометрия полноэкранного квадрата
 			Vertex vertices[] =
 			{
-				{ vec4(-1, -1, 0, 1), vec2(0, 1) },
-				{ vec4(1, -1, 0, 1), vec2(1, 1) },
-				{ vec4(1, 1, 0, 1), vec2(1, 0) },
-				{ vec4(-1, 1, 0, 1), vec2(0, 0) }
+				{ vec4(-1, -1, 0, 1) },
+				{ vec4(1, -1, 0, 1) },
+				{ vec4(1, 1, 0, 1) },
+				{ vec4(-1, 1, 0, 1) }
 			};
 			unsigned short indices[] = { 0, 2, 1, 0, 3, 2 };
 
