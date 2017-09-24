@@ -6,6 +6,7 @@ exports.configureCompiler = function(objectFile, compiler) {
 	compiler.addIncludeDir('../inanity/deps/bullet/repo/src');
 	compiler.addIncludeDir('../inanity/deps/freetype/repo/include');
 	compiler.addIncludeDir('../inanity/deps/harfbuzz/generated');
+	compiler.strict = false;
 };
 
 var staticLibraries = [
@@ -43,8 +44,9 @@ var staticDepsLibraries = [
 	{ dir: 'sqlite', lib: 'libsqlite', platform: 'win32' },
 	{ dir: 'sqlite', lib: 'libsqlite', platform: 'linux' },
 	{ dir: 'sqlite', lib: 'libsqlite', platform: 'freebsd' },
-	{ dir: 'freetype', lib: 'libfreetype' },
 	{ dir: 'harfbuzz', lib: 'libharfbuzz' },
+	{ dir: 'freetype', lib: 'libfreetype' },
+	{ dir: 'icu', lib: 'libicu' },
 	{ dir: 'ucdn', lib: 'libucdn' }
 ];
 var dynamicLibraries = {
@@ -52,7 +54,7 @@ var dynamicLibraries = {
 		'user32.lib', 'gdi32.lib', 'opengl32.lib', 'openal32.lib'
 	],
 	linux: [
-		'pthread', 'GL', 'dl', 'z', 'SDL2', 'openal'
+		'm', 'pthread', 'GL', 'dl', 'z', 'SDL2', 'openal'
 	],
 	freebsd: [
 		'pthread', 'GL', 'X11', 'z', 'xcb', 'X11-xcb', 'SDL2'

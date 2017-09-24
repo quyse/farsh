@@ -197,6 +197,12 @@ Painter::Painter(ptr<Device> device, ptr<Context> context, ptr<Presenter> presen
 	pointSamplerSettings.SetFilter(SamplerSettings::filterPoint);
 	pointSamplerSettings.SetWrap(SamplerSettings::wrapClamp);
 
+	// создать настройки depth-stencil state
+	dssNormal = device->CreateDepthStencilState();
+	dssNormal->SetDepthTest(DepthStencilState::testFuncLess, true);
+	dssPass = device->CreateDepthStencilState();
+	dssPass->SetDepthTest(DepthStencilState::testFuncAlways, false);
+
 	//** создать ресурсы
 	dsbShadow = device->CreateDepthStencilBuffer(shadowMapSize, shadowMapSize, false);
 	for(int i = 0; i < maxShadowLightsCount; ++i)
@@ -890,8 +896,7 @@ void Painter::Draw()
 				Context::LetIndexBuffer lib(context, ibFilter);
 				Context::LetVertexShader lvs(context, vsFilter);
 				Context::LetPixelShader lps(context, psShadowBlur);
-				Context::LetDepthTestFunc ldtf(context, Context::depthTestFuncAlways);
-				Context::LetDepthWrite ldw(context, false);
+				Context::LetDepthStencilState ldss(context, dssPass);
 
 				// первый проход
 
@@ -942,8 +947,7 @@ void Painter::Draw()
 	{
 		Context::LetFrameBuffer lfb(context, fbOpaque);
 		Context::LetViewport lv(context, screenWidth, screenHeight);
-		Context::LetDepthTestFunc ldtf(context, Context::depthTestFuncLess);
-		Context::LetDepthWrite ldw(context, true);
+		Context::LetDepthStencilState ldss(context, dssNormal);
 		Context::LetUniformBuffer lubCamera(context, ugCamera);
 
 		// установить uniform'ы камеры
@@ -1119,8 +1123,7 @@ void Painter::Draw()
 		Context::LetVertexBuffer lvb(context, 0, vbFilter);
 		Context::LetIndexBuffer lib(context, ibFilter);
 		Context::LetVertexShader lvs(context, vsFilter);
-		Context::LetDepthTestFunc ldtf(context, Context::depthTestFuncAlways);
-		Context::LetDepthWrite ldw(context, false);
+		Context::LetDepthStencilState ldss(context, dssPass);
 
 		// downsampling
 		/*

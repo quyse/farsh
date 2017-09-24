@@ -145,6 +145,10 @@ private:
 	/// Настройки семплера для карт теней.
 	ptr<SamplerState> shadowSamplerState;
 
+	/// Настройки depth-stencil state.
+	ptr<DepthStencilState> dssNormal;
+	ptr<DepthStencilState> dssPass;
+
 	/// Варианты света.
 	std::unordered_map<LightVariantKey, LightVariant, Hasher> lightVariantsCache;
 	/// Получить вариант света.

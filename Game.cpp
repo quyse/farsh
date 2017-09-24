@@ -95,7 +95,7 @@ void Game::Run()
 			ptr<Gui::FontFace> fontFace = fontEngine->LoadFontFace(fileSystem->LoadFile("/DejaVuSans.ttf"));
 			const int fontSize = 13;
 			ptr<Gui::FontShape> fontShape = fontFace->CreateShape(fontSize);
-			ptr<Gui::FontGlyphs> fontGlyphs = fontFace->CreateGlyphs(canvas, fontSize);
+			ptr<Gui::FontGlyphs> fontGlyphs = fontFace->CreateGlyphs(canvas, fontSize, Gui::FontFace::CreateGlyphsConfig());
 			font = NEW(Gui::Font(fontShape, fontGlyphs));
 		}
 
@@ -438,8 +438,8 @@ void Game::Tick()
 		}
 		char fpsString[64];
 		sprintf(fpsString, "frameTime: %.6f sec, FPS: %.6f", lastAllTicksTime / needTickCount, needTickCount / lastAllTicksTime);
-		font->DrawString(canvas, fpsString, vec2(19.0f, (float)screenHeight - 21.0f), vec4(1, 1, 1, 1));
-		font->DrawString(canvas, fpsString, vec2(20.0f, (float)screenHeight - 20.0f), vec4(1, 0, 0, 1));
+		font->DrawString(canvas, fpsString, 'Zyyy', vec2(19.0f, (float)screenHeight - 21.0f), vec4(1, 1, 1, 1));
+		font->DrawString(canvas, fpsString, 'Zyyy', vec2(20.0f, (float)screenHeight - 20.0f), vec4(1, 0, 0, 1));
 		canvas->Flush();
 	}
 
